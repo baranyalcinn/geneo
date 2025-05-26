@@ -1,0 +1,217 @@
+---
+description: 
+globs: src/main/java/**/*.java,src/test/java/**/*.java,src/main/resources/application.yml,pom.xml,*.tsx,frontend/src/**/*.tsx,frontend/src/**/*.ts,frontend/src/**/*.test.tsx,frontend/src/**/*.test.ts,frontend/src/**/*.spec.tsx,frontend/src/**/*.spec.ts,frontend/src/**/*.css,frontend/src/**/*.module.css,frontend/src/**/*.scss,frontend/src/**/*.module.scss,frontend/src/**/*.json,frontend/package.json,frontend/tsconfig.json,frontend/.*eslint*.(js|json|yaml|yml|cjs|mjs),frontend/.*prettier*.(js|json|yaml|yml|cjs|mjs|toml),frontend/vite.config.(ts|js),frontend/next.config.(js|mjs),frontend/*.md
+alwaysApply: false
+---
+# Java & Spring Boot Development Rules (Project familytree)
+
+## 📜 Rule Set Description and Purpose
+This `java-rules.mdc` file defines the core development standards, best practices, and coding conventions for the backend portion of Project X, developed with Java and Spring Boot. Its purpose is to guide the AI assistant (Cursor) and developers in producing consistent, high-quality, maintainable, testable, and scalable code. These rules are based on Clean Code, DRY, and SOLID principles and promote the effective use of modern Java (21+) and Spring Boot (3.x) features.
+
+## 🎯 Intended File Scope / Auto-Attachment Suggestions
+This rule set is intended to be applied to files matching the following patterns. Please enter these patterns into your development tool's (e.g., Cursor) relevant "File pattern matches" or rule association settings:
+
+- `src/main/java/**/*.java`
+- `src/test/java/**/*.java`
+- `src/main/resources/application.properties`
+- `src/main/resources/application.yml`
+- `src/main/resources/application-*.properties`
+- `src/main/resources/application-*.yml`
+- `src/main/resources/**/*.xml` (e.g., `logback-spring.xml`)
+- `pom.xml`
+- `build.gradle`
+- `build.gradle.kts`
+- `src/main/resources/db/migration/V*.sql` (if used)
+
+## 🚀 General Project Philosophy
+This Java Spring Boot backend will be developed in strict adherence to Clean Code, Don't Repeat Yourself (DRY), and SOLID principles. The goal is to create a high-quality, maintainable, testable, and scalable API and business logic layer. I expect the AI to adopt these principles when generating code and making suggestions.
+
+## ☕ Java & Spring Boot Rules
+
+### Language and Version
+- **Java Version:** Java 21 (LTS) or higher will be used. Modern Java features up to Java 24 (e.g., records, sealed classes, pattern matching, virtual threads, switch expressions, etc.) should be actively utilized.
+- **Spring Boot Version:** The latest stable Spring Boot 3.x version will be preferred. Features from Spring Framework 6.x should also be leveraged.
+- **Build Tool:** Maven or Gradle (Decide based on the `pom.xml` or `build.gradle` file in the project). Consistent dependency management and build processes are targeted.
+
+### Core Principles
+- **SOLID:**
+    - **S (Single Responsibility Principle):** Every class and method should have a single responsibility. This principle should be particularly observed in Service and Repository classes.
+    - **O (Open/Closed Principle):** Modules should be open for extension but closed for modification. New behavior should be added by adding new code, rather than changing existing code.
+    - **L (Liskov Substitution Principle):** Subclasses should be substitutable for their base classes without issues.
+    - **I (Interface Segregation Principle):** Prefer smaller, client-specific interfaces over large, general-purpose ones.
+    - **D (Dependency Inversion Principle):** High-level modules should not depend on low-level modules. Both should depend on abstractions (interfaces). Dependencies should be managed via **constructor injection** (use of `@RequiredArgsConstructor` is encouraged).
+- **DRY (Don't Repeat Yourself):** Avoid code duplication; common logic should be extracted into utility classes, abstract classes, or shared services.
+- **KISS (Keep It Simple, Stupid):** Avoid unnecessary complexity; the simplest and most understandable solution should be preferred. Avoid over-engineering.
+- **YAGNI (You Ain't Gonna Need It):** Write code only for current and clearly defined requirements.
+
+### Coding Style and Conventions
+- **Naming:** Google Java Style Guide can be a baseline.
+    - Classes: `PascalCase` (e.g., `CustomerService`, `OrderRepository`)
+    - Methods and Variables: `camelCase` (e.g., `findCustomerById`, `totalAmount`)
+    - Constants: `UPPER_SNAKE_CASE` (e.g., `DEFAULT_PAGE_SIZE`)
+    - No `I` prefix for interfaces (e.g., `CustomerService` interface, `CustomerServiceImpl` implementation).
+- **Formatting:** A defined formatter in the project (e.g., IntelliJ IDEA default, Prettier via Spotless) should be used, and consistency should be maintained.
+- **Lombok:** Should be used effectively to improve code readability:
+    - `@Getter`, `@Setter` (when necessary, especially careful with Entities), `@ToString` (excluding sensitive data), `@EqualsAndHashCode` (pay attention to `callSuper=true/false` and `exclude` usage).
+    - `@NoArgsConstructor`, `@AllArgsConstructor`, `@Builder` (for DTOs and Entities).
+    - `@Slf4j` or `@Log4j2` for standard logging.
+    - `@RequiredArgsConstructor` (for constructor injection of final fields).
+    - `@Value` or `@Data` (ideal for immutable DTOs). Java Records should also be considered for this purpose.
+- **Immutable Objects:** DTOs, Value Objects, and configuration objects should be designed as immutable whenever possible. Java Records or Lombok's `@Value` are excellent for this.
+- **Optional Usage:** `Optional<T>` should be used for methods that can return null. Instead of null checks, `Optional`'s methods like `map`, `flatMap`, `orElse`, `orElseThrow`, `ifPresentOrElse` should be preferred. Never use `Optional.get()` directly (unless `isPresent()` is checked beforehand).
+- **Stream API & Collections API:** Modern features of Java Stream API and Collections API (e.g., `List.of()`, `Map.of()`, `Collectors.toList()`, `Collectors.toUnmodifiableList()`) should be used effectively for collection operations.
+- **Exception Handling:**
+    - Meaningful, project-specific exception classes (derived from `RuntimeException`) should be created (e.g., `ResourceNotFoundException`, `InvalidInputException`).
+    - `@ControllerAdvice` and `@ExceptionHandler` should be used for global exception handling. A standard error response structure should be established.
+    - `try-catch` blocks should only be used for exceptions that can actually be handled; avoid catching generic `Exception` or `Throwable` unnecessarily. Caught exceptions should be logged.
+- **API Design (RESTful):**
+    - HTTP methods (GET, POST, PUT, DELETE, PATCH) should be used correctly and semantically.
+    - Resource-based URLs (e.g., `/api/v1/users`, `/api/v1/products/{productId}`). A versioning strategy (URL or header) should be defined.
+    - HTTP status codes (200, 201, 204, 400, 401, 403, 404, 500, etc.) should be used according to standards.
+    - JSON format and DTOs (Data Transfer Objects) should be used for requests and responses. Validation (`jakarta.validation.constraints.*`) should be defined in DTOs.
+- **Layered Architecture:**
+    - `Controller` (API endpoints, request/response management)
+    - `Service` (Business logic, DTO transformations, transaction management)
+    - `Repository` (Database access - Spring Data JPA interfaces)
+    - `Domain/Entity` (JPA entities, representing database tables)
+    - There should be a clear separation of responsibilities between these layers.
+- **Database Operations:**
+    - Spring Data JPA will be used. Queries should be defined via Repository interfaces.
+    - For complex queries, `@Query` annotation or Specification API/QueryDSL can be used.
+    - Be mindful of the N+1 problem; optimize with `JOIN FETCH` or `@EntityGraph`.
+    - `@Transactional` annotation should be used correctly on service methods for transaction management (including `readOnly=true` optimizations).
+- **Logging:**
+    - SLF4J interface and Logback/Log4j2 implementation will be used.
+    - Log levels (DEBUG, INFO, WARN, ERROR) should be used correctly.
+    - Sensitive data (passwords, personal information) should not be logged.
+    - Correlation ID (e.g., via MDC) can be used for request tracing.
+- **API Documentation:** API documentation should be automatically generated and kept up-to-date with OpenAPI (Swagger) (e.g., using `springdoc-openapi`).
+- **Comments:**
+    - The code itself should be as self-explanatory as possible.
+    - Javadoc should be used for public APIs and complex algorithms. Comments explaining "why" are more valuable than comments explaining "how."
+    - `// TODO:` comments should be in a trackable format (e.g., `// TODO [JIRA-123 NameSurname]: Brief description`).
+
+## 🔄 Refactoring and Code Improvement
+- The AI is expected to analyze existing code and suggest improvements based on the principles above.
+- When refactoring, it's important to explain the reason for the change (which principle it better adheres to, what problem it solves).
+- Priority should be given to suggestions that improve code readability, performance, and maintainability.
+
+## 🤖 Additional Notes for AI Interaction
+- When requesting a feature, service, or method, I will try to provide detailed requirements regarding its inputs, outputs, and expected behavior.
+- When generating code, it would be helpful to add short explanations or arguments, especially for complex parts and important decisions.
+- If there are different solution paths, you can present them with their pros and cons.
+
+
+# React & TypeScript Frontend Development Rules (Project familytree)
+
+## 📜 Rule Set Description and Purpose
+This `react-rules.mdc` file defines the core development standards, best practices, and coding conventions for the frontend portion of Project X, developed with React and TypeScript. Its purpose is to guide the AI assistant (Cursor) and developers in producing consistent, modern, performant, accessible, and maintainable user interfaces (UI) and components. These rules are based on component-based architecture, functional components, hooks, and effective state management principles.
+
+## 🎯 Intended File Scope / Auto-Attachment Suggestions
+This rule set is intended to be applied to files matching the following patterns. Please enter these patterns into your development tool's (e.g., Cursor) relevant "File pattern matches" or rule association settings:
+
+- `src/**/*.tsx`
+- `src/**/*.ts`
+- `src/**/*.test.tsx`
+- `src/**/*.test.ts`
+- `src/**/*.spec.tsx`
+- `src/**/*.spec.ts`
+- `src/**/*.css`
+- `src/**/*.module.css`
+- `src/**/*.scss`
+- `src/**/*.module.scss`
+- `package.json`
+- `tsconfig.json`
+- `.eslintrc.js` (or `.json`, `.yaml`)
+- `prettier.config.js` (or `.prettierrc`, `.json`)
+- `vite.config.ts` (if used)
+- `next.config.js` (if used)
+
+## 🚀 General Project Philosophy
+This React frontend will be developed with the aim of creating a modern, user-friendly, performant, and maintainable interface. Clean code, reusable components, and effective state management are core objectives. I expect the AI to adopt these principles when generating code and suggesting best practices.
+
+## ⚛️ React & TypeScript Rules
+
+### Language and Tools
+- **React Version:** React 18+ will be used. React 19.x features and patterns (Concurrent Features, Server Components, etc., if suitable for the project structure) should be explored when possible.
+- **Language:** TypeScript (`.tsx`, `.ts`) will be used. The goal is to enhance type safety, code clarity, and the development experience. The `any` type must be strictly avoided.
+- **Package Manager:** `yarn` or `npm` (Be consistent based on the project - check `package-lock.json` or `yarn.lock`).
+- **Build Tool/Bundler:** Vite (preferred) or Create React App (CRA) / Next.js (depending on project type).
+
+### Core Principles
+- **Component-Based Architecture:** The application must consist of small, focused, and reusable components.
+- **Functional Components and Hooks:** **Only** functional components and Hooks (`useState`, `useEffect`, `useContext`, `useReducer`, `useMemo`, `useCallback`, `useRef`) will be used instead of class components. Custom hooks are actively encouraged.
+- **One-way Data Flow:** Data should flow from parent to child via props. Callback functions should be used for state updates.
+- **DRY (Don't Repeat Yourself):** Common UI elements and logic should be extracted into reusable components or custom hooks.
+- **KISS (Keep It Simple, Stupid):** Avoid unnecessary complexity; the simplest and most understandable solution should be preferred.
+
+### Coding Style and Conventions
+- **Naming:**
+    - Components and Hooks: `PascalCase` (e.g., `UserProfile.tsx`, `useUserData.ts`).
+    - Other variables, functions, file and folder names: `camelCase` or `kebab-case` (typically `kebab-case` for folders, e.g., `user-profile`). Be consistent throughout the project.
+    - TypeScript types and interfaces: `PascalCase` (e.g., `interface UserProfileProps`, `type UserId = string`).
+- **File Structure:** A feature-based folder structure is preferred.
+    - Example: `src/features/authentication/components/LoginForm.tsx`
+    -         `src/features/authentication/hooks/useAuth.ts`
+    -         `src/features/authentication/services/authAPI.ts`
+    -         `src/components/common/Button.tsx` (generic, shared components)
+    -         `src/hooks/common/useLocalStorage.ts` (generic, shared hooks)
+- **TypeScript Usage:**
+    - Everything should be typed: props, state, function parameters, and return values.
+    - `interface`s are generally preferred for defining object shapes, while `type`s can be used for unions, intersections, or primitive aliases. (Consistency throughout the project is important).
+    - Utility types (`Partial`, `Pick`, `Omit`, `Readonly`, etc.) should be used effectively.
+    - Strict linting and formatting rules should be enforced with `eslint` (`@typescript-eslint/eslint-plugin`) and `prettier`.
+- **State Management:**
+    - **Local State:** `useState` and `useReducer` (for more complex local state).
+    - **Global State:**
+        - **Preferred:** Zustand or Recoil (for simplicity and performance).
+        - Alternative: Redux Toolkit (for larger and more complex applications).
+        - Context API: Should only be used for global data that doesn't change very often (theme, language) or for small subtrees. Be mindful of performance implications.
+- **Styling:**
+    - **Preferred:** Tailwind CSS (for rapid development and a utility-first approach).
+    - Alternatives: Styled Components, Emotion (CSS-in-JS), CSS Modules.
+    - A consistent design system (color palette, typography, spacing) should be established project-wide, or the rules of an existing library (e.g., Material UI, Ant Design - if used) should be followed.
+- **API Requests:**
+    - **Preferred:** `React Query (TanStack Query)` or `SWR`. These libraries greatly simplify caching, revalidation, optimistic updates, and loading/error state management.
+    - For basic API calls: `axios` (for ease of interceptors and global configuration) or the standard `fetch` API.
+    - A service layer (`src/services`) or custom hooks (`src/features/.../hooks/useFeatureData.ts`) should be created for API calls.
+- **Routing:** `React Router` (v6+) will be used. Route definitions should be centralized and clear. Route-based code splitting should be done with lazy loading (`React.lazy` and `Suspense`).
+- **Form Management:**
+    - **Preferred:** `React Hook Form` (for performance and flexibility).
+    - Alternative: `Formik`.
+    - Integration with schema-based validation libraries like `zod` or `yup` is preferred for form validation.
+- **Tests:**
+    - `Jest`, `React Testing Library`, and `Vitest` (if using Vite) will be used.
+    - User interactions and component behaviors should be tested (`getByRole`, `userEvent`, etc.). Focus on the end-user experience, not implementation details (state, props).
+    - Custom hooks should be tested separately.
+    - `jest.fn()` or `vi.fn()` for mocking. `msw` (Mock Service Worker) can be used for API call mocking.
+- **Accessibility (a11y):**
+    - Semantic HTML tags (`<nav>`, `<main>`, `<article>`, `<button>`) should be used correctly.
+    - Keyboard navigation must be supported and tested.
+    - `label`s for form elements must be correctly associated.
+    - ARIA (Accessible Rich Internet Applications) roles and attributes (`role`, `aria-*`) should be used carefully when necessary.
+    - Pay attention to color contrasts.
+- **Performance:**
+    - `React.memo`, `useMemo`, `useCallback` should be used carefully and consciously to prevent unnecessary re-renders. Identify bottlenecks with the Profiler.
+    - Always use stable and unique `key` props in list renderings.
+    - Virtualized lists (e.g., `TanStack Virtual`, `react-window`) should be considered for large datasets.
+    - Code Splitting (`React.lazy`, dynamic `import()`).
+    - Image optimization.
+- **Comments:**
+    - Component props, usage of custom hooks, and complex logic should be explained in TSDoc format.
+    - Comments explaining "why" are more valuable than comments explaining "how." The code itself should explain the "how."
+- **Strictly Avoid:**
+    - `defaultProps` (unnecessary in functional components and TypeScript).
+    - `PropTypes` (TypeScript already provides type checking).
+    - `findDOMNode()` (except in very rare cases).
+    - Violation of Hook rules (calling hooks conditionally or inside loops).
+
+## 🔄 Refactoring and Code Improvement
+- The AI is expected to analyze existing code (components, hooks, state logic) and suggest improvements based on the principles above.
+- Solutions for "prop drilling" issues (like Context API or global state management), or alternatives for large `useEffect` blocks (like custom hooks or state machines) can be suggested.
+- Breaking down components into smaller, reusable pieces is encouraged.
+
+## 🤖 Additional Notes for AI Interaction
+- When requesting a component or hook, I will try to clearly define expected props, state structure (if any), and core functionality.
+- It would be beneficial if the AI could present different approaches (and their trade-offs), especially for topics like state management or complex `useEffect` logic.
+- The AI is expected to pay attention to the testability and accessibility of the generated code.

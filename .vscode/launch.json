@@ -1,0 +1,21 @@
+{
+   "configurations": [
+      {
+         "type": "java",
+         "name": "FamilyTreeApplication",
+         "request": "launch",
+         "mainClass": "by.backend.FamilyTreeApplication",
+         "projectName": "backend"
+      },
+      {
+         "type": "java",
+         "name": "Spring Boot-FamilyTreeApplication<familytree>",
+         "request": "launch",
+         "cwd": "${workspaceFolder}",
+         "mainClass": "by.familytree.FamilyTreeApplication",
+         "projectName": "familytree",
+         "args": "",
+         "envFile": "${workspaceFolder}/.env"
+      }
+   ]
+}

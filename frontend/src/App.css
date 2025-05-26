@@ -1,0 +1,206 @@
+:root {
+  --primary: #8b5cf6;
+  --primary-light: #a78bfa;
+  --primary-dark: #7c3aed;
+  --secondary: #ec4899;
+  --secondary-light: #f472b6;
+  --secondary-dark: #be185d;
+  --bg-default: #111827;
+  --bg-paper: #1f2937;
+  --text-primary: #f9fafb;
+  --text-secondary: #d1d5db;
+  --error: #ef4444;
+  --warning: #f59e0b;
+  --info: #3b82f6;
+  --success: #10b981;
+  --divider: rgba(255, 255, 255, 0.08);
+  
+  --male-color: #1e40af;
+  --male-color-light: #3b82f6;
+  --female-color: #be185d;
+  --female-color-light: #ec4899;
+  
+  --border-radius-sm: 8px;
+  --border-radius-md: 12px;
+  --border-radius-lg: 16px;
+  
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.16), 0 4px 6px rgba(0, 0, 0, 0.23);
+  --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.19), 0 6px 6px rgba(0, 0, 0, 0.23);
+  --shadow-xl: 0 14px 28px rgba(0, 0, 0, 0.25), 0 10px 10px rgba(0, 0, 0, 0.22);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-default);
+  color: var(--text-primary);
+  overflow-y: scroll;
+  line-height: 1.6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 6px;
+  border: 3px solid #0f172a;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 3px 6px;
+  border-radius: var(--border-radius-sm);
+  color: var(--primary-light);
+  font-size: 0.9em;
+}
+
+.content {
+  min-height: calc(100vh - 64px);
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Bir resim veya logo için */
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Özelleştirilmiş ek CSS sınıfları */
+.text-primary {
+  color: var(--primary);
+}
+
+.text-secondary {
+  color: var(--secondary);
+}
+
+.text-success {
+  color: var(--success);
+}
+
+.text-error {
+  color: var(--error);
+}
+
+.text-info {
+  color: var(--info);
+}
+
+.text-warning {
+  color: var(--warning);
+}
+
+/* Aile ağacı için özel stiller */
+.male-node {
+  background: linear-gradient(135deg, #1e3a8a, #1e40af);
+  color: white;
+}
+
+.female-node {
+  background: linear-gradient(135deg, #831843, #be185d);
+  color: white;
+}
+
+.node-card {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.node-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  filter: brightness(1.1);
+}
+
+.node-card.selected {
+  box-shadow: 0 0 0 2px var(--primary), 0 8px 16px rgba(0, 0, 0, 0.25);
+}
+
+.glass-card {
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.tree-container {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 100px);
+  overflow: hidden;
+  background: linear-gradient(135deg, #0f172a, #020617);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Aile ağacı çizgileri için stiller */
+.tree-line {
+  stroke-width: 1.5;
+  transition: stroke 0.2s ease;
+}
+
+.tree-line.spouse {
+  stroke-width: 2;
+  stroke: rgba(255, 255, 255, 0.25);
+}
+
+.tree-line.parent-child {
+  stroke: rgba(255, 255, 255, 0.15);
+}
+
+.tree-line.sibling-connector {
+  stroke-dasharray: 3,3;
+  stroke: rgba(255, 255, 255, 0.15);
+}
+
+/* Ekran responsive ayarları */
+@media (max-width: 768px) {
+  .content {
+    padding: 16px;
+  }
+  
+  .tree-container {
+    height: calc(100vh - 80px);
+  }
+}

@@ -1,0 +1,33 @@
+spring:
+  banner:
+    charset: UTF-8 # Banner için karakter kodlaması
+  messages:
+    encoding: UTF-8 # Mesajlar için karakter kodlaması
+  datasource:
+    url: jdbc:postgresql://localhost:5432/FamilyTreeDB?characterEncoding=UTF-8 # Veritabanı bağlantısı için karakter kodlaması
+    username: postgres
+    password: 12345
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update # Bu ayar veritabanı şemasını otomatik günceller, dikkatli olun.
+    show-sql: false # Geliştirme sırasında true yapmak faydalı olabilir.
+    open-in-view: false # Performans sorunlarına yol açabilir, genellikle false önerilir.
+    properties:
+      hibernate:
+        format-sql: false # SQL loglarını daha okunaklı formatlar.
+  cache:
+    type: CAFFEINE # Önbellek sağlayıcısı olarak Caffeine'i kullan.
+    cache-names:
+      - relationshipPaths
+      # - ancestorsCache # Diğer potansiyel önbellek adlarınız
+      # - descendantsCache
+    caffeine:
+      spec: maximumSize=500,expireAfterAccess=300s # Caffeine için önbellek özellikleri.
+server: # Sunucu geneli karakter kodlaması ayarları
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
