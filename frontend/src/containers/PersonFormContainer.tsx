@@ -84,57 +84,48 @@ export const PersonFormContainer: React.FC<Props> = ({ personId, onSave, onCance
 
       if (personId) {
         // Güncelleme işlemi
-        const updateData = {
+        const updateData: Partial<Person> = {
           id: personId,
           firstName: person.firstName,
           lastName: person.lastName,
           gender: person.gender,
-          birthDate: person.birthDate ?? undefined,
-          deathDate: person.deathDate ?? undefined,
-          fatherId: person.fatherId ?? undefined,
-          motherId: person.motherId ?? undefined,
-          spouseId: person.spouseId ?? undefined,
-          relationships1Ids: Array.isArray(person.relationships1Ids) 
-            ? person.relationships1Ids 
-            : [],
-          relationships2Ids: Array.isArray(person.relationships2Ids) 
-            ? person.relationships2Ids 
-            : []
+          birthDate: person.birthDate || null,
+          deathDate: person.deathDate || null,
+          father: person.father || null,
+          mother: person.mother || null,
+          spouse: person.spouse || null,
+          photoUrl: person.photoUrl || null,
+          placeOfBirth: person.placeOfBirth || null,
+          placeOfDeath: person.placeOfDeath || null,
+          notes: person.notes || null,
+          relationships1Ids: person.relationships1Ids || [],
+          relationships2Ids: person.relationships2Ids || [],
         };
         
         console.log('Güncellenecek veri:', updateData);
-        await personService.updatePerson(personId.toString(), { 
-            ...updateData, 
-            birthDate: updateData.birthDate || null,
-            deathDate: updateData.deathDate || null,
-            fatherId: updateData.fatherId || null,
-            motherId: updateData.motherId || null,
-            spouseId: updateData.spouseId || null,
-        });
+        await personService.updatePerson(personId.toString(), updateData);
       } else {
         // Yeni kişi ekleme
-        const newPerson = {
-          firstName: person.firstName,
-          lastName: person.lastName,
-          gender: person.gender,
-          birthDate: person.birthDate ?? undefined,
-          deathDate: person.deathDate ?? undefined,
-          fatherId: person.fatherId ?? undefined,
-          motherId: person.motherId ?? undefined,
-          spouseId: person.spouseId ?? undefined,
+        const newPersonData: Omit<Person, 'id'> = {
+          firstName: person.firstName!,
+          lastName: person.lastName!,
+          gender: person.gender!,
+          birthDate: person.birthDate || null,
+          deathDate: person.deathDate || null,
+          father: person.father || null,
+          mother: person.mother || null,
+          spouse: person.spouse || null,
+          photoUrl: person.photoUrl || null,
+          placeOfBirth: person.placeOfBirth || null,
+          placeOfDeath: person.placeOfDeath || null,
+          notes: person.notes || null,
           relationships1Ids: [],
-          relationships2Ids: []
+          relationships2Ids: [],
+          children: [],
         };
         
-        console.log('Eklenecek veri:', newPerson);
-        await personService.createPerson({ 
-            ...newPerson, 
-            birthDate: newPerson.birthDate || null,
-            deathDate: newPerson.deathDate || null,
-            fatherId: newPerson.fatherId || null,
-            motherId: newPerson.motherId || null,
-            spouseId: newPerson.spouseId || null,
-        });
+        console.log('Eklenecek veri:', newPersonData);
+        await personService.createPerson(newPersonData);
       }
       
       onSave();
@@ -156,14 +147,7 @@ export const PersonFormContainer: React.FC<Props> = ({ personId, onSave, onCance
 
   return (
     <PersonForm
-      person={{
-        ...person,
-        birthDate: person.birthDate ?? undefined,
-        deathDate: person.deathDate ?? undefined,
-        fatherId: person.fatherId ?? undefined,
-        motherId: person.motherId ?? undefined,
-        spouseId: person.spouseId ?? undefined,
-      }}
+      person={person}
       setPerson={setPerson}
       availableFathers={availableFathers}
       availableMothers={availableMothers}
