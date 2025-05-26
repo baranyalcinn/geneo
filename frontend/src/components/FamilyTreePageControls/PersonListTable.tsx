@@ -8,7 +8,7 @@ import { ThemeContextType } from '../../context/ThemeContext'; // Projenizdeki T
 import { useTheme } from '@mui/material/styles'; // useTheme hook'unu import ediyoruz
 
 type Order = 'asc' | 'desc';
-export type OrderByKey = 'name' | 'gender' | 'birthDate' | 'deathDate' | 'motherId' | 'fatherId' | 'spouseId';
+export type OrderByKey = 'name' | 'gender' | 'birthDate' | 'deathDate' | 'mother' | 'father' | 'spouse';
 
 interface HeadCell {
   id: OrderByKey;
@@ -138,13 +138,13 @@ const PersonListTable: React.FC<PersonListTableProps> = ({
                 <TableCell>{person.birthDate ? new Date(person.birthDate).toLocaleDateString() : '-'}</TableCell>
                 <TableCell>{person.deathDate ? new Date(person.deathDate).toLocaleDateString() : '-'}</TableCell>
                 <TableCell>
-                  {person.motherId ? (allPersons.find(p => p.id === person.motherId)?.firstName + ' ' + allPersons.find(p => p.id === person.motherId)?.lastName) : '-'}
+                  {person.mother ? `${person.mother.firstName} ${person.mother.lastName}` : '-'}
                 </TableCell>
                 <TableCell>
-                  {person.fatherId ? (allPersons.find(p => p.id === person.fatherId)?.firstName + ' ' + allPersons.find(p => p.id === person.fatherId)?.lastName) : '-'}
+                  {person.father ? `${person.father.firstName} ${person.father.lastName}` : '-'}
                 </TableCell>
                 <TableCell>
-                  {person.spouseId ? (allPersons.find(p => p.id === person.spouseId)?.firstName + ' ' + allPersons.find(p => p.id === person.spouseId)?.lastName) : '-'}
+                  {person.spouse ? `${person.spouse.firstName} ${person.spouse.lastName}` : '-'}
                 </TableCell>
               </TableRow>
             ))}
