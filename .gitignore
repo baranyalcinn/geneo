@@ -8,6 +8,7 @@
 *.iml
 .vscode/
 .cursor/
+.cursor/rules/
 
 # OS
 .DS_Store
