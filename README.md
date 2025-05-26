@@ -1,148 +1,349 @@
-# Aile Ağacı Uygulaması
+# Aile Ağacı Projesi
 
-Aile üyelerinizi ve ilişkilerini yönetebileceğiniz, görselleştirebileceğiniz modern bir platform.
+![Family Tree](https://img.shields.io/badge/Aile_Ağacı-v0.1.0-blue) ![React](https://img.shields.io/badge/React-v19.1.0-61DAFB) ![Spring Boot](https://img.shields.io/badge/Spring_Boot-v3.5.0-6DB33F)
 
-## Özellikler
+Aile Ağacı, aile üyelerinizi ve aralarındaki ilişkileri görselleştirip yönetebileceğiniz modern ve kullanıcı dostu bir web uygulamasıdır.
 
-- Kişi ekleme, düzenleme, silme
-- Ebeveyn-çocuk, eş, kardeş gibi ilişkiler tanımlama
-- Hiyerarşik aile ağacı görselleştirmesi ([React Flow](https://reactflow.dev/))
-- Kişi arama ve filtreleme
-- Doğum ve ölüm tarihi desteği
-- İlişki tabanlı oyun modülü
-- Çoklu dil desteği (Türkçe/İngilizce)
-- Koyu/açık tema desteği ([MUI](https://mui.com/))
-- Modern, responsive arayüz
+## 📋 İçindekiler
 
-## Kullanılan Teknolojiler
+- [Özellikler](#-özellikler)
+- [Ekran Görüntüleri](#-ekran-görüntüleri)
+- [Teknoloji Yığını](#-teknoloji-yığını)
+- [Mimari](#-mimari)
+- [Kurulum](#-kurulum)
+- [Kullanım](#-kullanım)
+- [Geliştirme](#-geliştirme)
+- [Test](#-test)
+- [Dağıtım](#-dağıtım)
+- [Katkıda Bulunma](#-katkıda-bulunma)
+- [Lisans](#-lisans)
+- [İletişim](#-iletişim)
+
+## ✨ Özellikler
+
+### Temel Özellikler
+- ✅ Kişi yönetimi (ekleme, düzenleme, silme)
+- ✅ Çoklu ilişki türleri (ebeveyn-çocuk, eş, kardeş)
+- ✅ Etkileşimli aile ağacı görselleştirmesi
+- ✅ Kişi arama ve filtreleme
+- ✅ Doğum ve ölüm tarihi desteği
+- ✅ Çoklu dil desteği (Türkçe/İngilizce)
+- ✅ Koyu/açık tema desteği
+
+### Gelişmiş Özellikler
+- ✅ İlişki tabanlı oyun modülü
+- ✅ Soy ağacı analizi
+- ✅ Kişilere özel notlar ve anılar
+- ✅ Modern, responsive arayüz
+- ✅ Veri yedekleme ve içe/dışa aktarma
+
+## 🖼️ Ekran Görüntüleri
+
+*Ekran görüntüleri eklenecek*
+
+## 🔧 Teknoloji Yığını
 
 ### Frontend
-
-- [React](https://react.dev/) (TypeScript)
-- [Vite](https://vitejs.dev/)
-- [Material UI (MUI)](https://mui.com/)
-- [React Flow](https://reactflow.dev/)
-- [Axios](https://axios-http.com/)
-- Zustand, i18next, d3, styled-components
-- Test: [Vitest](https://vitest.dev/), [Testing Library](https://testing-library.com/)
+- **Framework**: [React](https://react.dev/) v19.1.0 (TypeScript)
+- **Build Tool**: [Vite](https://vitejs.dev/) v6.3.5
+- **UI Kütüphanesi**: [Material UI (MUI)](https://mui.com/) v7.1.0
+- **Görselleştirme**: [React Flow](https://reactflow.dev/) v12.6.0
+- **Durum Yönetimi**: [Zustand](https://zustand-demo.pmnd.rs/) v5.0.4
+- **API İstemcisi**: [Axios](https://axios-http.com/) v1.9.0
+- **Uluslararasılaştırma**: [i18next](https://www.i18next.com/) v25.1.2
+- **Animasyon**: [Framer Motion](https://www.framer.com/motion/) v12.10.5
+- **Stil**: [Styled Components](https://styled-components.com/) v6.1.18
+- **Test**: [Vitest](https://vitest.dev/), [Testing Library](https://testing-library.com/)
 
 ### Backend
+- **Framework**: [Spring Boot](https://spring.io/projects/spring-boot) v3.5.0
+- **Java Sürümü**: Java 24
+- **Veritabanı**: [PostgreSQL](https://www.postgresql.org/) v42.7.5
+- **ORM**: Spring Data JPA
+- **Nesne Haritalama**: [MapStruct](https://mapstruct.org/) v1.6.3
+- **Kod Azaltma**: [Lombok](https://projectlombok.org/) v1.18.38
+- **Önbellek**: [Caffeine](https://github.com/ben-manes/caffeine) v3.1.8
+- **Doğrulama**: Spring Validation
+- **İzleme**: Spring Actuator
 
-- [Spring Boot](https://spring.io/projects/spring-boot)
-- Spring Data JPA, Validation, Actuator, Cache
-- [PostgreSQL](https://www.postgresql.org/)
-- MapStruct, Lombok, Caffeine
-- Test: Spring Boot Test
+## 🏗️ Mimari
 
-## Kurulum
+### Genel Yapı
+- **Monorepo**: Frontend ve backend kodları aynı repo içinde ayrı klasörlerde
+- **REST API**: Backend ve frontend arasında JSON tabanlı iletişim
+- **Katmanlı Mimari**: Backend'de Controller-Service-Repository deseni
+
+### Backend
+```
+backend/
+  ├── config/         # Uygulama yapılandırmaları
+  ├── controller/     # REST API endpoint'leri
+  ├── exception/      # Özel hata işleme
+  ├── mapper/         # DTO-Entity dönüşümleri
+  ├── model/          # Veri modelleri
+  │   ├── dto/        # Veri transfer nesneleri
+  │   ├── entity/     # Veritabanı varlıkları
+  │   └── enums/      # Sabit değerler
+  ├── repository/     # Veritabanı işlemleri
+  └── service/        # İş mantığı katmanı
+      ├── family/     # Aile servisleri
+      ├── familytree/ # Aile ağacı servisleri
+      ├── game/       # Oyun modülü servisleri
+      ├── person/     # Kişi servisleri
+      └── relationship/ # İlişki servisleri
+```
+
+### Frontend
+```
+frontend/
+  ├── components/     # Yeniden kullanılabilir UI bileşenleri
+  │   ├── FamilyTree/ # Aile ağacı görselleştirme
+  │   ├── PersonForm/ # Kişi ekleme/düzenleme formları
+  │   ├── ui/         # Temel UI bileşenleri
+  │   └── ...
+  ├── context/        # React context sağlayıcılar
+  ├── hooks/          # Özel React hook'ları
+  ├── pages/          # Sayfa bileşenleri
+  ├── services/       # API iletişim servisleri
+  ├── store/          # Zustand global durum yönetimi
+  ├── theme/          # MUI tema yapılandırması
+  ├── types/          # TypeScript tür tanımlamaları
+  └── utils/          # Yardımcı fonksiyonlar
+```
+
+## 📥 Kurulum
 
 ### Gereksinimler
 
-- Node.js >= 18
-- Java >= 21
-- PostgreSQL
+- Node.js >= 23.11.0
+- Java >= 24
+- PostgreSQL >= 15
+- Maven veya Gradle
 
-### Frontend
+### Frontend Kurulumu
 
 ```bash
-cd frontend
+# Repo'yu klonla
+git clone https://github.com/USERNAME/familytree.git
+cd familytree/frontend
+
+# Bağımlılıkları yükle
 npm install
+
+# Geliştirme sunucusunu başlat
 npm run dev
 ```
 
-Uygulama: [http://localhost:3000](http://localhost:3000)
+Uygulama şu adreste çalışacak: [http://localhost:3000](http://localhost:3000)
 
-### Backend
+### Backend Kurulumu
 
 ```bash
-# PostgreSQL'de bir veritabanı oluşturun (ör: familytree)
-# application.properties dosyasını yapılandırın
+# PostgreSQL'de veritabanı oluştur
+createdb familytree
+
+# Backend dizinine git
+cd familytree/backend
+
+# application.properties dosyasını yapılandır
+# src/main/resources/application.properties
+
+# Spring Boot uygulamasını başlat
 mvn spring-boot:run
 ```
 
-API: [http://localhost:8080/api](http://localhost:8080/api)
+API şu adreste çalışacak: [http://localhost:8080/api](http://localhost:8080/api)
 
-## Mimarî
+### Yapılandırma
 
-- **Monorepo**: frontend (React) ve backend (Spring Boot) ayrı klasörlerde
-- **Katmanlı yapı**: Controller, Service, Repository, DTO, Entity
-- **Context ve Provider**: React context ile tema, dil, veri yönetimi
-- **Veri akışı**: Axios ile REST API üzerinden
-- **Aile ağacı**: React Flow ile dinamik node/edge yapısı
+`backend/src/main/resources/application.properties` dosyasını düzenleyin:
 
-## Test
+```properties
+# Veritabanı
+spring.datasource.url=jdbc:postgresql://localhost:5432/familytree
+spring.datasource.username=postgres
+spring.datasource.password=your_password
 
-### Frontend
+# JPA/Hibernate
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+
+# Sunucu
+server.port=8080
+server.servlet.context-path=/api
+```
+
+## 🎮 Kullanım
+
+### Kişi Yönetimi
+
+1. Ana sayfada "Kişi Ekle" butonuna tıklayın
+2. Kişi bilgilerini girin (ad, soyadı, doğum tarihi, vb.)
+3. Kişiyi kaydedin
+4. Kişi detaylarını görüntülemek için listedeki kişiye tıklayın
+5. Düzenlemek için "Düzenle" butonunu kullanın
+
+### Aile Ağacı Görselleştirmesi
+
+1. "Aile Ağacı" sekmesine gidin
+2. Görüntülemek istediğiniz kişiyi merkez olarak seçin
+3. Görünümü yakınlaştırmak/uzaklaştırmak için kaydırma tekerleğini kullanın
+4. Düğümleri sürükleyerek düzeni özelleştirin
+5. İlişki türlerini görüntülemek için bağlantılara tıklayın
+
+### İlişki Ekleme
+
+1. "İlişkiler" sekmesine gidin
+2. "Yeni İlişki" butonuna tıklayın
+3. İlişki türünü seçin (ebeveyn, eş, kardeş)
+4. İlişkilendirilecek kişileri seçin
+5. İlişkiyi kaydedin
+
+## 🧩 Geliştirme
+
+### Yeni Bir Bileşen Ekleme
+
+```jsx
+// src/components/MyNewComponent.tsx
+import React from 'react';
+import { Typography, Box } from '@mui/material';
+
+interface MyNewComponentProps {
+  title: string;
+  // diğer prop'lar
+}
+
+const MyNewComponent: React.FC<MyNewComponentProps> = ({ title }) => {
+  return (
+    <Box sx={{ padding: 2 }}>
+      <Typography variant="h4">{title}</Typography>
+      {/* bileşen içeriği */}
+    </Box>
+  );
+};
+
+export default MyNewComponent;
+```
+
+### Yeni Bir Service Oluşturma
+
+```java
+// src/main/java/by/backend/service/mynewfeature/MyNewService.java
+package by.backend.service.mynewfeature;
+
+import org.springframework.stereotype.Service;
+import lombok.RequiredArgsConstructor;
+
+@Service
+@RequiredArgsConstructor
+public class MyNewService {
+    private final SomeRepository someRepository;
+    
+    public SomeDTO doSomething(Long id) {
+        // iş mantığı
+        return new SomeDTO();
+    }
+}
+```
+
+## 🧪 Test
+
+### Frontend Testleri
+
+```bash
+# Birim testleri çalıştır
+cd frontend
+npm run test
+
+# Kod kapsamı raporu
+npm run test:coverage
+```
+
+### Backend Testleri
+
+```bash
+# Maven ile testleri çalıştır
+cd backend
+mvn test
+
+# Tek bir test sınıfını çalıştır
+mvn test -Dtest=PersonServiceTest
+```
+
+## 🚀 Dağıtım
+
+### Frontend Build
 
 ```bash
 cd frontend
-npm run test
+npm run build
 ```
 
-### Backend
+Build çıktısı `frontend/build` dizininde oluşturulacaktır.
+
+### Backend Build
 
 ```bash
-mvn test
+cd backend
+mvn package
 ```
 
-## Katkı
+Çalıştırılabilir JAR dosyası `backend/target` dizininde oluşturulacaktır.
 
-Katkıda bulunmak için fork'layın, yeni bir branch açın ve PR gönderin. Kod kalitesi için ESLint ve Prettier kurallarına uyun.
+### Docker ile Dağıtım
 
-## Lisans
+```bash
+# Docker imajları oluştur
+docker-compose build
 
-MIT
+# Servisleri başlat
+docker-compose up -d
+```
 
-## İletişim
+## 👥 Katkıda Bulunma
 
-Her türlü soru ve öneri için: [github issues](https://github.com/USERNAME/REPO/issues)
+1. Bu repo'yu fork'layın
+2. Yeni bir branch oluşturun (`git checkout -b feature/amazing-feature`)
+3. Değişikliklerinizi commit'leyin (`git commit -m 'Add some amazing feature'`)
+4. Branch'inizi push'layın (`git push origin feature/amazing-feature`)
+5. Pull Request gönderin
+
+## 📝 Lisans
+
+Bu proje MIT Lisansı altında lisanslanmıştır - ayrıntılar için [LICENSE](LICENSE) dosyasına bakın.
+
+## 📞 İletişim
+
+Proje Yöneticisi - [@twitter_handle](https://twitter.com/twitter_handle)
+
+Proje Linki: [https://github.com/USERNAME/familytree](https://github.com/USERNAME/familytree)
 
 ---
 
-## Context7 ile Kullanılan Temel Teknolojiler ve API'ler
+## 🔄 Son Güncellemeler
 
-### React
+### v0.1.0 (Mayıs 2024)
+- Ölüm tarihi desteği eklendi
+- Performans iyileştirmeleri yapıldı
+- Hata düzeltmeleri
 
-Bileşen tabanlı, fonksiyonel ve hook odaklı modern arayüz geliştirme kütüphanesi.
+### v0.0.9 (Nisan 2024)
+- İlişki tabanlı oyun modülü eklendi
+- Kullanıcı arayüzü iyileştirmeleri
+- Çoklu dil desteği genişletildi
 
-**Temel Hook'lar:**
-- **useState**: Bileşenlerde durum yönetimi sağlar.
-  ```jsx
-  const [count, setCount] = useState(0);
-  ```
-- **useEffect**: Yan etkileri (API çağrıları, DOM manipülasyonu) yönetir.
-  ```jsx
-  useEffect(() => {
-    // Bileşen mount olduğunda çalışır
-    return () => {
-      // Bileşen unmount olduğunda temizlik işlemleri
-    };
-  }, [bağımlılıklar]);
-  ```
-- **useContext**: Context API ile global state erişimi sağlar.
-  ```jsx
-  const theme = useContext(ThemeContext);
-  ```
+---
 
-### Spring Boot
+## 💡 Teknoloji Detayları
 
-Hızlı, üretim hazır Java backend geliştirme framework'ü.
+### React Flow Kullanımı
 
-**Temel Anotasyonlar:**
-- **@RestController**: HTTP endpoint'leri tanımlar
-- **@Service**: İş mantığı katmanını tanımlar
-- **@Repository**: Veritabanı işlemlerini yapan arayüzler
-- **@Entity**: Veritabanı tablolarını temsil eden sınıflar
+Aile ağacı görselleştirmesi için React Flow kütüphanesini kullanıyoruz. Temel yapı şu şekildedir:
 
-### React Flow
-
-Node-edge tabanlı görselleştirme kütüphanesi, aile ağacı gibi hiyerarşik yapıları görselleştirmek için idealdir.
-
-**Temel Kullanım:**
 ```jsx
 import { ReactFlow, useNodesState, useEdgesState, addEdge } from '@xyflow/react';
 
-function Flow() {
+function FamilyTreeView() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
@@ -156,82 +357,80 @@ function Flow() {
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
-    />
+    >
+      <Controls />
+      <Background />
+    </ReactFlow>
   );
 }
 ```
 
-### MUI (Material UI)
+### Spring Boot REST API
 
-Material Design temelli, özelleştirilebilir React UI bileşenleri kütüphanesi.
+Backend'de Spring Boot REST Controller'lar kullanarak veri sunarız:
 
-**Tema Oluşturma:**
-```jsx
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+```java
+@RestController
+@RequestMapping("/api/persons")
+public class PersonController {
 
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#556cd6',
-    },
-    secondary: {
-      main: '#19857b',
-    },
-  },
-  colorSchemes: {
-    light: true,
-    dark: true,
-  },
-});
+    private final PersonService personService;
 
-function App() {
-  return (
-    <ThemeProvider theme={theme}>
-      {/* Uygulama içeriği */}
-    </ThemeProvider>
-  );
+    public PersonController(PersonService personService) {
+        this.personService = personService;
+    }
+
+    @GetMapping
+    public List<PersonDTO> getAllPersons() {
+        return personService.getAllPersons();
+    }
+
+    @GetMapping("/{id}")
+    public PersonDTO getPerson(@PathVariable Long id) {
+        return personService.getPersonById(id);
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public PersonDTO createPerson(@Valid @RequestBody PersonDTO personDTO) {
+        return personService.createPerson(personDTO);
+    }
 }
 ```
 
-### Axios
+### Zustand Durum Yönetimi
 
-Promise tabanlı HTTP istemcisi, REST API ile haberleşmeyi kolaylaştırır.
+Frontend'de global durum yönetimi için Zustand kullanıyoruz:
 
-**Temel Kullanım:**
-```js
-// GET isteği
-axios.get('/api/persons')
-  .then(response => console.log(response.data))
-  .catch(error => console.error(error));
+```typescript
+import { create } from 'zustand';
 
-// POST isteği
-axios.post('/api/persons', {
-  name: 'John Doe',
-  birthDate: '1990-01-01'
-})
-  .then(response => console.log(response.data))
-  .catch(error => console.error(error));
+interface PersonState {
+  persons: Person[];
+  selectedPerson: Person | null;
+  loading: boolean;
+  fetchPersons: () => Promise<void>;
+  selectPerson: (id: number) => void;
+}
 
-// İnterceptor kullanımı
-axios.interceptors.request.use(config => {
-  // İstek gönderilmeden önce yapılacak işlemler
-  return config;
-});
-```
-
-## Yeni Eklenen Özellik: Ölüm Tarihi
-
-Uygulamada artık kişiler için ölüm tarihi bilgisi ekleyebilirsiniz. Bu özellik, vefat eden aile üyeleri için önemli bir bilgi olarak sisteme eklendi.
-
-### Yapılan Değişiklikler:
-
-1. Veritabanı şemasına `death_date` sütunu eklendi
-2. Model sınıflarında ölüm tarihi desteği eklendi
-3. Kullanıcı arayüzünde ölüm tarihi giriş alanı eklendi
-4. Aile ağacı görselleştirmesinde ölüm tarihleri gösteriliyor
-
-### Nasıl Kullanılır:
-
-1. "Kişi Ekle" veya "Kişi Düzenle" sayfalarında ölüm tarihi alanını doldurabilirsiniz
-2. Kişi hayatta ise bu alanı boş bırakın
-3. Aile ağacı görünümünde kişilerin doğum ve ölüm tarihleri otomatik olarak gösterilecektir 
+const usePersonStore = create<PersonState>((set) => ({
+  persons: [],
+  selectedPerson: null,
+  loading: false,
+  fetchPersons: async () => {
+    set({ loading: true });
+    try {
+      const response = await axios.get('/api/persons');
+      set({ persons: response.data, loading: false });
+    } catch (error) {
+      console.error('Kişiler yüklenirken hata oluştu:', error);
+      set({ loading: false });
+    }
+  },
+  selectPerson: (id) => {
+    set((state) => ({
+      selectedPerson: state.persons.find(p => p.id === id) || null
+    }));
+  }
+}));
+``` 
