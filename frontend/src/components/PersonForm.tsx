@@ -359,9 +359,13 @@ const PersonForm: React.FC<PersonFormUIProps> = ({
                 labelId="mother-label"
                 id="motherId"
                 name="motherId"
-                value={person.motherId != null ? String(person.motherId) : ''}
+                value={person.mother?.id != null ? String(person.mother.id) : ''}
                 label={t('mother')}
-                onChange={e => setPerson({ ...person, motherId: e.target.value === '' ? null : Number(e.target.value) })}
+                onChange={e => {
+                  const selectedId = e.target.value === '' ? undefined : Number(e.target.value);
+                  const selectedMother = availableMothers.find(m => m.id === selectedId);
+                  setPerson({ ...person, mother: selectedId ? selectedMother : undefined });
+                }}
                 startAdornment={
                   <InputAdornment position="start">
                     <WomanIcon sx={{ color: '#e91e63' }} />
@@ -421,9 +425,13 @@ const PersonForm: React.FC<PersonFormUIProps> = ({
                 labelId="father-label"
                 id="fatherId"
                 name="fatherId"
-                value={person.fatherId != null ? String(person.fatherId) : ''}
+                value={person.father?.id != null ? String(person.father.id) : ''}
                 label={t('father')}
-                onChange={e => setPerson({ ...person, fatherId: e.target.value === '' ? null : Number(e.target.value) })}
+                onChange={e => {
+                  const selectedId = e.target.value === '' ? undefined : Number(e.target.value);
+                  const selectedFather = availableFathers.find(f => f.id === selectedId);
+                  setPerson({ ...person, father: selectedId ? selectedFather : undefined });
+                }}
                 startAdornment={
                   <InputAdornment position="start">
                     <ManIcon sx={{ color: '#2196f3' }} />
@@ -483,9 +491,13 @@ const PersonForm: React.FC<PersonFormUIProps> = ({
                 labelId="spouse-label"
                 id="spouseId"
                 name="spouseId"
-                value={person.spouseId != null ? String(person.spouseId) : ''}
+                value={person.spouse?.id != null ? String(person.spouse.id) : ''}
                 label={t('spouse')}
-                onChange={e => setPerson({ ...person, spouseId: e.target.value === '' ? null : Number(e.target.value) })}
+                onChange={e => {
+                  const selectedId = e.target.value === '' ? undefined : Number(e.target.value);
+                  const selectedSpouse = availableSpouses.find(s => s.id === selectedId);
+                  setPerson({ ...person, spouse: selectedId ? selectedSpouse : undefined });
+                }}
                 startAdornment={
                   <InputAdornment position="start">
                     <FamilyRestroomIcon sx={{ color: theme.palette.warning.main }} />

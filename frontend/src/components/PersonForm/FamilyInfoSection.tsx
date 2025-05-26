@@ -45,10 +45,9 @@ const FamilyInfoSection: React.FC<FamilyInfoSectionProps> = ({
             labelId="father-label"
             id="fatherId"
             name="fatherId"
-            value={person.fatherId || ''}
+            value={person.father?.id || ''}
             label={t('father')}
-            onChange={e => setPerson({ ...person, fatherId: e.target.value ? Number(e.target.value) : undefined })}
-            isDarkMode={isDarkMode}
+            onChange={e => setPerson({ ...person, father: e.target.value ? availableFathers.find(p => p.id === Number(e.target.value)) : undefined })}
             MenuProps={selectMenuProps(isDarkMode)}
           >
             <MenuItem value=""><em>{t('unknown')}</em></MenuItem>
@@ -67,10 +66,9 @@ const FamilyInfoSection: React.FC<FamilyInfoSectionProps> = ({
             labelId="mother-label"
             id="motherId"
             name="motherId"
-            value={person.motherId || ''}
+            value={person.mother?.id || ''}
             label={t('mother')}
-            onChange={e => setPerson({ ...person, motherId: e.target.value ? Number(e.target.value) : undefined })}
-            isDarkMode={isDarkMode}
+            onChange={e => setPerson({ ...person, mother: e.target.value ? availableMothers.find(p => p.id === Number(e.target.value)) : undefined })}
             MenuProps={selectMenuProps(isDarkMode)}
           >
             <MenuItem value=""><em>{t('unknown')}</em></MenuItem>
@@ -89,11 +87,10 @@ const FamilyInfoSection: React.FC<FamilyInfoSectionProps> = ({
             labelId="spouse-label"
             id="spouseId"
             name="spouseId"
-            value={person.spouseId || ''}
+            value={person.spouse?.id || ''}
             label={t('spouse')}
-            onChange={e => setPerson({ ...person, spouseId: e.target.value ? Number(e.target.value) : undefined })}
+            onChange={e => setPerson({ ...person, spouse: e.target.value ? availableSpouses.find(p => p.id === Number(e.target.value)) : undefined })}
             disabled={!isEditing} // Sadece düzenleme modunda aktif
-            isDarkMode={isDarkMode}
             MenuProps={selectMenuProps(isDarkMode)}
           >
             <MenuItem value=""><em>{t('none')}</em></MenuItem>

@@ -309,7 +309,7 @@ const AdditionalInfoSection: FC<AdditionalInfoSectionProps> = ({
 
 interface FamilyRelationsSectionProps {
   person: Partial<Person>;
-  onRelationChange: (field: 'fatherId' | 'motherId' | 'spouseId') => (event: SelectChangeEvent<string>) => void;
+  onRelationChange: (field: 'father' | 'mother' | 'spouse') => (event: SelectChangeEvent<string>) => void;
   availableFathers: Person[];
   availableMothers: Person[];
   availableSpouses: Person[];
@@ -336,24 +336,24 @@ const FamilyRelationsSection: FC<FamilyRelationsSectionProps> = ({
         <PersonRelationSelect
           id="fatherId"
           label={t('father')}
-          value={person.fatherId !== undefined && person.fatherId !== null ? String(person.fatherId) : undefined}
-          onChange={onRelationChange('fatherId')}
+          value={person.father?.id !== undefined ? String(person.father.id) : undefined}
+          onChange={onRelationChange('father')}
           options={availableFathers}
           startIcon={<ManIcon sx={{ color: theme.palette.info.main }} />}
         />
         <PersonRelationSelect
           id="motherId"
           label={t('mother')}
-          value={person.motherId !== undefined && person.motherId !== null ? String(person.motherId) : undefined}
-          onChange={onRelationChange('motherId')}
+          value={person.mother?.id !== undefined ? String(person.mother.id) : undefined}
+          onChange={onRelationChange('mother')}
           options={availableMothers}
           startIcon={<WomanIcon sx={{ color: theme.palette.error.main }} />}
         />
         <PersonRelationSelect
           id="spouseId"
           label={t('spouse')}
-          value={person.spouseId !== undefined && person.spouseId !== null ? String(person.spouseId) : undefined}
-          onChange={onRelationChange('spouseId')}
+          value={person.spouse?.id !== undefined ? String(person.spouse.id) : undefined}
+          onChange={onRelationChange('spouse')}
           options={availableSpouses}
           startIcon={<FamilyRestroomIcon sx={{ color: theme.palette.warning.main }} />}
         />
@@ -469,10 +469,25 @@ const PersonForm: React.FC<PersonFormUIProps> = ({
     borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`
   };
 
-  const handleRelationChange = (field: 'fatherId' | 'motherId' | 'spouseId') => (event: SelectChangeEvent<string>) => {
+  const handleRelationChange = (field: 'father' | 'mother' | 'spouse') => (event: SelectChangeEvent<string>) => {
     const value = event.target.value;
-    const idValue = value ? parseInt(value, 10) : undefined; 
-    setPerson({ ...person, [field]: isNaN(idValue as any) ? undefined : idValue });
+    const idValue = value ? parseInt(value, 10) : undefined;
+
+    let selectedPersonSummary: Person | undefined = undefined;
+    if (idValue !== undefined) {
+      switch (field) {
+        case 'father':
+          selectedPersonSummary = availableFathers.find(p => p.id === idValue);
+          break;
+        case 'mother':
+          selectedPersonSummary = availableMothers.find(p => p.id === idValue);
+          break;
+        case 'spouse':
+          selectedPersonSummary = availableSpouses.find(p => p.id === idValue);
+          break;
+      }
+    }
+    setPerson({ ...person, [field]: selectedPersonSummary });
   };
 
   if (loading) {

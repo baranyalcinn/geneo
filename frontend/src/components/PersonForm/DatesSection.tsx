@@ -1,7 +1,7 @@
 import React from 'react';
 import { Person } from '../../types/Person';
 import {
-  Typography, Stack
+  Typography, Stack, Box
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import CakeIcon from '@mui/icons-material/Cake';
