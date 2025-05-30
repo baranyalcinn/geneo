@@ -106,8 +106,8 @@ export const FamilyTreeProvider: React.FC<FamilyTreeProviderProps> = ({ children
 
     personMap.forEach(person => {
       // Eş ilişkisini kur
-      if (person.spouseId && personMap.has(person.spouseId)) {
-        const spouse = personMap.get(person.spouseId);
+      if (person.spouse?.id && personMap.has(person.spouse.id)) {
+        const spouse = personMap.get(person.spouse.id);
         if (spouse) {
           person.spouse = spouse;
           // Karşılıklı eş ilişkisini de kurabiliriz, ancak bu removeCycles'da sorun yaratabilir.
@@ -118,7 +118,7 @@ export const FamilyTreeProvider: React.FC<FamilyTreeProviderProps> = ({ children
 
       // Çocuk ilişkilerini kur (hem anne hem baba üzerinden)
       persons.forEach(p => {
-        if (p.fatherId === person.id || p.motherId === person.id) {
+        if ((p.father?.id === person.id || p.mother?.id === person.id)) {
           const childFromMap = personMap.get(p.id);
           if (childFromMap) {
             person.children = person.children || [];
