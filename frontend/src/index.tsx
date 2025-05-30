@@ -21,7 +21,7 @@ if (!rootElement) throw new Error('Root element not found');
 createRoot(rootElement).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+    <App />
     </QueryClientProvider>
   </React.StrictMode>
 );

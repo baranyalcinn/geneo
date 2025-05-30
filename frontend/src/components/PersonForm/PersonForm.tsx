@@ -79,14 +79,14 @@ const BasicInfoSection: FC<BasicInfoSectionProps> = ({
             variant="outlined"
             slotProps={{
               input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <PersonIcon
-                      fontSize="small"
-                      sx={{ color: theme.palette.primary.main }}
-                    />
-                  </InputAdornment>
-                ),
+              startAdornment: (
+                <InputAdornment position="start">
+                  <PersonIcon
+                    fontSize="small"
+                    sx={{ color: theme.palette.primary.main }}
+                  />
+                </InputAdornment>
+              ),
               }
             }}
           />
@@ -102,14 +102,14 @@ const BasicInfoSection: FC<BasicInfoSectionProps> = ({
             variant="outlined"
             slotProps={{
               input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <PersonIcon
-                      fontSize="small"
-                      sx={{ color: theme.palette.primary.main, opacity: 0.7 }}
-                    />
-                  </InputAdornment>
-                ),
+              startAdornment: (
+                <InputAdornment position="start">
+                  <PersonIcon
+                    fontSize="small"
+                    sx={{ color: theme.palette.primary.main, opacity: 0.7 }}
+                  />
+                </InputAdornment>
+              ),
               }
             }}
           />
@@ -163,14 +163,14 @@ const BasicInfoSection: FC<BasicInfoSectionProps> = ({
             }}
             slotProps={{
               input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <CakeIcon
-                      fontSize="small"
-                      sx={{ color: theme.palette.secondary.main }}
-                    />
-                  </InputAdornment>
-                ),
+              startAdornment: (
+                <InputAdornment position="start">
+                  <CakeIcon
+                    fontSize="small"
+                    sx={{ color: theme.palette.secondary.main }}
+                  />
+                </InputAdornment>
+              ),
               }
             }}
           />
@@ -227,14 +227,14 @@ const AdditionalInfoSection: FC<AdditionalInfoSectionProps> = ({
               }}
               slotProps={{
                 input: {
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SentimentVeryDissatisfiedIcon 
-                        fontSize="small" 
-                        sx={{ color: theme.palette.grey[600] }}
-                      />
-                    </InputAdornment>
-                  ),
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SentimentVeryDissatisfiedIcon 
+                      fontSize="small" 
+                      sx={{ color: theme.palette.grey[600] }}
+                    />
+                  </InputAdornment>
+                ),
                 }
               }}
             />
