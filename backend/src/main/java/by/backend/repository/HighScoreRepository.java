@@ -13,4 +13,7 @@ public interface HighScoreRepository extends JpaRepository<HighScore, Long> {
 
     // Zorluk seviyesine göre en yüksek ilk 10 skoru puanları azalan sırayla getir
     List<HighScore> findTop10ByDifficultyOrderByScoreDesc(Difficulty difficulty);
+
+    // Belirli bir oyuncunun belirli bir zorluktaki en yüksek skorunu getir
+    HighScore findTopByPlayerNameAndDifficultyOrderByScoreDesc(String playerName, Difficulty difficulty);
 } 

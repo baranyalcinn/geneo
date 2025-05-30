@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
 import java.util.Set;
 
 @Data
@@ -23,4 +24,5 @@ public class GameAnswerDTO {
     private String playerName;
     private int gameQuestionCount;
     private int correctAnswersCount;
+    private List<QuestionProgressionPoint> currentProgression;
 }

@@ -33,54 +33,62 @@ public class GameController {
     }
 
     @PostMapping("/start")
-    public ResponseEntity<?> startGame(@RequestBody StartGameRequestDTO startGameRequest) {
+    public ResponseEntity<Object> startGame(@RequestBody StartGameRequestDTO startGameRequest) {
         try {
             if (startGameRequest == null || startGameRequest.getPlayerName() == null || startGameRequest.getPlayerName().trim().isEmpty() || startGameRequest.getDifficulty() == null) {
                 logger.warn("POST /start: Geçersiz istek: {}", startGameRequest);
-                return ResponseEntity.badRequest().body(Map.of("message", "Oyuncu adı ve zorluk seviyesi gereklidir."));
+                Map<String, Object> errorBody = Map.of("message", "Oyuncu adı ve zorluk seviyesi gereklidir.");
+                return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
             }
             logger.info("POST /start: Oyuncu: {}, Zorluk: {}", startGameRequest.getPlayerName(), startGameRequest.getDifficulty());
             InitialGameDataDTO initialData = gameService.startGame(startGameRequest.getPlayerName(), startGameRequest.getDifficulty());
-            return ResponseEntity.ok(initialData);
+            return new ResponseEntity<>(initialData, HttpStatus.OK);
         } catch (GameException e) {
             logger.error("POST /start: Oyun başlatılırken özel hata: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+            Map<String, Object> errorBody = Map.of("message", e.getMessage());
+            return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
         } catch (Exception e) {
             logger.error("POST /start: Oyun başlatılırken beklenmeyen hata: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError().body(Map.of("message", "Oyun başlatılırken bir hata oluştu: " + e.getMessage()));
+            Map<String, Object> errorBody = Map.of("message", "Oyun başlatılırken bir hata oluştu: " + e.getMessage());
+            return new ResponseEntity<>(errorBody, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
     @PostMapping("/answer")
-    public ResponseEntity<?> answerQuestion(@RequestBody GameAnswerDTO gameAnswer) {
+    public ResponseEntity<Object> answerQuestion(@RequestBody GameAnswerDTO gameAnswer) {
         try {
             if (gameAnswer == null || gameAnswer.getQuestionId() == null || gameAnswer.getAnswer() == null || gameAnswer.getDifficulty() == null) {
                 logger.warn("POST /answer: Eksik bilgi ile çağrıldı: {}", gameAnswer);
-                return ResponseEntity.badRequest().body(Map.of("message", "Soru ID, cevap ve zorluk seviyesi gereklidir."));
+                Map<String, Object> errorBody = Map.of("message", "Soru ID, cevap ve zorluk seviyesi gereklidir.");
+                return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
             }
             logger.info("POST /answer: Oyuncu: {}, Soru ID: {}, Cevap: {}", gameAnswer.getPlayerName(), gameAnswer.getQuestionId(), gameAnswer.getAnswer());
             AnswerResponseDTO answerResponse = gameService.answerQuestion(gameAnswer);
-            return ResponseEntity.ok(answerResponse);
+            return new ResponseEntity<>(answerResponse, HttpStatus.OK);
         } catch (GameException e) {
             logger.error("POST /answer: Cevap işlenirken özel hata (Oyuncu: {}): {}", gameAnswer != null ? gameAnswer.getPlayerName() : "N/A", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+            Map<String, Object> errorBody = Map.of("message", e.getMessage());
+            return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
         } catch (Exception e) {
             logger.error("POST /answer: Cevap işlenirken beklenmeyen hata (Oyuncu: {}): {}", gameAnswer != null ? gameAnswer.getPlayerName() : "N/A", e.getMessage(), e);
-            return ResponseEntity.internalServerError().body(Map.of("message", "Cevap işlenirken bir hata oluştu: " + e.getMessage()));
+            Map<String, Object> errorBody = Map.of("message", "Cevap işlenirken bir hata oluştu: " + e.getMessage());
+            return new ResponseEntity<>(errorBody, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
     @PostMapping("/record-result")
-    public ResponseEntity<?> recordResult(@RequestBody RecordScoreRequestDTO scoreRequest) {
+    public ResponseEntity<Object> recordResult(@RequestBody RecordScoreRequestDTO scoreRequest) {
         try {
             if (scoreRequest == null) {
                 logger.warn("POST /record-result: İstek gövdesi null");
-                return ResponseEntity.badRequest().body(Map.of("message", "Geçersiz istek: İstek gövdesi boş"));
+                Map<String, Object> errorBody = Map.of("message", "Geçersiz istek: İstek gövdesi boş");
+                return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
             }
             
             if (scoreRequest.getPlayerName() == null || scoreRequest.getPlayerName().trim().isEmpty()) {
                 logger.warn("POST /record-result: Oyuncu adı eksik veya boş: {}", scoreRequest);
-                return ResponseEntity.badRequest().body(Map.of("message", "Oyuncu adı gereklidir"));
+                Map<String, Object> errorBody = Map.of("message", "Oyuncu adı gereklidir");
+                return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
             }
             
             logger.info("POST /record-result: Oyuncu: {}, Skor: {}, Zorluk: {}, Doğru Cevaplar: {}/{}", 
@@ -91,25 +99,26 @@ public class GameController {
                         scoreRequest.getTotalQuestions());
             
             GameResultDTO savedResult = gameService.recordGameResult(scoreRequest);
-            return ResponseEntity.ok(savedResult);
+            return new ResponseEntity<>(savedResult, HttpStatus.OK);
         } catch (GameException e) {
             logger.error("POST /record-result: Skor kaydedilirken özel hata (Oyuncu: {}): {}", scoreRequest != null ? scoreRequest.getPlayerName() : "N/A", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+            Map<String, Object> errorBody = Map.of("message", e.getMessage());
+            return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
         } catch (Exception e) {
             logger.error("POST /record-result: Skor kaydedilirken beklenmeyen hata (Oyuncu: {}): {}", scoreRequest != null ? scoreRequest.getPlayerName() : "N/A", e.getMessage(), e);
             // Hata durumunda bile, frontend'in skorları gösterebilmesi için boş bir yanıt gönder
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of(
-                    "message", "Skor kaydedilirken bir hata oluştu: " + e.getMessage(),
-                    "success", false,
-                    "scoreRecorded", false,
-                    "result", (scoreRequest != null) ? scoreRequest : Map.of()
-                ));
+            Map<String, Object> errorBody = Map.of(
+                "message", "Skor kaydedilirken bir hata oluştu: " + e.getMessage(),
+                "success", false,
+                "scoreRecorded", false,
+                "result", (scoreRequest != null) ? scoreRequest : Map.of()
+            );
+            return new ResponseEntity<>(errorBody, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
     @GetMapping("/highscores")
-    public ResponseEntity<?> getHighScores() {
+    public ResponseEntity<Object> getHighScores() {
         try {
             logger.info("GET /highscores: Yüksek skorlar getiriliyor...");
             // Önbelleğe alma stratejisi ile yüksek skorları al
@@ -122,14 +131,14 @@ public class GameController {
                 for (Difficulty difficulty : Difficulty.values()) {
                     emptyScores.put(difficulty.name(), new ArrayList<>());
                 }
-                return ResponseEntity.ok(emptyScores);
+                return new ResponseEntity<>(emptyScores, HttpStatus.OK);
             }
             
             logger.info("GET /highscores: {} farklı zorluk düzeyi için yüksek skorlar başarıyla alındı", highScores.size());
-            return ResponseEntity.ok(highScores);
+            return new ResponseEntity<>(highScores, HttpStatus.OK);
         } catch (GameException e) {
             logger.error("GET /highscores: Yüksek skorlar getirilirken özel hata: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.OK).body(Map.of()); // Hata durumunda boş obje döndür
+            return new ResponseEntity<>(Map.of(), HttpStatus.OK); // Hata durumunda boş obje döndür
         } catch (Exception e) {
             logger.error("GET /highscores: Yüksek skorlar getirilirken beklenmeyen hata: {}", e.getMessage(), e);
             // Ön uç bir şekilde devam edebilsin diye boş bir highscores objesi döndür
@@ -137,7 +146,7 @@ public class GameController {
             for (Difficulty difficulty : Difficulty.values()) {
                 emptyScores.put(difficulty.name(), new ArrayList<>());
             }
-            return ResponseEntity.status(HttpStatus.OK).body(emptyScores);
+            return new ResponseEntity<>(emptyScores, HttpStatus.OK);
         }
     }
 
@@ -149,20 +158,20 @@ public class GameController {
             GameQuestionDTO question = gameService.generateQuestion(difficulty); 
             if (question != null) {
                 logger.debug("GET /question: Soru oluşturuldu: {}", question.getId());
-                return ResponseEntity.ok(question);
+                return new ResponseEntity<>(question, HttpStatus.OK);
             } else {
                 logger.warn("GET /question: Zorluk seviyesi {} için soru oluşturulamadı.", difficulty);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null); 
+                return new ResponseEntity<>(null, HttpStatus.NOT_FOUND);
             }
         } catch (IllegalArgumentException e) {
             logger.error("GET /question: Geçersiz zorluk seviyesi parametresi: {}. Hata: {}", difficultyStr, e.getMessage());
-            return ResponseEntity.badRequest().build();
+            return new ResponseEntity<>(null, HttpStatus.BAD_REQUEST);
         } catch (GameException e) {
             logger.error("GET /question: Soru oluşturulurken oyunla ilgili bir hata oluştu (Zorluk: {}): {}", difficultyStr, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
         } catch (Exception e) {
             logger.error("GET /question: Soru oluşturulurken beklenmedik bir hata oluştu (Zorluk: {}): {}", difficultyStr, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 } 

@@ -26,4 +26,8 @@ public class HighScore {
     private int totalQuestions;
     private int maxStreak;
     private LocalDateTime playedAt;
+
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String progressionData;
 } 

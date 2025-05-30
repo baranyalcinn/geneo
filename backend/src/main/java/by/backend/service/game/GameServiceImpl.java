@@ -277,34 +277,28 @@ public class GameServiceImpl implements GameService {
             isGameEnd = true;
             gameEndMessage = getMessage("game.feedback.end_of_game_all_questions_answered");
             log.info("Oyun bitti (tüm sorular cevaplandı): Oyuncu '{}', Skor '{}'", answerDetails.getPlayerName(), totalScore);
-            highScore = new HighScore(
-                null,
+            highScore = processAndRecordHighScore(
                 answerDetails.getPlayerName(),
                 totalScore,
                 answerDetails.getDifficulty(),
                 isCorrect ? answerDetails.getCorrectAnswersCount() + 1 : answerDetails.getCorrectAnswersCount(),
                 DEFAULT_QUESTIONS_PER_GAME,
-                newStreak,
-                LocalDateTime.now()
+                newStreak
             );
-            highScoreRepository.save(highScore);
         } else {
             nextQuestion = generateNewQuestion(answerDetails.getDifficulty(), askedQuestionsInThisGame);
             if (nextQuestion == null) {
                 isGameEnd = true;
                 gameEndMessage = getMessage("game.feedback.end_of_game_no_more_questions");
                 log.warn("Oyun bitti (yeni soru üretilemedi): Oyuncu '{}'", answerDetails.getPlayerName());
-                 highScore = new HighScore(
-                    null,
+                highScore = processAndRecordHighScore(
                     answerDetails.getPlayerName(),
                     totalScore,
                     answerDetails.getDifficulty(),
                     isCorrect ? answerDetails.getCorrectAnswersCount() + 1 : answerDetails.getCorrectAnswersCount(),
                     answerDetails.getGameQuestionCount() + 1,
-                    newStreak,
-                    LocalDateTime.now()
+                    newStreak
                 );
-                highScoreRepository.save(highScore);
             }
         }
 
@@ -821,56 +815,84 @@ public class GameServiceImpl implements GameService {
     @Override
     @Transactional
     public GameResultDTO recordGameResult(RecordScoreRequestDTO scoreDetails) {
-        log.info("Oyun sonucu kaydediliyor: Oyuncu '{}', Skor '{}', Zorluk '{}'", 
+        log.info("Oyun sonucu kaydediliyor: Oyuncu '{}', Skor '{}', Zorluk '{}'",
                 scoreDetails.getPlayerName(), scoreDetails.getScore(), scoreDetails.getDifficulty());
 
         if (scoreDetails.getPlayerName() == null || scoreDetails.getPlayerName().trim().isEmpty()) {
             log.warn("Geçersiz oyuncu adı ile skor kaydı yapılamaz: {}", scoreDetails.getPlayerName());
-            throw new GameException("Geçerli bir oyuncu adı gereklidir.");
+            throw new GameException(getMessage("game.error.invalid_player_name"));
         }
-        
+
         if (scoreDetails.getDifficulty() == null) {
             log.warn("Zorluk seviyesi olmadan skor kaydedilemez");
-            throw new GameException("Zorluk seviyesi gereklidir.");
+            throw new GameException(getMessage("game.error.difficulty_required"));
         }
-        
+
         if (scoreDetails.getScore() < 0) {
             log.warn("Negatif skor kaydedilemez: {}", scoreDetails.getScore());
-            throw new GameException("Skor negatif olamaz.");
+            throw new GameException(getMessage("game.error.negative_score"));
         }
 
-        HighScore highScore = new HighScore();
-        highScore.setPlayerName(scoreDetails.getPlayerName().trim());
-        highScore.setScore(scoreDetails.getScore());
-        highScore.setDifficulty(scoreDetails.getDifficulty());
-        highScore.setCorrectAnswers(scoreDetails.getCorrectAnswers() >= 0 ? scoreDetails.getCorrectAnswers() : 0);
-        highScore.setTotalQuestions(scoreDetails.getTotalQuestions() >= 0 ? scoreDetails.getTotalQuestions() : 0);
-        highScore.setMaxStreak(scoreDetails.getMaxStreak() >= 0 ? scoreDetails.getMaxStreak() : 0);
-        highScore.setPlayedAt(LocalDateTime.now());
+        String playerName = scoreDetails.getPlayerName().trim();
+        Difficulty difficulty = scoreDetails.getDifficulty();
+        int newScore = scoreDetails.getScore();
+
+        HighScore existingHighScore = highScoreRepository.findTopByPlayerNameAndDifficultyOrderByScoreDesc(playerName, difficulty);
+
+        HighScore scoreToSaveOrUpdate;
+        boolean newHighScoreBeaten = false;
+
+        if (existingHighScore != null) {
+            if (newScore > existingHighScore.getScore()) {
+                // Mevcut skoru güncelle
+                existingHighScore.setScore(newScore);
+                existingHighScore.setCorrectAnswers(scoreDetails.getCorrectAnswers() >= 0 ? scoreDetails.getCorrectAnswers() : 0);
+                existingHighScore.setTotalQuestions(scoreDetails.getTotalQuestions() >= 0 ? scoreDetails.getTotalQuestions() : 0);
+                existingHighScore.setMaxStreak(scoreDetails.getMaxStreak() >= 0 ? scoreDetails.getMaxStreak() : 0);
+                existingHighScore.setPlayedAt(LocalDateTime.now());
+                scoreToSaveOrUpdate = existingHighScore;
+                newHighScoreBeaten = true;
+                log.info("Oyuncu '{}' için {} zorluğundaki mevcut yüksek skor ({}) aşıldı. Yeni skor: {}", playerName, difficulty, existingHighScore.getScore(), newScore);
+            } else {
+                // Yeni skor mevcut en yüksek skordan düşük, bir şey yapma veya sadece istatistik güncelle
+                log.info("Oyuncu '{}' için {} zorluğundaki yeni skor ({}), mevcut en yüksek skordan ({}) düşük veya eşit. Skor tablosu güncellenmeyecek.", playerName, difficulty, newScore, existingHighScore.getScore());
+                // İsteğe bağlı: Her oyunu ayrı bir kayıt olarak tutmak isterseniz buraya farklı bir mantık ekleyebilirsiniz.
+                // Şimdilik sadece en yüksek skoru tutuyoruz.
+                return convertToGameResultDTO(existingHighScore); // Mevcut en yüksek skoru döndür
+            }
+        } else {
+            // Bu oyuncu ve zorluk için ilk skor
+            HighScore newHighScoreEntry = new HighScore();
+            newHighScoreEntry.setPlayerName(playerName);
+            newHighScoreEntry.setScore(newScore);
+            newHighScoreEntry.setDifficulty(difficulty);
+            newHighScoreEntry.setCorrectAnswers(scoreDetails.getCorrectAnswers() >= 0 ? scoreDetails.getCorrectAnswers() : 0);
+            newHighScoreEntry.setTotalQuestions(scoreDetails.getTotalQuestions() >= 0 ? scoreDetails.getTotalQuestions() : 0);
+            newHighScoreEntry.setMaxStreak(scoreDetails.getMaxStreak() >= 0 ? scoreDetails.getMaxStreak() : 0);
+            newHighScoreEntry.setPlayedAt(LocalDateTime.now());
+            scoreToSaveOrUpdate = newHighScoreEntry;
+            newHighScoreBeaten = true; // Yeni bir en yüksek skor
+            log.info("Oyuncu '{}' için {} zorluğunda ilk skor kaydediliyor: {}", playerName, difficulty, newScore);
+        }
 
         try {
-            HighScore savedScore = highScoreRepository.save(highScore);
-            log.info("Oyun sonucu başarıyla kaydedildi: ID {}, Oyuncu '{}'", savedScore.getId(), savedScore.getPlayerName());
-            
-            return GameResultDTO.builder()
-                    .playerName(savedScore.getPlayerName())
-                    .score(savedScore.getScore())
-                    .difficulty(savedScore.getDifficulty())
-                    .correctAnswers(savedScore.getCorrectAnswers())
-                    .totalQuestions(savedScore.getTotalQuestions())
-                    .maxStreak(savedScore.getMaxStreak())
-                    .gameOver(true)
-                    .build();
+            HighScore savedScore = highScoreRepository.save(scoreToSaveOrUpdate);
+            log.info("Oyun sonucu başarıyla {} (ID: {}), Oyuncu '{}'", existingHighScore != null && newHighScoreBeaten ? "güncellendi" : "kaydedildi", savedScore.getId(), savedScore.getPlayerName());
+            GameResultDTO resultDTO = convertToGameResultDTO(savedScore);
+            // resultDTO.setHighScore(newHighScoreBeaten); // GameResultDTO'ya böyle bir alan ekleyebiliriz.
+            return resultDTO;
         } catch (Exception e) {
-            log.error("HighScore kaydedilirken hata oluştu: Oyuncu '{}'. Hata: {}", scoreDetails.getPlayerName(), e.getMessage(), e);
+            log.error("HighScore kaydedilirken/güncellenirken hata oluştu: Oyuncu '{}'. Hata: {}", playerName, e.getMessage(), e);
+            // Hata durumunda ne döndürüleceğine karar verilmeli.
+            // Belki de scoreDetails'den bir DTO oluşturup onu döndürmek daha iyi olabilir.
             return GameResultDTO.builder()
-                    .playerName(scoreDetails.getPlayerName())
-                    .score(scoreDetails.getScore())
-                    .difficulty(scoreDetails.getDifficulty())
+                    .playerName(playerName)
+                    .score(newScore)
+                    .difficulty(difficulty)
                     .correctAnswers(scoreDetails.getCorrectAnswers())
                     .totalQuestions(scoreDetails.getTotalQuestions())
                     .maxStreak(scoreDetails.getMaxStreak())
-                    .gameOver(true)
+                    // .setGameOver(true) // GameResultDTO'da gameOver alanı yok, ama mantıksal olarak oyun bitmiş olmalı
                     .build();
         }
     }
@@ -1002,5 +1024,46 @@ public class GameServiceImpl implements GameService {
             log.warn("Aktif kişi önbelleği yenileme sonrası hala boş.");
         }
         return currentCache;
+    }
+
+    private HighScore processAndRecordHighScore(String playerName, int score, Difficulty difficulty, int correctAnswers, int totalQuestions, int maxStreak) {
+        HighScore existingHighScore = highScoreRepository.findTopByPlayerNameAndDifficultyOrderByScoreDesc(playerName, difficulty);
+        HighScore scoreToSaveOrUpdate = null;
+
+        if (existingHighScore != null) {
+            if (score > existingHighScore.getScore()) {
+                existingHighScore.setScore(score);
+                existingHighScore.setCorrectAnswers(correctAnswers);
+                existingHighScore.setTotalQuestions(totalQuestions);
+                existingHighScore.setMaxStreak(maxStreak);
+                existingHighScore.setPlayedAt(LocalDateTime.now());
+                scoreToSaveOrUpdate = existingHighScore;
+                log.info("Oyuncu '{}' için {} zorluğundaki mevcut yüksek skor ({}) aşıldı ve güncellendi. Yeni skor: {}", playerName, difficulty, existingHighScore.getScore(), score);
+            } else {
+                log.info("Oyuncu '{}' için {} zorluğundaki yeni skor ({}), mevcut en yüksek skordan ({}) düşük veya eşit. Mevcut skor ({}) korunacak.", playerName, difficulty, score, existingHighScore.getScore(), existingHighScore.getId());
+                return existingHighScore;
+            }
+        } else {
+            HighScore newHighScoreEntry = new HighScore();
+            newHighScoreEntry.setPlayerName(playerName);
+            newHighScoreEntry.setScore(score);
+            newHighScoreEntry.setDifficulty(difficulty);
+            newHighScoreEntry.setCorrectAnswers(correctAnswers);
+            newHighScoreEntry.setTotalQuestions(totalQuestions);
+            newHighScoreEntry.setMaxStreak(maxStreak);
+            newHighScoreEntry.setPlayedAt(LocalDateTime.now());
+            scoreToSaveOrUpdate = newHighScoreEntry;
+            log.info("Oyuncu '{}' için {} zorluğunda ilk skor kaydediliyor: {}", playerName, difficulty, score);
+        }
+
+        if (scoreToSaveOrUpdate != null) {
+            try {
+                return highScoreRepository.save(scoreToSaveOrUpdate);
+            } catch (Exception e) {
+                log.error("processAndRecordHighScore: HighScore kaydedilirken/güncellenirken hata oluştu: Oyuncu '{}'. Hata: {}", playerName, e.getMessage(), e);
+                return null;
+            }
+        }
+        return existingHighScore;
     }
 } 

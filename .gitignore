@@ -25,3 +25,28 @@ yarn-error.log*
 # Ortak .env dosyaları
 .env
 .env.* 
+
+# Database
+/backend/src/main/resources/db/
+
+# Logs
+/backend/logs/
+
+# Cache
+/backend/src/main/resources/cache/
+
+# Temporary files
+*.tmp
+*.tmp.*
+*.swp
+*.swp.*
+
+# Backup files
+*.bak
+*.bak.*
+*.backup
+*.backup.*
+#target
+/backend/target/
+
+   

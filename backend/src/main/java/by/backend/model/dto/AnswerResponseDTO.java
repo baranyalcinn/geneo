@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Set;
 
 @Data
-@Builder
+@Builder(access = lombok.AccessLevel.PUBLIC)
 public class AnswerResponseDTO {
     private boolean correctAnswer;
     private String correctAnswerText;
@@ -20,4 +20,5 @@ public class AnswerResponseDTO {
     private Long finalScoreId;
     private List<RelationshipStepDTO> relationshipPath;
     private Set<String> askedQuestionSignaturesInThisGame;
+    private List<QuestionProgressionPoint> updatedProgression;
 } 
