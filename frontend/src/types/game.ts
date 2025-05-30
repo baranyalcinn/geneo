@@ -29,35 +29,44 @@ export interface RelationshipStep {
 
 export interface GameQuestion {
   id: string;
-  person1: string;
-  person2: string;
+  questionText: string;
   options: string[];
-  correctAnswer?: string;
   difficulty: Difficulty;
-  timeLimit?: number;
   person1Info?: PersonInfo;
   person2Info?: PersonInfo;
-  relationshipPath?: RelationshipStep[];
+}
+
+export interface InitialGameData {
+  firstQuestion: GameQuestion;
+  playerName: string;
+  difficulty: Difficulty;
 }
 
 export interface GameSession {
-  sessionId: string;
-  playerName?: string;
-  currentQuestion?: GameQuestion | null;
-  questionsAnswered?: number;
-  totalQuestionsInSession?: number;
-  currentScore?: number;
-  currentStreak?: number;
+  playerName: string;
   difficulty: Difficulty;
-  gameOver: boolean;
+  currentQuestion?: GameQuestion | null;
+  currentScore: number;
+  currentStreak: number;
+  questionsAnswered: number;
+  correctAnswersCount: number;
+  totalQuestionsInGame: number;
+  askedQuestionSignaturesInThisGame: string[];
+  isGameOver: boolean;
   finalResult?: GameResult | null;
 }
 
 export interface GameAnswer {
-  sessionId: string;
   questionId: string;
   answer: string;
-  timeTakenInSeconds?: number;
+  timeTakenInSeconds: number;
+  difficulty: Difficulty;
+  playerName: string;
+  askedQuestionSignaturesInThisGame: string[];
+  currentScore: number;
+  currentStreak: number;
+  gameQuestionCount: number;
+  correctAnswersCount: number;
 }
 
 export interface AnswerResponse {
@@ -70,25 +79,35 @@ export interface AnswerResponse {
   gameOver: boolean;
   finalResult?: GameResult;
   relationshipPath?: RelationshipStep[];
+  askedQuestionSignaturesInThisGame: string[];
+  finalScoreId?: string;
 }
 
 export interface GameResult {
+  id?: string;
   playerName: string;
   score: number;
   difficulty: Difficulty;
   correctAnswers: number;
   totalQuestions: number;
   maxStreak: number;
-  gameOver: boolean;
+  date?: string;
+  gameOver?: boolean;
   badges?: string[];
   isHighScore?: boolean;
-  correct?: boolean;
-  message?: string;
-  askedQuestionSignaturesInThisGame?: string[];
 }
 
 export interface HighScores {
   [Difficulty.EASY]: GameResult[];
   [Difficulty.MEDIUM]: GameResult[];
   [Difficulty.HARD]: GameResult[];
+}
+
+export interface RecordScoreRequest {
+  playerName: string;
+  score: number;
+  difficulty: Difficulty;
+  correctAnswers: number;
+  totalQuestions: number;
+  maxStreak: number;
 } 

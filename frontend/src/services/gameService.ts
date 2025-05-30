@@ -2,13 +2,13 @@ import { apiService } from './apiService';
 import {
   Difficulty,
   StartGameRequest,
-  GameSession,
+  InitialGameData,
   HighScores,
   GameQuestion as GameQuestionType,
   GameAnswer as GameAnswerType,
   AnswerResponse as AnswerResponseType,
   GameResult as GameResultType,
-  PersonInfo as PersonInfoType
+  RecordScoreRequest
 } from '../types/game';
 
 export interface PersonInfo {
@@ -73,20 +73,22 @@ export interface AnswerResponse {
  * Starts a new game session.
  * @param playerName The name of the player.
  * @param difficulty The selected game difficulty.
- * @returns A promise that resolves to the initial game session state.
+ * @returns A promise that resolves to the initial game data.
  */
-export const startGame = async (playerName: string, difficulty: Difficulty): Promise<GameSession> => {
+export const startGame = async (playerName: string, difficulty: Difficulty): Promise<InitialGameData> => {
   const requestBody: StartGameRequest = { playerName, difficulty };
-  return apiService.post<GameSession>('game/start', requestBody);
+  return apiService.post<InitialGameData>('game/start', requestBody);
 };
 
 /**
- * Ends the current game session.
- * @param sessionId The ID of the game session to end.
+ * Ends the current game session. This function might be deprecated if game end is handled by submitAnswer or recordGameResult.
+ * For now, assuming it might still be used for explicitly ending a game prematurely.
+ * @param sessionId The ID of the game session to end. (Note: Backend doesn't seem to use sessionId actively in provided code)
  * @returns A promise that resolves to the game result, conforming to the GameResult type from ../types/game.
  */
 export const endGame = async (sessionId: string): Promise<GameResultType> => {
-  return apiService.post<GameResultType>(`game/end/${sessionId}`, {});
+  console.warn("endGame service function called, but backend implementation might be missing or different.");
+  return Promise.reject(new Error("endGame endpoint functionality needs review with backend."));
 };
 
 /**
@@ -101,17 +103,20 @@ export const getHighScores = async (): Promise<HighScores> => {
   };
   
   try {
-    const scores = await apiService.get<HighScores>('game/highscores');
+    const scoresFromApi = await apiService.get<{[key in Difficulty]: any[]}>('game/highscores');
     
-    if (!scores || typeof scores !== 'object') {
-      console.warn("API'den geçersiz yüksek skor verisi alındı, varsayılan kullanılıyor.", scores);
+    if (!scoresFromApi || typeof scoresFromApi !== 'object') {
+      console.warn("API'den geçersiz yüksek skor verisi alındı, varsayılan kullanılıyor.", scoresFromApi);
       return defaultScores;
     }
     
     const formattedScores: HighScores = { ...defaultScores };
     for (const diffKey of Object.values(Difficulty)) {
-        if (scores[diffKey] && Array.isArray(scores[diffKey])) {
-            formattedScores[diffKey] = scores[diffKey].map(score => score as GameResultType);
+        if (scoresFromApi[diffKey] && Array.isArray(scoresFromApi[diffKey])) {
+            formattedScores[diffKey] = scoresFromApi[diffKey].map(score => ({
+                ...score,
+                date: score.date ? score.date.toString() : undefined
+            } as GameResultType));
         } else {
             formattedScores[diffKey] = [];
         }
@@ -119,7 +124,7 @@ export const getHighScores = async (): Promise<HighScores> => {
     localStorage.setItem('highScores', JSON.stringify(formattedScores));
     return formattedScores;
   } catch (error) {
-    console.error('Yüksek skorlar API\'den alınırken hata oluştu.', error);
+    console.error('Yüksek skorlar API'den alınırken hata oluştu.', error);
     try {
       const localScores = localStorage.getItem('highScores');
       if (localScores) {
@@ -134,21 +139,18 @@ export const getHighScores = async (): Promise<HighScores> => {
 };
 
 /**
- * Fetches a question based on difficulty.
+ * Fetches a question based on difficulty. (This is for ad-hoc question generation, not typically during a game flow)
  * @param difficulty The difficulty level for the question.
- * @returns A promise that resolves to a question conforming to the GameQuestion type.
+ * @returns A promise that resolves to a question conforming to the GameQuestionType type.
  */
 export const getQuestion = async (difficulty: Difficulty): Promise<GameQuestionType> => {
   try {
-    console.log(`Soru getiriliyor - Zorluk: ${difficulty}`);
-    // Backend'e doğru parametre formatıyla istek yap
-    const questionData = await apiService.get<GameQuestionType>(`game/question`, { difficulty });
+    const questionData = await apiService.get<GameQuestionType>('game/question', { params: { difficulty } });
     
     if (questionData) {
-      console.log("API'den soru alındı:", questionData);
       return {
         ...questionData,
-        id: questionData.id || `question-${Date.now()}`,
+        id: questionData.id || `adhoc-question-${Date.now()}`,
       };
     }
     throw new Error("Sunucudan geçerli soru alınamadı (getQuestion servisi).");
@@ -160,19 +162,24 @@ export const getQuestion = async (difficulty: Difficulty): Promise<GameQuestionT
 
 /**
  * Submits an answer to a question and gets the result.
- * @param answer The answer to submit, conforming to the GameAnswer type.
- * @returns A promise that resolves to the result of the answer, conforming to the GameResult type.
+ * @param answerDetails The answer to submit, conforming to the GameAnswerType.
+ * @returns A promise that resolves to the result of the answer, conforming to the AnswerResponseType.
  */
-export const submitAnswer = async (answer: GameAnswerType): Promise<AnswerResponseType> => {
-  return apiService.post<AnswerResponseType>('game/answer', answer);
+export const submitAnswer = async (answerDetails: GameAnswerType): Promise<AnswerResponseType> => {
+  return apiService.post<AnswerResponseType>('game/answer', answerDetails);
 };
 
 /**
- * Records the game result to the database.
- * @param gameResult The game result object, expected to be of type GameResultType.
- * @returns A promise that resolves to the recorded game result, also of type GameResultType.
+ * Records the game result to the database when a game is completed.
+ * @param scoreDetails The game result object, conforming to RecordScoreRequest.
+ * @returns A promise that resolves to the recorded game result, of type GameResultType.
  */
-export const recordGameResult = async (gameResult: GameResultType): Promise<GameResultType> => {
-  // Ensure the endpoint 'game/results' is correct according to your backend API.
-  return apiService.post<GameResultType>('game/results', gameResult);
+export const recordGameResult = async (scoreDetails: RecordScoreRequest): Promise<GameResultType> => {
+  try {
+    const result = await apiService.post<GameResultType>('game/record-score', scoreDetails);
+    return result;
+  } catch (error) {
+     console.error("Oyun sonucu kaydedilirken hata oluştu:", error);
+     throw error;
+  }
 };
