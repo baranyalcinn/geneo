@@ -30,11 +30,17 @@ import DatesSection from './DatesSection';
 import PersonRelationSelect from './PersonRelationSelect';
 import { StyledFormSection, StyledSectionHeader } from './StyledComponents';
 
+// t fonksiyonunu string döndürecek şekilde saran yardımcı fonksiyon
+const ensureString = (value: any): string => {
+  if (value === null || value === undefined) return '';
+  return String(value);
+};
+
 interface BasicInfoSectionProps {
   person: Partial<Person>;
   setPerson: (person: Partial<Person>) => void;
   nameInputRef: React.RefObject<HTMLInputElement | null>;
-  t: (key: string) => string;
+  t: (key: string) => React.ReactNode;
 }
 
 const BasicInfoSection: FC<BasicInfoSectionProps> = ({
@@ -69,7 +75,7 @@ const BasicInfoSection: FC<BasicInfoSectionProps> = ({
             fullWidth
             required
             autoFocus
-            placeholder={t('enterFirstName')}
+            placeholder={String(t('enterFirstName'))}
             variant="outlined"
             InputProps={{
               startAdornment: (
@@ -90,7 +96,7 @@ const BasicInfoSection: FC<BasicInfoSectionProps> = ({
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPerson({ ...person, lastName: e.target.value })}
             fullWidth
             required
-            placeholder={t('enterLastName')}
+            placeholder={String(t('enterLastName'))}
             variant="outlined"
             InputProps={{
               startAdornment: (
@@ -171,7 +177,7 @@ const BasicInfoSection: FC<BasicInfoSectionProps> = ({
           value={person.placeOfBirth || ''}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPerson({ ...person, placeOfBirth: e.target.value })}
           fullWidth
-          placeholder={t('enterPlaceOfBirth')}
+          placeholder={String(t('enterPlaceOfBirth'))}
           variant="outlined"
         />
       </Stack>
@@ -182,7 +188,7 @@ const BasicInfoSection: FC<BasicInfoSectionProps> = ({
 interface AdditionalInfoSectionProps {
   person: Partial<Person>;
   setPerson: (person: Partial<Person>) => void;
-  t: (key: string) => string;
+  t: (key: string) => React.ReactNode;
 }
 
 const AdditionalInfoSection: FC<AdditionalInfoSectionProps> = ({
@@ -197,7 +203,7 @@ const AdditionalInfoSection: FC<AdditionalInfoSectionProps> = ({
               sx={{ color: theme.palette.grey[600], mr: 1 }}
             />
           <Typography variant="subtitle1" fontWeight={600}>
-            {t('deathInformation') || 'Ölüm Bilgileri'} 
+            {t('deathInformation')}
           </Typography>
         </StyledSectionHeader>
         <Stack spacing={2}>
@@ -248,57 +254,7 @@ const AdditionalInfoSection: FC<AdditionalInfoSectionProps> = ({
             value={person.placeOfDeath || ''}
             onChange={e => setPerson({ ...person, placeOfDeath: e.target.value })}
             fullWidth
-            placeholder={t('enterPlaceOfDeath')}
-            variant="outlined"
-          />
-        </Stack>
-      </StyledFormSection>
-
-      <StyledFormSection elevation={0} sx={{ mb: 3 }}>
-        <StyledSectionHeader>
-            <Avatar sx={{ width: 24, height: 24, bgcolor: 'primary.main', color: 'white', mr: 1 }}>
-              <PersonIcon fontSize='small' />
-            </Avatar>
-            <Typography variant="subtitle1" fontWeight={600}>
-              {t('photoAndNotes')}
-            </Typography>
-        </StyledSectionHeader>
-
-        <Stack spacing={2}>
-          <TextField
-              id="photoUrl"
-              name="photoUrl"
-              label={t('photoUrl')}
-              value={person.photoUrl || ''}
-              onChange={e => setPerson({ ...person, photoUrl: e.target.value })}
-              fullWidth
-              placeholder={t('enterPhotoUrl')}
-              variant="outlined"
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Avatar 
-                      src={person.photoUrl || undefined} 
-                      alt={person.firstName || ''} 
-                      sx={{ width: 24, height: 24, mr: 1, bgcolor: 'transparent' }}
-                    >
-                      <PersonIcon fontSize="small" />
-                    </Avatar>
-                  </InputAdornment>
-                ),
-              }}
-            />
-          
-          <TextField
-            id="notes"
-            name="notes"
-            label={t('notes')}
-            value={person.notes || ''}
-            onChange={e => setPerson({ ...person, notes: e.target.value })}
-            fullWidth
-            multiline
-            rows={4}
-            placeholder={t('enterNotes')}
+            placeholder="Ölüm yeri"
             variant="outlined"
           />
         </Stack>
@@ -313,7 +269,7 @@ interface FamilyRelationsSectionProps {
   availableFathers: Person[];
   availableMothers: Person[];
   availableSpouses: Person[];
-  t: (key: string) => string;
+  t: (key: string) => React.ReactNode;
 }
 
 const FamilyRelationsSection: FC<FamilyRelationsSectionProps> = ({
@@ -328,14 +284,14 @@ const FamilyRelationsSection: FC<FamilyRelationsSectionProps> = ({
       <StyledSectionHeader>
         <GroupsIcon color="primary" />
         <Typography variant="subtitle1" fontWeight={600}>
-          {t('familyInformation') || 'Aile Bilgileri'}
+          {t('familyInformation')}
         </Typography>
       </StyledSectionHeader>
 
       <Stack spacing={2}>
         <PersonRelationSelect
           id="fatherId"
-          label={t('father')}
+          label={String(t('father'))}
           value={person.father?.id !== undefined ? String(person.father.id) : undefined}
           onChange={onRelationChange('father')}
           options={availableFathers}
@@ -343,7 +299,7 @@ const FamilyRelationsSection: FC<FamilyRelationsSectionProps> = ({
         />
         <PersonRelationSelect
           id="motherId"
-          label={t('mother')}
+          label={String(t('mother'))}
           value={person.mother?.id !== undefined ? String(person.mother.id) : undefined}
           onChange={onRelationChange('mother')}
           options={availableMothers}
@@ -351,7 +307,7 @@ const FamilyRelationsSection: FC<FamilyRelationsSectionProps> = ({
         />
         <PersonRelationSelect
           id="spouseId"
-          label={t('spouse')}
+          label={String(t('spouse'))}
           value={person.spouse?.id !== undefined ? String(person.spouse.id) : undefined}
           onChange={onRelationChange('spouse')}
           options={availableSpouses}
@@ -384,6 +340,9 @@ const PersonForm: React.FC<PersonFormUIProps> = ({
   const { t } = useLanguage();
   const isDarkMode = theme.palette.mode === 'dark';
   const isEditing = !!person.id;
+
+  // t fonksiyonunu string döndürecek şekilde saran
+  const tString = (key: string): string => ensureString(t(key));
 
   useEffect(() => {
     if (nameInputRef.current) {

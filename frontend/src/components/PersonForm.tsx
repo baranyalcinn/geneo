@@ -1,21 +1,17 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, FC } from 'react';
 import { Person, Gender } from '../types/Person';
 import LoadingIndicator from './ui/LoadingIndicator';
 import ErrorMessage from './ui/ErrorMessage';
 import {
-  TextField, Button, MenuItem, Select, InputLabel, FormControl,
-  Box, Tooltip, Typography, Avatar, Paper,
-  InputAdornment, Fade, Alert, Chip, Zoom, Stack
+  TextField, Button, MenuItem, Select, InputLabel, FormControl, SelectChangeEvent,
+  Box, Typography, Paper, InputAdornment, Fade, Alert, Chip, Stack, Card, CardContent
 } from '@mui/material';
 import { useTheme, alpha } from '@mui/material/styles';
 
 // İkonlar
 import PersonIcon from '@mui/icons-material/Person';
-import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom';
 import ManIcon from '@mui/icons-material/Man';
 import WomanIcon from '@mui/icons-material/Woman';
-import MaleIcon from '@mui/icons-material/Male';
-import FemaleIcon from '@mui/icons-material/Female';
 import CakeIcon from '@mui/icons-material/Cake';
 import SentimentVeryDissatisfiedIcon from '@mui/icons-material/SentimentVeryDissatisfied';
 import SaveIcon from '@mui/icons-material/Save';
@@ -23,7 +19,285 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import BadgeIcon from '@mui/icons-material/Badge';
 import GroupsIcon from '@mui/icons-material/Groups';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { useLanguage } from '../context/LanguageContext';
+
+// import PersonRelationSelect from './PersonRelationSelect'; // Geçici olarak yorum satırı yapıldı
+
+interface BasicInfoSectionProps {
+  person: Partial<Person>;
+  setPerson: (person: Partial<Person>) => void;
+  nameInputRef: React.RefObject<HTMLInputElement | null>;
+  t: (key: string) => string;
+}
+
+const BasicInfoSection: FC<BasicInfoSectionProps> = ({
+  person, setPerson, nameInputRef, t
+}) => {
+  const theme = useTheme();
+  
+  return (
+    <Card sx={{ mb: 2, borderRadius: 2, boxShadow: 2 }}>
+      <CardContent sx={{ p: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <BadgeIcon color="primary" sx={{ mr: 1 }} />
+          <Typography variant="h6" fontWeight={600}>
+            {t('basicInformation')}
+          </Typography>
+          <Chip
+            label={t('required')}
+            size="small"
+            color="primary"
+            variant="outlined"
+            sx={{ ml: 'auto', height: 24 }}
+          />
+        </Box>
+
+        <Stack spacing={2}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <TextField
+              id="firstName"
+              name="firstName"
+              label={t('firstName')}
+              inputRef={nameInputRef}
+              value={person.firstName || ''}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPerson({ ...person, firstName: e.target.value })}
+              fullWidth
+              required
+              autoFocus
+              placeholder={t('enterFirstName')}
+              variant="outlined"
+              size="small"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <PersonIcon fontSize="small" color="primary" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+            
+            <TextField
+              id="lastName"
+              name="lastName"
+              label={t('lastName')}
+              value={person.lastName || ''}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPerson({ ...person, lastName: e.target.value })}
+              fullWidth
+              required
+              placeholder={t('enterLastName')}
+              variant="outlined"
+              size="small"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <PersonIcon fontSize="small" color="action" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Stack>
+
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <FormControl fullWidth size="small">
+              <InputLabel id="gender-label" required>
+                {t('gender')}
+              </InputLabel>
+              <Select
+                labelId="gender-label"
+                id="gender"
+                name="gender"
+                value={person.gender || ''}
+                label={t('gender')}
+                onChange={(e) => setPerson({ ...person, gender: e.target.value as Gender | undefined })}
+                required
+              >
+                <MenuItem value="">
+                  <em>{t('selectGender') || 'Cinsiyet Seçin'}</em>
+                </MenuItem>
+                <MenuItem value={Gender.MALE}>
+                  <ManIcon sx={{ mr: 1, color: theme.palette.info.main }} fontSize="small" /> 
+                  {t('male')}
+                </MenuItem>
+                <MenuItem value={Gender.FEMALE}>
+                  <WomanIcon sx={{ mr: 1, color: theme.palette.error.main }} fontSize="small" /> 
+                  {t('female')}
+                </MenuItem>
+              </Select>
+            </FormControl>
+
+            <TextField
+              id="birthDate"
+              name="birthDate"
+              label={t('birthDate')}
+              type="date"
+              value={person.birthDate || ''}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPerson({ ...person, birthDate: e.target.value || null })}
+              fullWidth
+              size="small"
+              InputLabelProps={{
+                shrink: true,
+              }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <CakeIcon fontSize="small" color="secondary" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Stack>
+
+          <TextField
+            id="placeOfBirth"
+            name="placeOfBirth"
+            label={t('placeOfBirth')}
+            value={person.placeOfBirth || ''}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPerson({ ...person, placeOfBirth: e.target.value })}
+            fullWidth
+            size="small"
+            placeholder={t('enterPlaceOfBirth')}
+            variant="outlined"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <LocationOnIcon fontSize="small" color="action" />
+                </InputAdornment>
+              ),
+            }}
+          />
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+};
+
+interface DeathInfoSectionProps {
+  person: Partial<Person>;
+  setPerson: (person: Partial<Person>) => void;
+  t: (key: string) => string;
+}
+
+const DeathInfoSection: FC<DeathInfoSectionProps> = ({
+  person, setPerson, t
+}) => {
+  return (
+    <Card sx={{ mb: 2, borderRadius: 2, boxShadow: 1 }}>
+      <CardContent sx={{ p: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <SentimentVeryDissatisfiedIcon sx={{ color: 'text.secondary', mr: 1 }} />
+          <Typography variant="h6" fontWeight={600}>
+            {t('deathInformation') || 'Ölüm Bilgileri'} 
+          </Typography>
+        </Box>
+        
+        <Stack spacing={2}>
+          <TextField
+            id="deathDate"
+            name="deathDate"
+            label={t('deathDate')}
+            type="date"
+            value={person.deathDate || ''}
+            onChange={e => setPerson({ ...person, deathDate: e.target.value || null })}
+            fullWidth
+            size="small"
+            InputLabelProps={{
+              shrink: true,
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SentimentVeryDissatisfiedIcon fontSize="small" color="action" />
+                </InputAdornment>
+              ),
+            }}
+          />
+          
+          <TextField
+            id="placeOfDeath"
+            name="placeOfDeath"
+            label={t('placeOfDeath')}
+            value={person.placeOfDeath || ''}
+            onChange={e => setPerson({ ...person, placeOfDeath: e.target.value })}
+            fullWidth
+            size="small"
+            placeholder={t('enterPlaceOfDeath')}
+            variant="outlined"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <LocationOnIcon fontSize="small" color="action" />
+                </InputAdornment>
+              ),
+            }}
+          />
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+};
+
+interface FamilyRelationsSectionProps {
+  person: Partial<Person>;
+  onRelationChange: (field: 'father' | 'mother' | 'spouse') => (event: SelectChangeEvent<string>) => void;
+  availableFathers: Person[];
+  availableMothers: Person[];
+  availableSpouses: Person[];
+  t: (key: string) => string;
+}
+
+const FamilyRelationsSection: FC<FamilyRelationsSectionProps> = ({
+  person,
+  onRelationChange,
+  availableFathers, availableMothers, availableSpouses,
+  t
+}) => {
+  const theme = useTheme();
+  
+  return (
+    <Card sx={{ mb: 2, borderRadius: 2, boxShadow: 1 }}>
+      <CardContent sx={{ p: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <GroupsIcon color="primary" sx={{ mr: 1 }} />
+          <Typography variant="h6" fontWeight={600}>
+            {t('familyInformation') || 'Aile Bilgileri'}
+          </Typography>
+        </Box>
+
+        <Stack spacing={2}>
+          { /* PersonRelationSelect kullanımı geçici olarak kaldırıldı, import çözülünce eklenecek */}
+          {/* <PersonRelationSelect
+            id="fatherId"
+            label={t('father')}
+            value={person.father?.id !== undefined ? String(person.father.id) : ''} 
+            onChange={onRelationChange('father')}
+            options={availableFathers}
+            startIcon={<ManIcon sx={{ color: theme.palette.info.main }} fontSize="small" />}
+          /> */}
+          
+          {/* <PersonRelationSelect
+            id="motherId"
+            label={t('mother')}
+            value={person.mother?.id !== undefined ? String(person.mother.id) : ''} 
+            onChange={onRelationChange('mother')}
+            options={availableMothers}
+            startIcon={<WomanIcon sx={{ color: theme.palette.error.main }} fontSize="small" />}
+          /> */}
+          
+          {/* <PersonRelationSelect
+            id="spouseId"
+            label={t('spouse')}
+            value={person.spouse?.id !== undefined ? String(person.spouse.id) : ''} 
+            onChange={onRelationChange('spouse')}
+            options={availableSpouses}
+            startIcon={<GroupsIcon sx={{ color: theme.palette.warning.main }} fontSize="small" />}
+          /> */}
+          <Typography>PersonRelationSelect bileşeni geçici olarak kaldırıldı.</Typography> {/* Yer tutucu */}
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+};
 
 export interface PersonFormUIProps {
   person: Partial<Person>;
@@ -42,14 +316,15 @@ const PersonForm: React.FC<PersonFormUIProps> = ({
   availableFathers, availableMothers, availableSpouses,
   loading, error, onSave, onCancel
 }) => {
-  const nameInputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
   const theme = useTheme();
   const { t } = useLanguage();
-  const isDarkMode = theme.palette.mode === 'dark';
   const isEditing = !!person.id;
 
   useEffect(() => {
-    nameInputRef.current?.focus();
+    if (nameInputRef.current) {
+        nameInputRef.current.focus();
+    }
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
@@ -61,74 +336,19 @@ const PersonForm: React.FC<PersonFormUIProps> = ({
     }
   };
 
-  // Form alanları için ortak stiller
-  const inputBaseStyle = {
-    '& .MuiOutlinedInput-root': {
-      borderRadius: '12px',
-      transition: 'all 0.2s',
-      backgroundColor: isDarkMode 
-        ? alpha(theme.palette.background.paper, 0.1) 
-        : alpha(theme.palette.background.paper, 0.8),
-      '&:hover': {
-        backgroundColor: isDarkMode
-          ? alpha(theme.palette.background.paper, 0.2)
-          : alpha(theme.palette.background.paper, 1),
-      },
-      '&.Mui-focused': {
-        backgroundColor: isDarkMode
-          ? alpha(theme.palette.background.paper, 0.2)
-          : alpha(theme.palette.background.paper, 1),
-        boxShadow: isDarkMode
-          ? `0 0 0 2px ${alpha(theme.palette.primary.main, 0.4)}`
-          : `0 0 0 2px ${alpha(theme.palette.primary.main, 0.2)}`
-      }
-    },
-    '& .MuiInputLabel-root': {
-      fontSize: '0.9rem',
-      fontWeight: 500,
-      transition: 'all 0.2s',
-      color: isDarkMode 
-        ? alpha(theme.palette.text.primary, 0.7) 
-        : theme.palette.text.secondary
-    },
-    '& .MuiInputBase-input': {
-      fontSize: '0.95rem',
-      padding: '12px 14px'
+  const handleRelationChange = (field: 'father' | 'mother' | 'spouse') => (event: SelectChangeEvent<string>) => {
+    const value = event.target.value;
+    const idValue = value ? parseInt(value, 10) : undefined;
+    
+    let selectedPersonSummary: Person | undefined = undefined;
+    if (idValue !== undefined) {
+      const sourceArray = field === 'father' ? availableFathers :
+                        field === 'mother' ? availableMothers :
+                        availableSpouses;
+      selectedPersonSummary = sourceArray.find(p => p.id === idValue);
     }
-  };
-
-  const formSectionStyle = {
-    p: 2,
-    borderRadius: 3,
-    mb: 2,
-    backgroundColor: isDarkMode 
-      ? alpha(theme.palette.background.paper, 0.05) 
-      : alpha(theme.palette.background.paper, 0.4),
-    backdropFilter: 'blur(10px)',
-    transition: 'all 0.2s ease',
-    border: isDarkMode 
-      ? `1px solid ${alpha(theme.palette.divider, 0.1)}` 
-      : `1px solid ${alpha(theme.palette.divider, 0.08)}`,
-    boxShadow: isDarkMode 
-      ? 'none' 
-      : '0 2px 20px rgba(0,0,0,0.03)',
-    '&:hover': {
-      backgroundColor: isDarkMode 
-        ? alpha(theme.palette.background.paper, 0.08) 
-        : alpha(theme.palette.background.paper, 0.6),
-      boxShadow: isDarkMode 
-        ? 'none' 
-        : '0 4px 20px rgba(0,0,0,0.06)'
-    }
-  };
-
-  const sectionHeaderStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 1,
-    mb: 2,
-    pb: 1,
-    borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`
+    
+    setPerson({ ...person, [field]: selectedPersonSummary });
   };
 
   if (loading) {
@@ -141,511 +361,83 @@ const PersonForm: React.FC<PersonFormUIProps> = ({
       onKeyDown={handleKeyDown} 
       aria-busy={loading} 
       aria-live="polite"
-      sx={{ width: '100%' }}
+      sx={{ width: '100%', maxWidth: 800, mx: 'auto' }}
     >
       {error && (
         <Fade in={!!error}>
           <Alert 
             severity="error" 
             variant="filled"
-            sx={{ 
-              mb: 3, 
-              borderRadius: 2,
-              boxShadow: '0 4px 12px rgba(211,47,47,0.2)'
-            }}
+            sx={{ mb: 2, borderRadius: 2 }}
           >
             {error}
           </Alert>
         </Fade>
       )}
 
-      <Box sx={{ mb: 3 }}>
-        <Paper elevation={0} sx={formSectionStyle}>
-          <Box sx={sectionHeaderStyle}>
-            <BadgeIcon color="primary" />
-            <Typography variant="subtitle1" fontWeight={600}>
-              {t('basicInformation')}
-            </Typography>
-            <Chip 
-              label={t('required')} 
-              size="small" 
-              color="primary" 
-              variant="outlined"
-              sx={{ ml: 'auto', height: 20, fontSize: '0.7rem' }}
-            />
-          </Box>
+      <BasicInfoSection
+        person={person}
+        setPerson={setPerson}
+        nameInputRef={nameInputRef}
+        t={t}
+      />
 
-          <Stack spacing={2}>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField
-                id="firstName"
-                name="firstName"
-                label={t('firstName')}
-                inputRef={nameInputRef}
-                value={person.firstName || ''}
-                onChange={e => setPerson({ ...person, firstName: e.target.value })}
-                fullWidth
-                required
-                autoFocus
-                placeholder={t('enterFirstName')}
-                variant="outlined"
-                sx={inputBaseStyle}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <PersonIcon 
-                        fontSize="small" 
-                        sx={{ color: theme.palette.primary.main }}
-                      />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              <TextField
-                id="lastName"
-                name="lastName"
-                label={t('lastName')}
-                value={person.lastName || ''}
-                onChange={e => setPerson({ ...person, lastName: e.target.value })}
-                fullWidth
-                required
-                placeholder={t('enterLastName')}
-                variant="outlined"
-                sx={inputBaseStyle}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <PersonIcon 
-                        fontSize="small" 
-                        sx={{ color: theme.palette.primary.main, opacity: 0.7 }}
-                      />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            </Stack>
+      <DeathInfoSection
+        person={person}
+        setPerson={setPerson}
+        t={t}
+      />
 
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <FormControl fullWidth sx={inputBaseStyle}>
-                <InputLabel id="gender-label" required>
-                  {t('gender')}
-                </InputLabel>
-                <Select
-                  labelId="gender-label"
-                  id="gender"
-                  name="gender"
-                  value={person.gender || ''}
-                  label={t('gender')}
-                  onChange={e => setPerson({ ...person, gender: e.target.value as Gender })}
-                  required
-                  MenuProps={{
-                    PaperProps: {
-                      sx: {
-                        mt: 1,
-                        borderRadius: 2,
-                        boxShadow: '0 8px 16px rgba(0,0,0,0.15)'
-                      }
-                    }
-                  }}
-                >
-                  <MenuItem value="ERKEK" sx={{ 
-                    borderRadius: 1, 
-                    m: 0.5,
-                    p: 1.5,
-                    '&:hover': {
-                      backgroundColor: alpha('#2196f3', 0.1)
-                    }
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar sx={{ 
-                        width: 30, 
-                        height: 30, 
-                        backgroundColor: alpha('#2196f3', 0.1) 
-                      }}>
-                        <MaleIcon sx={{ color: '#2196f3', fontSize: 18 }} />
-                      </Avatar>
-                      <Typography>{t('male')}</Typography>
-                    </Box>
-                  </MenuItem>
-                  <MenuItem value="KADIN" sx={{ 
-                    borderRadius: 1, 
-                    m: 0.5,
-                    p: 1.5,
-                    '&:hover': {
-                      backgroundColor: alpha('#e91e63', 0.1)
-                    }
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar sx={{ 
-                        width: 30, 
-                        height: 30, 
-                        backgroundColor: alpha('#e91e63', 0.1) 
-                      }}>
-                        <FemaleIcon sx={{ color: '#e91e63', fontSize: 18 }} />
-                      </Avatar>
-                      <Typography>{t('female')}</Typography>
-                    </Box>
-                  </MenuItem>
-                </Select>
-              </FormControl>
-
-              <TextField
-                id="birthDate"
-                name="birthDate"
-                label={t('birthDate')}
-                type="date"
-                value={person.birthDate || ''}
-                onChange={e => setPerson({ ...person, birthDate: e.target.value })}
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-                variant="outlined"
-                sx={inputBaseStyle}
-                placeholder="GG/AA/YYYY"
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <CakeIcon 
-                        fontSize="small" 
-                        sx={{ color: theme.palette.success.main }}
-                      />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-
-              <TextField
-                id="deathDate"
-                name="deathDate"
-                label={t('deathDate')}
-                type="date"
-                value={person.deathDate || ''}
-                onChange={e => setPerson({ ...person, deathDate: e.target.value })}
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-                variant="outlined"
-                sx={inputBaseStyle}
-                placeholder="GG/AA/YYYY"
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SentimentVeryDissatisfiedIcon 
-                        fontSize="small" 
-                        sx={{ color: theme.palette.grey[500] }}
-                      />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            </Stack>
-          </Stack>
-        </Paper>
-      </Box>
-
-      <Box sx={{ mb: 3 }}>
-        <Paper elevation={0} sx={formSectionStyle}>
-          <Box sx={sectionHeaderStyle}>
-            <GroupsIcon color="primary" />
-            <Typography variant="subtitle1" fontWeight={600}>
-              {t('familyRelations')}
-            </Typography>
-          </Box>
-
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <FormControl fullWidth sx={inputBaseStyle}>
-              <InputLabel id="mother-label">
-                {t('mother')}
-              </InputLabel>
-              <Select
-                labelId="mother-label"
-                id="motherId"
-                name="motherId"
-                value={person.mother?.id != null ? String(person.mother.id) : ''}
-                label={t('mother')}
-                onChange={e => {
-                  const selectedId = e.target.value === '' ? undefined : Number(e.target.value);
-                  const selectedMother = availableMothers.find(m => m.id === selectedId);
-                  setPerson({ ...person, mother: selectedId ? selectedMother : undefined });
-                }}
-                startAdornment={
-                  <InputAdornment position="start">
-                    <WomanIcon sx={{ color: '#e91e63' }} />
-                  </InputAdornment>
-                }
-                MenuProps={{
-                  PaperProps: {
-                    sx: {
-                      mt: 1,
-                      maxHeight: 300,
-                      borderRadius: 2,
-                      boxShadow: '0 8px 16px rgba(0,0,0,0.15)'
-                    }
-                  }
-                }}
-              >
-                <MenuItem value="" sx={{ 
-                  borderRadius: 1, 
-                  m: 0.5,
-                  p: 1
-                }}>
-                  <Typography color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                    {t('notSpecified')}
-                  </Typography>
-                </MenuItem>
-                
-                {availableMothers.map(mother => (
-                  <MenuItem key={mother.id} value={String(mother.id)} sx={{ 
-                    borderRadius: 1, 
-                    m: 0.5,
-                    p: 1
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar sx={{ 
-                        width: 28, 
-                        height: 28, 
-                        backgroundColor: alpha('#e91e63', 0.1) 
-                      }}>
-                        <Typography variant="caption" fontWeight={500} sx={{ color: '#e91e63' }}>
-                          {mother.firstName.charAt(0)}{mother.lastName.charAt(0)}
-                        </Typography>
-                      </Avatar>
-                      <Typography>
-                        {mother.firstName} {mother.lastName}
-                      </Typography>
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            
-            <FormControl fullWidth sx={inputBaseStyle}>
-              <InputLabel id="father-label">
-                {t('father')}
-              </InputLabel>
-              <Select
-                labelId="father-label"
-                id="fatherId"
-                name="fatherId"
-                value={person.father?.id != null ? String(person.father.id) : ''}
-                label={t('father')}
-                onChange={e => {
-                  const selectedId = e.target.value === '' ? undefined : Number(e.target.value);
-                  const selectedFather = availableFathers.find(f => f.id === selectedId);
-                  setPerson({ ...person, father: selectedId ? selectedFather : undefined });
-                }}
-                startAdornment={
-                  <InputAdornment position="start">
-                    <ManIcon sx={{ color: '#2196f3' }} />
-                  </InputAdornment>
-                }
-                MenuProps={{
-                  PaperProps: {
-                    sx: {
-                      mt: 1,
-                      maxHeight: 300,
-                      borderRadius: 2,
-                      boxShadow: '0 8px 16px rgba(0,0,0,0.15)'
-                    }
-                  }
-                }}
-              >
-                <MenuItem value="" sx={{ 
-                  borderRadius: 1, 
-                  m: 0.5,
-                  p: 1
-                }}>
-                  <Typography color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                    {t('notSpecified')}
-                  </Typography>
-                </MenuItem>
-                
-                {availableFathers.map(father => (
-                  <MenuItem key={father.id} value={String(father.id)} sx={{ 
-                    borderRadius: 1, 
-                    m: 0.5,
-                    p: 1
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar sx={{ 
-                        width: 28, 
-                        height: 28, 
-                        backgroundColor: alpha('#2196f3', 0.1) 
-                      }}>
-                        <Typography variant="caption" fontWeight={500} sx={{ color: '#2196f3' }}>
-                          {father.firstName.charAt(0)}{father.lastName.charAt(0)}
-                        </Typography>
-                      </Avatar>
-                      <Typography>
-                        {father.firstName} {father.lastName}
-                      </Typography>
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            
-            <FormControl fullWidth sx={inputBaseStyle}>
-              <InputLabel id="spouse-label">
-                {t('spouse')}
-              </InputLabel>
-              <Select
-                labelId="spouse-label"
-                id="spouseId"
-                name="spouseId"
-                value={person.spouse?.id != null ? String(person.spouse.id) : ''}
-                label={t('spouse')}
-                onChange={e => {
-                  const selectedId = e.target.value === '' ? undefined : Number(e.target.value);
-                  const selectedSpouse = availableSpouses.find(s => s.id === selectedId);
-                  setPerson({ ...person, spouse: selectedId ? selectedSpouse : undefined });
-                }}
-                startAdornment={
-                  <InputAdornment position="start">
-                    <FamilyRestroomIcon sx={{ color: theme.palette.warning.main }} />
-                  </InputAdornment>
-                }
-                MenuProps={{
-                  PaperProps: {
-                    sx: {
-                      mt: 1,
-                      maxHeight: 300,
-                      borderRadius: 2,
-                      boxShadow: '0 8px 16px rgba(0,0,0,0.15)'
-                    }
-                  }
-                }}
-              >
-                <MenuItem value="" sx={{ 
-                  borderRadius: 1, 
-                  m: 0.5,
-                  p: 1
-                }}>
-                  <Typography color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                    {t('notSpecified')}
-                  </Typography>
-                </MenuItem>
-                
-                {availableSpouses.map(spouse => (
-                  <MenuItem key={spouse.id} value={String(spouse.id)} sx={{ 
-                    borderRadius: 1, 
-                    m: 0.5,
-                    p: 1
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar sx={{ 
-                        width: 28, 
-                        height: 28, 
-                        backgroundColor: alpha(spouse.gender === 'ERKEK' ? '#2196f3' : '#e91e63', 0.1) 
-                      }}>
-                        <Typography 
-                          variant="caption" 
-                          fontWeight={500} 
-                          sx={{ color: spouse.gender === 'ERKEK' ? '#2196f3' : '#e91e63' }}
-                        >
-                          {spouse.firstName.charAt(0)}{spouse.lastName.charAt(0)}
-                        </Typography>
-                      </Avatar>
-                      <Typography>
-                        {spouse.firstName} {spouse.lastName}
-                      </Typography>
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Stack>
-        </Paper>
-      </Box>
-
-      {/* Butonlar */}
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'flex-end', 
-        gap: 2, 
-        mt: 4,
-        position: 'relative',
-        borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-        pt: 3
-      }}>
-        {isEditing && (
-          <Chip
-            label={`ID: ${person.id}`}
-            variant="outlined"
-            size="small"
-            sx={{ 
-              position: 'absolute',
-              left: 0,
-              top: '24px',
-              borderRadius: '8px',
-              fontSize: '0.75rem',
-              backgroundColor: isDarkMode 
-                ? alpha(theme.palette.background.paper, 0.1) 
-                : alpha(theme.palette.background.paper, 0.6),
-              borderColor: isDarkMode 
-                ? alpha(theme.palette.divider, 0.2) 
-                : theme.palette.divider,
-            }}
-          />
-        )}
-        
-        <Zoom in={true} style={{ transitionDelay: '200ms' }}>
-          <Tooltip title={t('cancel')} arrow>
-            <Button
-              variant="outlined"
-              onClick={onCancel}
-              startIcon={<CancelIcon />}
-              sx={{ 
-                borderRadius: '12px',
-                px: 3,
-                py: 1,
-                boxShadow: 'none',
-                color: theme.palette.grey[600],
-                borderColor: theme.palette.grey[300],
-                '&:hover': {
-                  borderColor: theme.palette.grey[400],
-                  backgroundColor: alpha(theme.palette.grey[500], 0.05)
-                }
-              }}
-            >
-              {t('cancel')}
-            </Button>
-          </Tooltip>
-        </Zoom>
-        
-        <Zoom in={true} style={{ transitionDelay: '300ms' }}>
-          <Tooltip title={isEditing ? t('save') : t('add')} arrow>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={onSave}
-              startIcon={isEditing ? <SaveIcon /> : <PersonAddIcon />}
-              disabled={!person.firstName || !person.lastName || !person.gender}
-              sx={{ 
-                borderRadius: '12px',
-                px: 3,
-                py: 1,
-                boxShadow: isDarkMode 
-                  ? '0 4px 12px rgba(33, 150, 243, 0.3)' 
-                  : '0 4px 12px rgba(33, 150, 243, 0.2)',
-                background: isDarkMode
-                  ? 'linear-gradient(45deg, #1976d2 0%, #2196f3 100%)'
-                  : 'linear-gradient(45deg, #2196f3 0%, #64b5f6 100%)',
-                '&:hover': {
-                  boxShadow: isDarkMode 
-                    ? '0 6px 14px rgba(33, 150, 243, 0.4)' 
-                    : '0 6px 14px rgba(33, 150, 243, 0.25)',
-                  background: isDarkMode
-                    ? 'linear-gradient(45deg, #1976d2 30%, #2196f3 100%)'
-                    : 'linear-gradient(45deg, #2196f3 30%, #64b5f6 100%)',
-                }
-              }}
-            >
-              {isEditing ? t('saveChanges') : t('addPerson')}
-            </Button>
-          </Tooltip>
-        </Zoom>
-      </Box>
+      <FamilyRelationsSection
+        person={person}
+        onRelationChange={handleRelationChange}
+        availableFathers={availableFathers}
+        availableMothers={availableMothers}
+        availableSpouses={availableSpouses}
+        t={t}
+      />
+      
+      <Paper 
+        elevation={2}
+        sx={{
+          p: 2,
+          mt: 2,
+          borderRadius: 2,
+          position: 'sticky',
+          bottom: 16,
+          bgcolor: alpha(theme.palette.background.paper, 0.95),
+          backdropFilter: 'blur(10px)',
+        }}
+      >
+        <Stack 
+          direction="row" 
+          spacing={2} 
+          justifyContent="flex-end"
+        >
+          <Button 
+            variant="outlined" 
+            onClick={onCancel} 
+            startIcon={<CancelIcon />} 
+            color="inherit"
+            sx={{ borderRadius: 2 }}
+          >
+            {t('cancel')}
+          </Button>
+          
+          <Button 
+            variant="contained" 
+            onClick={onSave} 
+            startIcon={isEditing ? <SaveIcon /> : <PersonAddIcon />} 
+            disabled={loading || !person.firstName || !person.lastName || !person.gender}
+            color="primary"
+            sx={{ borderRadius: 2 }}
+          >
+            {loading ? t('saving') : (isEditing ? t('saveChanges') : t('addPerson'))}
+          </Button>
+        </Stack>
+      </Paper>
     </Box>
   );
 };
 
-export default PersonForm; 
+export default PersonForm;
