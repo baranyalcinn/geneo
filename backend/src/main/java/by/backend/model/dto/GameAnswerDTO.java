@@ -22,4 +22,5 @@ public class GameAnswerDTO {
     private int currentStreak;
     private String playerName;
     private int gameQuestionCount;
+    private int correctAnswersCount;
 }

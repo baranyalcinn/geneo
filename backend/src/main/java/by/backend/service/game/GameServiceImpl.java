@@ -282,7 +282,7 @@ public class GameServiceImpl implements GameService {
                 answerDetails.getPlayerName(),
                 totalScore,
                 answerDetails.getDifficulty(),
-                0,
+                isCorrect ? answerDetails.getCorrectAnswersCount() + 1 : answerDetails.getCorrectAnswersCount(),
                 DEFAULT_QUESTIONS_PER_GAME,
                 newStreak,
                 LocalDateTime.now()
@@ -299,7 +299,7 @@ public class GameServiceImpl implements GameService {
                     answerDetails.getPlayerName(),
                     totalScore,
                     answerDetails.getDifficulty(),
-                    0,
+                    isCorrect ? answerDetails.getCorrectAnswersCount() + 1 : answerDetails.getCorrectAnswersCount(),
                     answerDetails.getGameQuestionCount() + 1,
                     newStreak,
                     LocalDateTime.now()
