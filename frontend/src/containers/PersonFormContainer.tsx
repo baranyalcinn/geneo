@@ -45,10 +45,12 @@ export const PersonFormContainer: React.FC<Props> = ({ personId, onSave, onCance
 
   // Kişi detayını ve tüm kişileri custom hook ile çek
   const { data: personData, loading: loadingPerson, error: errorPerson, refetch: refetchPerson } = useApiRequest(
+    personId ? ['person', personId.toString()] : ['person'],
     getPersonRequest,
-    !!personId
+    { enabled: !!personId }
   );
   const { data: allPersonsRaw, loading: loadingAll, error: errorAll, refetch: refetchAll } = useApiRequest(
+    ['persons'],
     getAllPersonsRequest
   );
   const allPersons = allPersonsRaw || [];

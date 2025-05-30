@@ -115,7 +115,7 @@ const PersonListPage: React.FC = () => {
     []
   );
 
-  const { data: persons = [], loading, error, refetch } = useApiRequest(getAllPersonsRequest);
+  const { data: persons = [], loading, error, refetch } = useApiRequest(['persons'], getAllPersonsRequest);
 
   // Sıralama değişikliği
   const handleRequestSort = (property: OrderByKey) => {

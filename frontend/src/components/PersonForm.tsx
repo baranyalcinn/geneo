@@ -4,11 +4,12 @@ import LoadingIndicator from './ui/LoadingIndicator';
 import ErrorMessage from './ui/ErrorMessage';
 import {
   TextField, Button, MenuItem, Select, InputLabel, FormControl, SelectChangeEvent,
-  Box, Typography, Paper, InputAdornment, Fade, Alert, Chip, Stack, Card, CardContent
+  Box, Typography, Paper, InputAdornment, Fade, Alert, Chip, Stack, Card, CardContent,
+  Container, Divider, IconButton, Tooltip, LinearProgress
 } from '@mui/material';
-import { useTheme, alpha } from '@mui/material/styles';
+import { useTheme, alpha, styled } from '@mui/material/styles';
 
-// İkonlar
+// Icons
 import PersonIcon from '@mui/icons-material/Person';
 import ManIcon from '@mui/icons-material/Man';
 import WomanIcon from '@mui/icons-material/Woman';
@@ -20,9 +21,151 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import BadgeIcon from '@mui/icons-material/Badge';
 import GroupsIcon from '@mui/icons-material/Groups';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import FavoriteIcon from '@mui/icons-material/Favorite';
 import { useLanguage } from '../context/LanguageContext';
 
-// import PersonRelationSelect from './PersonRelationSelect'; // Geçici olarak yorum satırı yapıldı
+// Styled Components
+const GradientCard = styled(Card)(({ theme }) => ({
+  background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${alpha(theme.palette.secondary.main, 0.05)} 100%)`,
+  borderRadius: 20,
+  border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+  backdropFilter: 'blur(20px)',
+  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+  position: 'relative',
+  overflow: 'hidden',
+  '&:hover': {
+    transform: 'translateY(-2px)',
+    boxShadow: `0 20px 40px ${alpha(theme.palette.primary.main, 0.1)}`,
+    border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+  },
+  '&::before': {
+    content: '""',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+  }
+}));
+
+const ModernTextField = styled(TextField)(({ theme }) => ({
+  '& .MuiOutlinedInput-root': {
+    borderRadius: 16,
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    backgroundColor: alpha(theme.palette.background.paper, 0.8),
+    backdropFilter: 'blur(10px)',
+    '&:hover': {
+      backgroundColor: alpha(theme.palette.background.paper, 0.9),
+      '& .MuiOutlinedInput-notchedOutline': {
+        borderColor: alpha(theme.palette.primary.main, 0.5),
+      },
+    },
+    '&.Mui-focused': {
+      backgroundColor: theme.palette.background.paper,
+      transform: 'scale(1.02)',
+      '& .MuiOutlinedInput-notchedOutline': {
+        borderWidth: 2,
+        borderColor: theme.palette.primary.main,
+        boxShadow: `0 0 20px ${alpha(theme.palette.primary.main, 0.2)}`,
+      },
+    },
+  },
+  '& .MuiInputLabel-root': {
+    fontWeight: 500,
+    '&.Mui-focused': {
+      color: theme.palette.primary.main,
+      fontWeight: 600,
+    },
+  },
+}));
+
+const ModernSelect = styled(Select)(({ theme }) => ({
+  borderRadius: 16,
+  backgroundColor: alpha(theme.palette.background.paper, 0.8),
+  backdropFilter: 'blur(10px)',
+  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+  '&:hover': {
+    backgroundColor: alpha(theme.palette.background.paper, 0.9),
+  },
+  '&.Mui-focused': {
+    backgroundColor: theme.palette.background.paper,
+    transform: 'scale(1.02)',
+  },
+  '& .MuiOutlinedInput-notchedOutline': {
+    borderRadius: 16,
+  },
+  '&:hover .MuiOutlinedInput-notchedOutline': {
+    borderColor: alpha(theme.palette.primary.main, 0.5),
+  },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+    borderWidth: 2,
+    borderColor: theme.palette.primary.main,
+    boxShadow: `0 0 20px ${alpha(theme.palette.primary.main, 0.2)}`,
+  },
+}));
+
+const AnimatedButton = styled(Button)(({ theme }) => ({
+  borderRadius: 16,
+  padding: '12px 32px',
+  fontWeight: 600,
+  textTransform: 'none',
+  fontSize: '1rem',
+  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+  position: 'relative',
+  overflow: 'hidden',
+  '&::before': {
+    content: '""',
+    position: 'absolute',
+    top: 0,
+    left: '-100%',
+    width: '100%',
+    height: '100%',
+    background: `linear-gradient(90deg, transparent, ${alpha(theme.palette.common.white, 0.2)}, transparent)`,
+    transition: 'left 0.5s',
+  },
+  '&:hover': {
+    transform: 'translateY(-2px)',
+    boxShadow: `0 10px 30px ${alpha(theme.palette.primary.main, 0.3)}`,
+    '&::before': {
+      left: '100%',
+    },
+  },
+  '&:active': {
+    transform: 'translateY(0)',
+  },
+}));
+
+const SectionHeader = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  marginBottom: theme.spacing(3),
+  position: 'relative',
+  '&::after': {
+    content: '""',
+    position: 'absolute',
+    bottom: -8,
+    left: 0,
+    width: 60,
+    height: 3,
+    background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+    borderRadius: 2,
+  },
+}));
+
+const FloatingActionArea = styled(Paper)(({ theme }) => ({
+  position: 'sticky',
+  bottom: 24,
+  padding: theme.spacing(2.5),
+  marginTop: theme.spacing(4),
+  borderRadius: 20,
+  background: `linear-gradient(135deg, ${alpha(theme.palette.background.paper, 0.95)} 0%, ${alpha(theme.palette.background.paper, 0.98)} 100%)`,
+  backdropFilter: 'blur(20px)',
+  border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+  boxShadow: `0 20px 60px ${alpha(theme.palette.common.black, 0.1)}`,
+  zIndex: 100,
+}));
 
 interface BasicInfoSectionProps {
   person: Partial<Person>;
@@ -37,25 +180,41 @@ const BasicInfoSection: FC<BasicInfoSectionProps> = ({
   const theme = useTheme();
   
   return (
-    <Card sx={{ mb: 2, borderRadius: 2, boxShadow: 2 }}>
-      <CardContent sx={{ p: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <BadgeIcon color="primary" sx={{ mr: 1 }} />
-          <Typography variant="h6" fontWeight={600}>
+    <GradientCard sx={{ mb: 4 }}>
+      <CardContent sx={{ p: 4 }}>
+        <SectionHeader>
+          <BadgeIcon sx={{ 
+            color: theme.palette.primary.main, 
+            mr: 2, 
+            fontSize: 28,
+            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
+          }} />
+          <Typography variant="h5" fontWeight={700} sx={{ 
+            background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}>
             {t('basicInformation')}
           </Typography>
           <Chip
             label={t('required')}
             size="small"
-            color="primary"
-            variant="outlined"
-            sx={{ ml: 'auto', height: 24 }}
+            sx={{ 
+              ml: 'auto',
+              background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+              color: 'white',
+              fontWeight: 600,
+              '&:hover': {
+                transform: 'scale(1.05)',
+              }
+            }}
           />
-        </Box>
+        </SectionHeader>
 
-        <Stack spacing={2}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <TextField
+        <Stack spacing={3}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
+            <ModernTextField
               id="firstName"
               name="firstName"
               label={t('firstName')}
@@ -67,17 +226,21 @@ const BasicInfoSection: FC<BasicInfoSectionProps> = ({
               autoFocus
               placeholder={t('enterFirstName')}
               variant="outlined"
-              size="small"
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <PersonIcon fontSize="small" color="primary" />
-                  </InputAdornment>
-                ),
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <PersonIcon sx={{ 
+                        color: theme.palette.primary.main,
+                        filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))'
+                      }} />
+                    </InputAdornment>
+                  ),
+                },
               }}
             />
             
-            <TextField
+            <ModernTextField
               id="lastName"
               name="lastName"
               label={t('lastName')}
@@ -87,23 +250,27 @@ const BasicInfoSection: FC<BasicInfoSectionProps> = ({
               required
               placeholder={t('enterLastName')}
               variant="outlined"
-              size="small"
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <PersonIcon fontSize="small" color="action" />
-                  </InputAdornment>
-                ),
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <PersonIcon sx={{ 
+                        color: theme.palette.secondary.main,
+                        filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))'
+                      }} />
+                    </InputAdornment>
+                  ),
+                },
               }}
             />
           </Stack>
 
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <FormControl fullWidth size="small">
-              <InputLabel id="gender-label" required>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
+            <FormControl fullWidth>
+              <InputLabel id="gender-label" required sx={{ fontWeight: 500 }}>
                 {t('gender')}
               </InputLabel>
-              <Select
+              <ModernSelect
                 labelId="gender-label"
                 id="gender"
                 name="gender"
@@ -111,22 +278,30 @@ const BasicInfoSection: FC<BasicInfoSectionProps> = ({
                 label={t('gender')}
                 onChange={(e) => setPerson({ ...person, gender: e.target.value as Gender | undefined })}
                 required
+                startAdornment={
+                  <InputAdornment position="start">
+                    <AutoAwesomeIcon sx={{ 
+                      color: theme.palette.info.main,
+                      filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))'
+                    }} />
+                  </InputAdornment>
+                }
               >
                 <MenuItem value="">
                   <em>{t('selectGender') || 'Cinsiyet Seçin'}</em>
                 </MenuItem>
-                <MenuItem value={Gender.MALE}>
-                  <ManIcon sx={{ mr: 1, color: theme.palette.info.main }} fontSize="small" /> 
+                <MenuItem value={Gender.MALE} sx={{ borderRadius: 2, m: 0.5 }}>
+                  <ManIcon sx={{ mr: 2, color: theme.palette.info.main }} /> 
                   {t('male')}
                 </MenuItem>
-                <MenuItem value={Gender.FEMALE}>
-                  <WomanIcon sx={{ mr: 1, color: theme.palette.error.main }} fontSize="small" /> 
+                <MenuItem value={Gender.FEMALE} sx={{ borderRadius: 2, m: 0.5 }}>
+                  <WomanIcon sx={{ mr: 2, color: theme.palette.error.main }} /> 
                   {t('female')}
                 </MenuItem>
-              </Select>
+              </ModernSelect>
             </FormControl>
 
-            <TextField
+            <ModernTextField
               id="birthDate"
               name="birthDate"
               label={t('birthDate')}
@@ -134,41 +309,49 @@ const BasicInfoSection: FC<BasicInfoSectionProps> = ({
               value={person.birthDate || ''}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPerson({ ...person, birthDate: e.target.value || null })}
               fullWidth
-              size="small"
               InputLabelProps={{
                 shrink: true,
               }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <CakeIcon fontSize="small" color="secondary" />
-                  </InputAdornment>
-                ),
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <CakeIcon sx={{ 
+                        color: theme.palette.warning.main,
+                        filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))'
+                      }} />
+                    </InputAdornment>
+                  ),
+                },
               }}
             />
           </Stack>
 
-          <TextField
+          <ModernTextField
             id="placeOfBirth"
             name="placeOfBirth"
             label={t('placeOfBirth')}
             value={person.placeOfBirth || ''}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPerson({ ...person, placeOfBirth: e.target.value })}
             fullWidth
-            size="small"
             placeholder={t('enterPlaceOfBirth')}
             variant="outlined"
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <LocationOnIcon fontSize="small" color="action" />
-                </InputAdornment>
-              ),
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <LocationOnIcon sx={{ 
+                      color: theme.palette.success.main,
+                      filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))'
+                    }} />
+                  </InputAdornment>
+                ),
+              },
             }}
           />
         </Stack>
       </CardContent>
-    </Card>
+    </GradientCard>
   );
 };
 
@@ -181,59 +364,76 @@ interface DeathInfoSectionProps {
 const DeathInfoSection: FC<DeathInfoSectionProps> = ({
   person, setPerson, t
 }) => {
+  const theme = useTheme();
+  
   return (
-    <Card sx={{ mb: 2, borderRadius: 2, boxShadow: 1 }}>
-      <CardContent sx={{ p: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <SentimentVeryDissatisfiedIcon sx={{ color: 'text.secondary', mr: 1 }} />
-          <Typography variant="h6" fontWeight={600}>
-            {t('deathInformation') || 'Ölüm Bilgileri'} 
+    <GradientCard sx={{ mb: 4 }}>
+      <CardContent sx={{ p: 4 }}>
+        <SectionHeader>
+          <SentimentVeryDissatisfiedIcon sx={{ 
+            color: theme.palette.text.secondary, 
+            mr: 2, 
+            fontSize: 28,
+            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
+          }} />
+          <Typography variant="h5" fontWeight={700} color="text.secondary">
+            {t('deathInformation') || 'Ölüm Bilgileri'}
           </Typography>
-        </Box>
+        </SectionHeader>
         
-        <Stack spacing={2}>
-          <TextField
-            id="deathDate"
-            name="deathDate"
-            label={t('deathDate')}
-            type="date"
-            value={person.deathDate || ''}
-            onChange={e => setPerson({ ...person, deathDate: e.target.value || null })}
-            fullWidth
-            size="small"
-            InputLabelProps={{
-              shrink: true,
-            }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SentimentVeryDissatisfiedIcon fontSize="small" color="action" />
-                </InputAdornment>
-              ),
-            }}
-          />
-          
-          <TextField
-            id="placeOfDeath"
-            name="placeOfDeath"
-            label={t('placeOfDeath')}
-            value={person.placeOfDeath || ''}
-            onChange={e => setPerson({ ...person, placeOfDeath: e.target.value })}
-            fullWidth
-            size="small"
-            placeholder={t('enterPlaceOfDeath')}
-            variant="outlined"
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <LocationOnIcon fontSize="small" color="action" />
-                </InputAdornment>
-              ),
-            }}
-          />
+        <Stack spacing={3}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
+            <ModernTextField
+              id="deathDate"
+              name="deathDate"
+              label={t('deathDate')}
+              type="date"
+              value={person.deathDate || ''}
+              onChange={e => setPerson({ ...person, deathDate: e.target.value || null })}
+              fullWidth
+              InputLabelProps={{
+                shrink: true,
+              }}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SentimentVeryDissatisfiedIcon sx={{ 
+                        color: theme.palette.text.secondary,
+                        filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))'
+                      }} />
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
+            
+            <ModernTextField
+              id="placeOfDeath"
+              name="placeOfDeath"
+              label={t('placeOfDeath')}
+              value={person.placeOfDeath || ''}
+              onChange={e => setPerson({ ...person, placeOfDeath: e.target.value })}
+              fullWidth
+              placeholder={t('enterPlaceOfDeath')}
+              variant="outlined"
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <LocationOnIcon sx={{ 
+                        color: theme.palette.text.secondary,
+                        filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))'
+                      }} />
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
+          </Stack>
         </Stack>
       </CardContent>
-    </Card>
+    </GradientCard>
   );
 };
 
@@ -255,47 +455,50 @@ const FamilyRelationsSection: FC<FamilyRelationsSectionProps> = ({
   const theme = useTheme();
   
   return (
-    <Card sx={{ mb: 2, borderRadius: 2, boxShadow: 1 }}>
-      <CardContent sx={{ p: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <GroupsIcon color="primary" sx={{ mr: 1 }} />
-          <Typography variant="h6" fontWeight={600}>
+    <GradientCard sx={{ mb: 4 }}>
+      <CardContent sx={{ p: 4 }}>
+        <SectionHeader>
+          <GroupsIcon sx={{ 
+            color: theme.palette.primary.main, 
+            mr: 2, 
+            fontSize: 28,
+            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
+          }} />
+          <Typography variant="h5" fontWeight={700} sx={{ 
+            background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}>
             {t('familyInformation') || 'Aile Bilgileri'}
           </Typography>
-        </Box>
+        </SectionHeader>
 
-        <Stack spacing={2}>
-          { /* PersonRelationSelect kullanımı geçici olarak kaldırıldı, import çözülünce eklenecek */}
-          {/* <PersonRelationSelect
-            id="fatherId"
-            label={t('father')}
-            value={person.father?.id !== undefined ? String(person.father.id) : ''} 
-            onChange={onRelationChange('father')}
-            options={availableFathers}
-            startIcon={<ManIcon sx={{ color: theme.palette.info.main }} fontSize="small" />}
-          /> */}
-          
-          {/* <PersonRelationSelect
-            id="motherId"
-            label={t('mother')}
-            value={person.mother?.id !== undefined ? String(person.mother.id) : ''} 
-            onChange={onRelationChange('mother')}
-            options={availableMothers}
-            startIcon={<WomanIcon sx={{ color: theme.palette.error.main }} fontSize="small" />}
-          /> */}
-          
-          {/* <PersonRelationSelect
-            id="spouseId"
-            label={t('spouse')}
-            value={person.spouse?.id !== undefined ? String(person.spouse.id) : ''} 
-            onChange={onRelationChange('spouse')}
-            options={availableSpouses}
-            startIcon={<GroupsIcon sx={{ color: theme.palette.warning.main }} fontSize="small" />}
-          /> */}
-          <Typography>PersonRelationSelect bileşeni geçici olarak kaldırıldı.</Typography> {/* Yer tutucu */}
-        </Stack>
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          minHeight: 120,
+          background: `linear-gradient(135deg, ${alpha(theme.palette.info.main, 0.1)} 0%, ${alpha(theme.palette.warning.main, 0.1)} 100%)`,
+          borderRadius: 4,
+          border: `2px dashed ${alpha(theme.palette.primary.main, 0.3)}`,
+        }}>
+          <Stack alignItems="center" spacing={2}>
+            <FavoriteIcon sx={{ 
+              fontSize: 48, 
+              color: alpha(theme.palette.primary.main, 0.6),
+              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
+            }} />
+            <Typography variant="h6" color="text.secondary" textAlign="center">
+              PersonRelationSelect bileşeni geçici olarak kaldırıldı.
+            </Typography>
+            <Typography variant="body2" color="text.secondary" textAlign="center">
+              Aile ilişkileri bölümü yakında eklenecek
+            </Typography>
+          </Stack>
+        </Box>
       </CardContent>
-    </Card>
+    </GradientCard>
   );
 };
 
@@ -323,7 +526,7 @@ const PersonForm: React.FC<PersonFormUIProps> = ({
 
   useEffect(() => {
     if (nameInputRef.current) {
-        nameInputRef.current.focus();
+      nameInputRef.current.focus();
     }
   }, []);
 
@@ -352,91 +555,119 @@ const PersonForm: React.FC<PersonFormUIProps> = ({
   };
 
   if (loading) {
-    return <LoadingIndicator />;
+    return (
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <LinearProgress sx={{ borderRadius: 2, height: 6 }} />
+        <LoadingIndicator />
+      </Container>
+    );
   }
 
   return (
-    <Box 
-      component="form" 
-      onKeyDown={handleKeyDown} 
-      aria-busy={loading} 
-      aria-live="polite"
-      sx={{ width: '100%', maxWidth: 800, mx: 'auto' }}
-    >
-      {error && (
-        <Fade in={!!error}>
-          <Alert 
-            severity="error" 
-            variant="filled"
-            sx={{ mb: 2, borderRadius: 2 }}
-          >
-            {error}
-          </Alert>
-        </Fade>
-      )}
-
-      <BasicInfoSection
-        person={person}
-        setPerson={setPerson}
-        nameInputRef={nameInputRef}
-        t={t}
-      />
-
-      <DeathInfoSection
-        person={person}
-        setPerson={setPerson}
-        t={t}
-      />
-
-      <FamilyRelationsSection
-        person={person}
-        onRelationChange={handleRelationChange}
-        availableFathers={availableFathers}
-        availableMothers={availableMothers}
-        availableSpouses={availableSpouses}
-        t={t}
-      />
-      
-      <Paper 
-        elevation={2}
-        sx={{
-          p: 2,
-          mt: 2,
-          borderRadius: 2,
-          position: 'sticky',
-          bottom: 16,
-          bgcolor: alpha(theme.palette.background.paper, 0.95),
-          backdropFilter: 'blur(10px)',
+    <Container maxWidth="md" sx={{ py: 4 }}>
+      <Box 
+        component="form" 
+        onKeyDown={handleKeyDown} 
+        aria-busy={loading} 
+        aria-live="polite"
+        sx={{ 
+          position: 'relative',
+          '&::before': {
+            content: '""',
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: `radial-gradient(circle at 20% 80%, ${alpha(theme.palette.primary.main, 0.03)} 0%, transparent 50%),
+                        radial-gradient(circle at 80% 20%, ${alpha(theme.palette.secondary.main, 0.03)} 0%, transparent 50%)`,
+            zIndex: -1,
+            pointerEvents: 'none',
+          }
         }}
       >
-        <Stack 
-          direction="row" 
-          spacing={2} 
-          justifyContent="flex-end"
-        >
-          <Button 
-            variant="outlined" 
-            onClick={onCancel} 
-            startIcon={<CancelIcon />} 
-            color="inherit"
-            sx={{ borderRadius: 2 }}
+        {error && (
+          <Fade in={!!error}>
+            <Alert 
+              severity="error" 
+              variant="filled"
+              sx={{ 
+                mb: 4, 
+                borderRadius: 3,
+                boxShadow: `0 8px 32px ${alpha(theme.palette.error.main, 0.2)}`,
+              }}
+            >
+              {error}
+            </Alert>
+          </Fade>
+        )}
+
+        <BasicInfoSection
+          person={person}
+          setPerson={setPerson}
+          nameInputRef={nameInputRef}
+          t={t}
+        />
+
+        <DeathInfoSection
+          person={person}
+          setPerson={setPerson}
+          t={t}
+        />
+
+        <FamilyRelationsSection
+          person={person}
+          onRelationChange={handleRelationChange}
+          availableFathers={availableFathers}
+          availableMothers={availableMothers}
+          availableSpouses={availableSpouses}
+          t={t}
+        />
+        
+        <FloatingActionArea elevation={8}>
+          <Stack 
+            direction={{ xs: 'column', sm: 'row' }} 
+            spacing={2} 
+            justifyContent="flex-end"
           >
-            {t('cancel')}
-          </Button>
-          
-          <Button 
-            variant="contained" 
-            onClick={onSave} 
-            startIcon={isEditing ? <SaveIcon /> : <PersonAddIcon />} 
-            disabled={loading || !person.firstName || !person.lastName || !person.gender}
-            color="primary"
-            sx={{ borderRadius: 2 }}
-          >
-            {loading ? t('saving') : (isEditing ? t('saveChanges') : t('addPerson'))}
-          </Button>
-        </Stack>
-      </Paper>
-    </Box>
+            <AnimatedButton 
+              variant="outlined" 
+              onClick={onCancel} 
+              startIcon={<CancelIcon />} 
+              color="inherit"
+              sx={{ 
+                borderWidth: 2,
+                '&:hover': {
+                  borderWidth: 2,
+                  backgroundColor: alpha(theme.palette.text.primary, 0.04),
+                }
+              }}
+            >
+              {t('cancel')}
+            </AnimatedButton>
+            
+            <AnimatedButton 
+              variant="contained" 
+              onClick={onSave} 
+              startIcon={isEditing ? <SaveIcon /> : <PersonAddIcon />} 
+              disabled={loading || !person.firstName || !person.lastName || !person.gender}
+              sx={{ 
+                background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                '&:hover': {
+                  background: `linear-gradient(45deg, ${theme.palette.primary.dark}, ${theme.palette.secondary.dark})`,
+                },
+                '&:disabled': {
+                  background: alpha(theme.palette.action.disabled, 0.12),
+                  color: theme.palette.action.disabled,
+                }
+              }}
+            >
+              {loading ? t('saving') : (isEditing ? t('saveChanges') : t('addPerson'))}
+            </AnimatedButton>
+          </Stack>
+        </FloatingActionArea>
+      </Box>
+    </Container>
   );
 };
 
