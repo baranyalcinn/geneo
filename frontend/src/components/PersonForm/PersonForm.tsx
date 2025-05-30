@@ -77,15 +77,17 @@ const BasicInfoSection: FC<BasicInfoSectionProps> = ({
             autoFocus
             placeholder={String(t('enterFirstName'))}
             variant="outlined"
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <PersonIcon
-                    fontSize="small"
-                    sx={{ color: theme.palette.primary.main }}
-                  />
-                </InputAdornment>
-              ),
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <PersonIcon
+                      fontSize="small"
+                      sx={{ color: theme.palette.primary.main }}
+                    />
+                  </InputAdornment>
+                ),
+              }
             }}
           />
           <TextField
@@ -98,15 +100,17 @@ const BasicInfoSection: FC<BasicInfoSectionProps> = ({
             required
             placeholder={String(t('enterLastName'))}
             variant="outlined"
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <PersonIcon
-                    fontSize="small"
-                    sx={{ color: theme.palette.primary.main, opacity: 0.7 }}
-                  />
-                </InputAdornment>
-              ),
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <PersonIcon
+                      fontSize="small"
+                      sx={{ color: theme.palette.primary.main, opacity: 0.7 }}
+                    />
+                  </InputAdornment>
+                ),
+              }
             }}
           />
         </Stack>
@@ -157,15 +161,17 @@ const BasicInfoSection: FC<BasicInfoSectionProps> = ({
             InputLabelProps={{
               shrink: true,
             }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <CakeIcon
-                    fontSize="small"
-                    sx={{ color: theme.palette.secondary.main }}
-                  />
-                </InputAdornment>
-              ),
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <CakeIcon
+                      fontSize="small"
+                      sx={{ color: theme.palette.secondary.main }}
+                    />
+                  </InputAdornment>
+                ),
+              }
             }}
           />
         </Stack>
@@ -219,15 +225,17 @@ const AdditionalInfoSection: FC<AdditionalInfoSectionProps> = ({
               InputLabelProps={{
                 shrink: true,
               }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SentimentVeryDissatisfiedIcon 
-                      fontSize="small" 
-                      sx={{ color: theme.palette.grey[600] }}
-                    />
-                  </InputAdornment>
-                ),
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SentimentVeryDissatisfiedIcon 
+                        fontSize="small" 
+                        sx={{ color: theme.palette.grey[600] }}
+                      />
+                    </InputAdornment>
+                  ),
+                }
               }}
             />
             {person.deathDate && (
@@ -256,6 +264,18 @@ const AdditionalInfoSection: FC<AdditionalInfoSectionProps> = ({
             fullWidth
             placeholder="Ölüm yeri"
             variant="outlined"
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <PersonIcon
+                      fontSize="small"
+                      sx={{ color: theme.palette.primary.main }}
+                    />
+                  </InputAdornment>
+                ),
+              }
+            }}
           />
         </Stack>
       </StyledFormSection>
