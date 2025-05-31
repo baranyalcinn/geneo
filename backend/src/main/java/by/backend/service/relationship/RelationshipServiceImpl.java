@@ -12,6 +12,7 @@ import by.backend.repository.PersonRepository;
 import by.backend.repository.RelationshipRepository;
 import by.backend.mapper.PersonMapper;
 import by.backend.service.validation.RelationshipValidator;
+import by.backend.service.pathfinding.RelationshipPathFinder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -39,6 +40,7 @@ public class RelationshipServiceImpl implements RelationshipService {
     private final PersonMapper personMapper;
     private final RelationshipProperties relationshipProperties;
     private final RelationshipValidator relationshipValidator;
+    private final RelationshipPathFinder relationshipPathFinder;
     
     private static final String GENDER_MALE = "ERKEK";
     private static final String GENDER_FEMALE = "KADIN";
@@ -227,7 +229,7 @@ public class RelationshipServiceImpl implements RelationshipService {
             return Collections.emptyList();
         }
 
-        List<List<Relationship>> allPaths = findPathsBFS(person1, person2, relationshipProperties.getDefaultPathDisplayMaxDepth());
+        List<List<Relationship>> allPaths = relationshipPathFinder.findPaths(person1, person2, relationshipProperties.getDefaultPathDisplayMaxDepth());
 
         if (allPaths.isEmpty()) {
             return Collections.emptyList();
@@ -237,113 +239,8 @@ public class RelationshipServiceImpl implements RelationshipService {
             .min(Comparator.comparingInt(List::size))
             .orElse(Collections.emptyList());
 
-        return convertPathToDTO(shortestPath, person1, person2);
-    }
-    
-    // Helper record for BFS state
-    private record PathExpansionState(List<Relationship> relationsInPath, Person currentEndPerson, Set<Long> personsInThisPathIds) {}
-
-    private List<List<Relationship>> findPathsBFS(Person startPerson, Person endPerson, int maxDepth) {
-        List<List<Relationship>> allPathsFound = new ArrayList<>();
-        Queue<PathExpansionState> queue = new LinkedList<>();
-
-        // Initial state: path starts with startPerson, no relations yet.
-        Set<Long> initialPersonsInPath = new HashSet<>();
-        initialPersonsInPath.add(startPerson.getId());
-        queue.add(new PathExpansionState(new ArrayList<>(), startPerson, initialPersonsInPath));
-
-        while (!queue.isEmpty()) {
-            PathExpansionState currentState = queue.poll();
-            List<Relationship> currentRelations = currentState.relationsInPath();
-            Person currentLastPerson = currentState.currentEndPerson();
-            Set<Long> personsCurrentlyInThisPath = currentState.personsInThisPathIds();
-
-            // If endPerson is reached
-            if (currentLastPerson.getId().equals(endPerson.getId())) {
-                allPathsFound.add(new ArrayList<>(currentRelations)); // Add a copy of the path
-                // If we have found enough paths, stop.
-                if (allPathsFound.size() >= relationshipProperties.getMaxBfsPathsToCollect()) {
-                    log.debug("{} ile {} arasında {} farklı yol bulundu (limit {}), arama sonlandırıldı.", 
-                        startPerson.getFirstName(), endPerson.getFirstName(), allPathsFound.size(), relationshipProperties.getMaxBfsPathsToCollect());
-                    break;
-                }
-                continue; // Continue to find other paths of potentially same length
-            }
-
-            // If path is too long, stop exploring this branch
-            if (currentRelations.size() >= maxDepth) {
-                continue;
-            }
-
-            List<Relationship> relationshipsToExplore = findAllActiveRelationships(currentLastPerson);
-
-            // Prioritize more direct relationships (optional, but can lead to 'simpler' paths first)
-            relationshipsToExplore.sort((r1, r2) -> {
-                boolean r1IsDirect = r1.getType() == RelationshipType.PARENT_CHILD || 
-                                    r1.getType() == RelationshipType.SPOUSE || 
-                                    r1.getType() == RelationshipType.SIBLING;
-                boolean r2IsDirect = r2.getType() == RelationshipType.PARENT_CHILD || 
-                                    r2.getType() == RelationshipType.SPOUSE || 
-                                    r2.getType() == RelationshipType.SIBLING;
-                
-                if (r1IsDirect && !r2IsDirect) return -1;
-                if (!r1IsDirect && r2IsDirect) return 1;
-                return 0;
-            });
-
-            for (Relationship relationship : relationshipsToExplore) {
-                Person neighbor = relationship.getPerson1().getId().equals(currentLastPerson.getId()) ? 
-                    relationship.getPerson2() : relationship.getPerson1();
-                
-                // Avoid cycles in the current path: if neighbor is already in this specific path, skip.
-                if (!personsCurrentlyInThisPath.contains(neighbor.getId())) {
-                    List<Relationship> newRelationsForPath = new ArrayList<>(currentRelations);
-                    newRelationsForPath.add(relationship);
-                    
-                    Set<Long> newPersonsInThisPath = new HashSet<>(personsCurrentlyInThisPath);
-                    newPersonsInThisPath.add(neighbor.getId());
-                    
-                    queue.add(new PathExpansionState(newRelationsForPath, neighbor, newPersonsInThisPath));
-                }
-            }
-        }
-        return allPathsFound;
-    }
-    
-    private List<RelationshipStepDTO> convertPathToDTO(List<Relationship> path, Person startPerson, Person endPerson) {
-        List<RelationshipStepDTO> dtos = new ArrayList<>();
-        Person currentPerson = startPerson;
         Locale locale = LocaleContextHolder.getLocale();
-
-        for (int i = 0; i < path.size(); i++) {
-            Relationship rel = path.get(i);
-            Person nextPersonInRel = rel.getPerson1().getId().equals(currentPerson.getId()) ? rel.getPerson2() : rel.getPerson1();
-            String description;
-            boolean isCurrentPersonThePerson1InRel = rel.getPerson1().getId().equals(currentPerson.getId());
-
-            if (isCurrentPersonThePerson1InRel) {
-                description = formatDirectRelationship(currentPerson, nextPersonInRel, rel.getType(), locale);
-            } else {
-                description = formatReverseRelationship(currentPerson, nextPersonInRel, rel.getType(), locale);
-            }
-            
-            dtos.add(RelationshipStepDTO.builder()
-                .personId(currentPerson.getId())
-                .personName(currentPerson.getFirstName() + " " + currentPerson.getLastName())
-                .personGender(currentPerson.getGender() != null ? currentPerson.getGender().name() : null)
-                .personBirthYear(currentPerson.getBirthDate() != null ? currentPerson.getBirthDate().getYear() : null)
-                .relationshipToNextPerson(description)
-                .nextPersonId(nextPersonInRel.getId())
-                .nextPersonName(nextPersonInRel.getFirstName() + " " + nextPersonInRel.getLastName())
-                .relationshipTypeName(rel.getType().name())
-                .relationshipStartDate(rel.getStartDate())
-                .relationshipEndDate(rel.getEndDate())
-                .sourcePerson(currentPerson.getId().equals(startPerson.getId()) && i == 0)
-                .targetPerson(nextPersonInRel.getId().equals(endPerson.getId()) && i == path.size() -1 )
-                .build());
-            currentPerson = nextPersonInRel;
-        }
-        return dtos;
+        return relationshipPathFinder.convertPathToDTO(shortestPath, person1, person2, locale);
     }
 
     @Override
@@ -483,44 +380,12 @@ public class RelationshipServiceImpl implements RelationshipService {
         }
     }
 
-    private String getDetailedSiblingMessageKey(String person1Gender, String person2Gender) {
-        if (GENDER_MALE.equals(person1Gender) && GENDER_MALE.equals(person2Gender)) return "relationship.sibling.is_brother_of";
-        if (GENDER_FEMALE.equals(person1Gender) && GENDER_FEMALE.equals(person2Gender)) return "relationship.sibling.is_sister_of";
-        if (GENDER_MALE.equals(person1Gender) && GENDER_FEMALE.equals(person2Gender)) return "relationship.sibling.is_brother_of_sister";
-        if (GENDER_FEMALE.equals(person1Gender) && GENDER_MALE.equals(person2Gender)) return "relationship.sibling.is_sister_of_brother";
-        return "relationship.sibling.is_sibling_of";
-    }
-
     private String formatDirectRelationship(Person person1, Person person2, RelationshipType type, Locale locale) {
-        String p1Gender = person1.getGender() != null ? person1.getGender().name().toUpperCase() : GENDER_UNKNOWN;
-        String p2Gender = person2.getGender() != null ? person2.getGender().name().toUpperCase() : GENDER_UNKNOWN;
-
-        switch (type) {
-            case PARENT_CHILD:
-                return getMessage("relationship.parent_child.parent", locale, person1.getFirstName(), person2.getFirstName());
-            case SPOUSE:
-                return getMessage("relationship.spouse.is_spouse_of", locale, person1.getFirstName(), person2.getFirstName());
-            case SIBLING:
-                return getMessage(getDetailedSiblingMessageKey(p1Gender, p2Gender), locale, person1.getFirstName(), person2.getFirstName());
-            default:
-                return getMessage("relationship.unknown", locale, person1.getFirstName(), person2.getFirstName(), type.name());
-        }
+        return relationshipPathFinder.formatDirectRelationship(person1, person2, type, locale);
     }
 
     private String formatReverseRelationship(Person person1, Person person2, RelationshipType type, Locale locale) {
-        String p1Gender = person1.getGender() != null ? person1.getGender().name().toUpperCase() : GENDER_UNKNOWN;
-        String p2Gender = person2.getGender() != null ? person2.getGender().name().toUpperCase() : GENDER_UNKNOWN;
-
-        switch (type) {
-            case PARENT_CHILD:
-                return getMessage("relationship.parent_child.child", locale, person1.getFirstName(), person2.getFirstName());
-            case SPOUSE:
-                return getMessage("relationship.spouse.is_spouse_of", locale, person1.getFirstName(), person2.getFirstName());
-            case SIBLING:
-                return getMessage(getDetailedSiblingMessageKey(p1Gender, p2Gender), locale, person1.getFirstName(), person2.getFirstName());
-            default:
-                return getMessage("relationship.unknown.reverse", locale, person1.getFirstName(), person2.getFirstName(), type.name());
-        }
+        return relationshipPathFinder.formatReverseRelationship(person1, person2, type, locale);
     }
 
     private RelationshipDescriptionResult findIndirectRelationship(Person person1, Person person2, Locale locale) {
