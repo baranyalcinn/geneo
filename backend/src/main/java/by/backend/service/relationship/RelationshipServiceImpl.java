@@ -11,6 +11,7 @@ import by.backend.model.enums.RelationshipType;
 import by.backend.repository.PersonRepository;
 import by.backend.repository.RelationshipRepository;
 import by.backend.mapper.PersonMapper;
+import by.backend.service.validation.RelationshipValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -37,6 +38,7 @@ public class RelationshipServiceImpl implements RelationshipService {
     private final MessageSource messageSource;
     private final PersonMapper personMapper;
     private final RelationshipProperties relationshipProperties;
+    private final RelationshipValidator relationshipValidator;
     
     private static final String GENDER_MALE = "ERKEK";
     private static final String GENDER_FEMALE = "KADIN";
@@ -54,7 +56,7 @@ public class RelationshipServiceImpl implements RelationshipService {
     @CacheEvict(value = {"relationships", "activeRelationships", "relationshipStatus", "relationshipPaths"}, allEntries = true)
     public Relationship createRelationship(Person person1, Person person2, RelationshipType type) {
         Locale locale = LocaleContextHolder.getLocale();
-        validateRelationship(person1, person2, type, locale);
+        relationshipValidator.validateRelationship(person1, person2, type, locale);
         
         if (hasActiveRelationship(person1, person2, type)) {
             throw new IllegalStateException(getMessage("relationship.error.already_exists", locale));
@@ -68,50 +70,6 @@ public class RelationshipServiceImpl implements RelationshipService {
         return relationshipRepository.save(relationship);
     }
     
-    private void validateRelationship(Person person1, Person person2, RelationshipType type, Locale locale) {
-        if (person1.getId().equals(person2.getId())) {
-            throw new IllegalArgumentException(getMessage("validation.error.self_relationship", locale, person1.getFirstName()));
-        }
-        
-        if (type == RelationshipType.SPOUSE) {
-            if (person1.getGender() != null && person2.getGender() != null && person1.getGender().equals(person2.getGender())) {
-                throw new IllegalArgumentException(getMessage("validation.error.spouse.same_gender", locale));
-            }
-
-            List<Relationship> existingSpousesP1 = relationshipRepository.findByPerson1AndTypeAndIsActiveTrue(person1, RelationshipType.SPOUSE);
-            if (!existingSpousesP1.isEmpty()) {
-                throw new IllegalStateException(getMessage("validation.error.spouse.multiple_active.person1", locale, person1.getFirstName()));
-            }
-            if (relationshipRepository.existsByPersonAndTypeAndIsActiveTrue(person1.getId(), RelationshipType.SPOUSE)) {
-                 throw new IllegalStateException(getMessage("validation.error.spouse.multiple_active", locale, person1.getFirstName()));
-            }
-            if (relationshipRepository.existsByPersonAndTypeAndIsActiveTrue(person2.getId(), RelationshipType.SPOUSE)) {
-                 throw new IllegalStateException(getMessage("validation.error.spouse.multiple_active", locale, person2.getFirstName()));
-            }
-        }
-        
-        if (type == RelationshipType.PARENT_CHILD) {
-            if (person1.getBirthDate() != null && person2.getBirthDate() != null) {
-                if (person1.getBirthDate().isAfter(person2.getBirthDate())) {
-                    throw new IllegalArgumentException(getMessage("validation.error.parent_child.parent_younger", locale));
-                }
-                
-                LocalDate childsBirthDate = person2.getBirthDate();
-                LocalDate parentBirthAtChildsBirth = person1.getBirthDate().plusYears(relationshipProperties.getMinParentAge());
-
-                if (parentBirthAtChildsBirth.isAfter(childsBirthDate)) {
-                     log.warn("Ebeveyn-çocuk yaş farkı çok az ({} yıldan az): person1.id={}, person1.birthDate={}, person2.id={}, person2.birthDate={}", 
-                        relationshipProperties.getMinParentAge(), person1.getId(), person1.getBirthDate(), person2.getId(), person2.getBirthDate());
-                }
-            }
-
-            Set<Person> ancestorsOfParent = getAllAncestors(person1);
-            if (ancestorsOfParent.contains(person2)) {
-                throw new IllegalArgumentException(getMessage("validation.error.parent_child.cyclic.ancestor_is_child", locale, person2.getFirstName(), person1.getFirstName()));
-            }
-        }
-    }
-
     @Override
     @Transactional
     @CacheEvict(value = {"relationships", "activeRelationships", "relationshipStatus", "relationshipPaths"}, allEntries = true)
