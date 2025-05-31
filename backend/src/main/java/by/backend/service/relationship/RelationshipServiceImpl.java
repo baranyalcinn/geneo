@@ -1,5 +1,6 @@
 package by.backend.service.relationship;
 
+import by.backend.config.RelationshipProperties;
 import by.backend.model.dto.PersonSummaryDTO;
 import by.backend.model.dto.RelationshipDescriptionResult;
 import by.backend.model.dto.RelationshipStepDTO;
@@ -35,11 +36,11 @@ public class RelationshipServiceImpl implements RelationshipService {
     private final PersonRepository personRepository;
     private final MessageSource messageSource;
     private final PersonMapper personMapper;
+    private final RelationshipProperties relationshipProperties;
     
     private static final String GENDER_MALE = "ERKEK";
     private static final String GENDER_FEMALE = "KADIN";
     private static final String GENDER_UNKNOWN = "BILINMEYEN";
-    private static final int DEFAULT_PATH_DISPLAY_MAX_DEPTH = 5;
 
     @Override
     @Transactional(readOnly = true)
@@ -95,13 +96,12 @@ public class RelationshipServiceImpl implements RelationshipService {
                     throw new IllegalArgumentException(getMessage("validation.error.parent_child.parent_younger", locale));
                 }
                 
-                int minParentAge = 12;
                 LocalDate childsBirthDate = person2.getBirthDate();
-                LocalDate parentBirthAtChildsBirth = person1.getBirthDate().plusYears(minParentAge);
+                LocalDate parentBirthAtChildsBirth = person1.getBirthDate().plusYears(relationshipProperties.getMinParentAge());
 
                 if (parentBirthAtChildsBirth.isAfter(childsBirthDate)) {
                      log.warn("Ebeveyn-çocuk yaş farkı çok az ({} yıldan az): person1.id={}, person1.birthDate={}, person2.id={}, person2.birthDate={}", 
-                        minParentAge, person1.getId(), person1.getBirthDate(), person2.getId(), person2.getBirthDate());
+                        relationshipProperties.getMinParentAge(), person1.getId(), person1.getBirthDate(), person2.getId(), person2.getBirthDate());
                 }
             }
 
@@ -269,7 +269,7 @@ public class RelationshipServiceImpl implements RelationshipService {
             return Collections.emptyList();
         }
 
-        List<List<Relationship>> allPaths = findPathsBFS(person1, person2, DEFAULT_PATH_DISPLAY_MAX_DEPTH);
+        List<List<Relationship>> allPaths = findPathsBFS(person1, person2, relationshipProperties.getDefaultPathDisplayMaxDepth());
 
         if (allPaths.isEmpty()) {
             return Collections.emptyList();
@@ -282,43 +282,45 @@ public class RelationshipServiceImpl implements RelationshipService {
         return convertPathToDTO(shortestPath, person1, person2);
     }
     
+    // Helper record for BFS state
+    private record PathExpansionState(List<Relationship> relationsInPath, Person currentEndPerson, Set<Long> personsInThisPathIds) {}
+
     private List<List<Relationship>> findPathsBFS(Person startPerson, Person endPerson, int maxDepth) {
         List<List<Relationship>> allPathsFound = new ArrayList<>();
-        Queue<List<Relationship>> queue = new LinkedList<>();
-        Set<Long> visitedPeopleInPath = new HashSet<>();
+        Queue<PathExpansionState> queue = new LinkedList<>();
 
-        List<Relationship> initialPath = new ArrayList<>();
-        queue.add(initialPath);
-        visitedPeopleInPath.add(startPerson.getId());
+        // Initial state: path starts with startPerson, no relations yet.
+        Set<Long> initialPersonsInPath = new HashSet<>();
+        initialPersonsInPath.add(startPerson.getId());
+        queue.add(new PathExpansionState(new ArrayList<>(), startPerson, initialPersonsInPath));
 
         while (!queue.isEmpty()) {
-            List<Relationship> currentPath = queue.poll();
-            Person currentPersonInPath;
+            PathExpansionState currentState = queue.poll();
+            List<Relationship> currentRelations = currentState.relationsInPath();
+            Person currentLastPerson = currentState.currentEndPerson();
+            Set<Long> personsCurrentlyInThisPath = currentState.personsInThisPathIds();
 
-            if (currentPath.isEmpty()) {
-                currentPersonInPath = startPerson;
-            } else {
-                currentPersonInPath = determineNextPersonInPath(currentPath, startPerson);
-            }
-
-            if (currentPersonInPath.getId().equals(endPerson.getId())) {
-                allPathsFound.add(new ArrayList<>(currentPath));
-                
-                if (allPathsFound.size() >= 5) {
-                    log.debug("{} ile {} arasında {} farklı yol bulundu ve sonlandırıldı", 
-                        startPerson.getFirstName(), endPerson.getFirstName(), allPathsFound.size());
+            // If endPerson is reached
+            if (currentLastPerson.getId().equals(endPerson.getId())) {
+                allPathsFound.add(new ArrayList<>(currentRelations)); // Add a copy of the path
+                // If we have found enough paths, stop.
+                if (allPathsFound.size() >= relationshipProperties.getMaxBfsPathsToCollect()) {
+                    log.debug("{} ile {} arasında {} farklı yol bulundu (limit {}), arama sonlandırıldı.", 
+                        startPerson.getFirstName(), endPerson.getFirstName(), allPathsFound.size(), relationshipProperties.getMaxBfsPathsToCollect());
                     break;
                 }
+                continue; // Continue to find other paths of potentially same length
+            }
+
+            // If path is too long, stop exploring this branch
+            if (currentRelations.size() >= maxDepth) {
                 continue;
             }
 
-            if (currentPath.size() >= maxDepth) {
-                continue;
-            }
+            List<Relationship> relationshipsToExplore = findAllActiveRelationships(currentLastPerson);
 
-            List<Relationship> relationships = findAllActiveRelationships(currentPersonInPath);
-
-            relationships.sort((r1, r2) -> {
+            // Prioritize more direct relationships (optional, but can lead to 'simpler' paths first)
+            relationshipsToExplore.sort((r1, r2) -> {
                 boolean r1IsDirect = r1.getType() == RelationshipType.PARENT_CHILD || 
                                     r1.getType() == RelationshipType.SPOUSE || 
                                     r1.getType() == RelationshipType.SIBLING;
@@ -331,49 +333,25 @@ public class RelationshipServiceImpl implements RelationshipService {
                 return 0;
             });
 
-            for (Relationship relationship : relationships) {
-                Person neighbor = relationship.getPerson1().getId().equals(currentPersonInPath.getId()) ? 
+            for (Relationship relationship : relationshipsToExplore) {
+                Person neighbor = relationship.getPerson1().getId().equals(currentLastPerson.getId()) ? 
                     relationship.getPerson2() : relationship.getPerson1();
                 
-                if (!isPersonInPath(neighbor, currentPath, startPerson)) {
-                    List<Relationship> newPath = new ArrayList<>(currentPath);
-                    newPath.add(relationship);
-                    queue.add(newPath);
+                // Avoid cycles in the current path: if neighbor is already in this specific path, skip.
+                if (!personsCurrentlyInThisPath.contains(neighbor.getId())) {
+                    List<Relationship> newRelationsForPath = new ArrayList<>(currentRelations);
+                    newRelationsForPath.add(relationship);
                     
-                    visitedPeopleInPath.add(neighbor.getId());
+                    Set<Long> newPersonsInThisPath = new HashSet<>(personsCurrentlyInThisPath);
+                    newPersonsInThisPath.add(neighbor.getId());
+                    
+                    queue.add(new PathExpansionState(newRelationsForPath, neighbor, newPersonsInThisPath));
                 }
             }
         }
         return allPathsFound;
     }
     
-    private Person determineNextPersonInPath(List<Relationship> path, Person startNode) {
-        if (path.isEmpty()) {
-            return startNode;
-        }
-        Person previousPerson = startNode;
-        for (int i = 0; i < path.size(); i++) {
-            Relationship r = path.get(i);
-            if (r.getPerson1().getId().equals(previousPerson.getId())) {
-                previousPerson = r.getPerson2();
-            } else if (r.getPerson2().getId().equals(previousPerson.getId())) {
-                previousPerson = r.getPerson1();
-            } else {
-                 if (i == 0) {
-                     if (r.getPerson1().getId().equals(startNode.getId())) previousPerson = r.getPerson2();
-                     else if (r.getPerson2().getId().equals(startNode.getId())) previousPerson = r.getPerson1();
-                     else {
-                         log.error("Path building error: First relationship {} not connected to startNode {}", r.getId(), startNode.getId());
-                         throw new IllegalStateException("Path building error with first relationship.");
-                     }
-                 } else {
-                     throw new IllegalStateException("Disjointed path segment found at relationship " + r.getId());
-                 }
-            }
-        }
-        return previousPerson;
-    }
-
     private List<RelationshipStepDTO> convertPathToDTO(List<Relationship> path, Person startPerson, Person endPerson) {
         List<RelationshipStepDTO> dtos = new ArrayList<>();
         Person currentPerson = startPerson;
@@ -420,6 +398,7 @@ public class RelationshipServiceImpl implements RelationshipService {
         return personMapper.toSummaryDTOList(new ArrayList<>(ancestors1));
     }
 
+    @Cacheable(value = "ancestors", key = "#person.id")
     private Set<Person> getAllAncestors(Person person) {
         Set<Person> ancestors = new HashSet<>();
         Queue<Person> queue = new LinkedList<>();
@@ -452,6 +431,7 @@ public class RelationshipServiceImpl implements RelationshipService {
         return personMapper.toSummaryDTOList(new ArrayList<>(descendants1));
     }
 
+    @Cacheable(value = "descendants", key = "#person.id")
     private Set<Person> getAllDescendants(Person person) {
         Set<Person> descendants = new HashSet<>();
         Queue<Person> queue = new LinkedList<>();
@@ -612,19 +592,6 @@ public class RelationshipServiceImpl implements RelationshipService {
             .person1(personMapper.toSummaryDTO(person1))
             .person2(personMapper.toSummaryDTO(person2))
             .build();
-    }
-
-    private boolean isPersonInPath(Person person, List<Relationship> path, Person startPerson) {
-        if (person.getId().equals(startPerson.getId())) {
-            return true;
-        }
-        
-        for (Relationship rel : path) {
-            if (rel.getPerson1().getId().equals(person.getId()) || rel.getPerson2().getId().equals(person.getId())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
