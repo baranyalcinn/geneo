@@ -12,7 +12,7 @@ import org.springframework.context.MessageSource;
 import org.springframework.context.NoSuchMessageException;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
+import java.time.LocalDate;//used for constructor
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -109,20 +109,20 @@ public class RelationshipPathFinderImpl implements RelationshipPathFinder {
                 description = formatReverseRelationship(currentPerson, nextPersonInRel, rel.getType(), locale);
             }
 
-            dtos.add(RelationshipStepDTO.builder()
-                .personId(currentPerson.getId())
-                .personName(currentPerson.getFirstName() + " " + currentPerson.getLastName())
-                .personGender(currentPerson.getGender() != null ? currentPerson.getGender().name() : null)
-                .personBirthYear(currentPerson.getBirthDate() != null ? currentPerson.getBirthDate().getYear() : null)
-                .relationshipToNextPerson(description)
-                .nextPersonId(nextPersonInRel.getId())
-                .nextPersonName(nextPersonInRel.getFirstName() + " " + nextPersonInRel.getLastName())
-                .relationshipTypeName(rel.getType().name())
-                .relationshipStartDate(rel.getStartDate())
-                .relationshipEndDate(rel.getEndDate())
-                .sourcePerson(currentPerson.getId().equals(startPerson.getId()) && i == 0)
-                .targetPerson(nextPersonInRel.getId().equals(endPerson.getId()) && i == path.size() -1 )
-                .build());
+            dtos.add(new RelationshipStepDTO(
+                currentPerson.getId(),
+                currentPerson.getFirstName() + " " + currentPerson.getLastName(),
+                currentPerson.getGender() != null ? currentPerson.getGender().name() : null,
+                currentPerson.getBirthDate() != null ? currentPerson.getBirthDate().getYear() : null,
+                description,
+                currentPerson.getId().equals(startPerson.getId()) && i == 0,
+                nextPersonInRel.getId().equals(endPerson.getId()) && i == path.size() - 1,
+                nextPersonInRel.getId(),
+                nextPersonInRel.getFirstName() + " " + nextPersonInRel.getLastName(),
+                rel.getType().name(),
+                rel.getStartDate(),
+                rel.getEndDate()
+            ));
             currentPerson = nextPersonInRel;
         }
         return dtos;
