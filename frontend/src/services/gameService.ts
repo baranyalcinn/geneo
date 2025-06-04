@@ -124,7 +124,7 @@ export const getHighScores = async (): Promise<HighScores> => {
     localStorage.setItem('highScores', JSON.stringify(formattedScores));
     return formattedScores;
   } catch (error) {
-    console.error('Yüksek skorlar API'den alınırken hata oluştu.', error);
+    console.error("Yüksek skorlar API'den alınırken hata oluştu.", error);
     try {
       const localScores = localStorage.getItem('highScores');
       if (localScores) {
