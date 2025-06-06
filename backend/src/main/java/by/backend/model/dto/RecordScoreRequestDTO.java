@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Locale;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -17,4 +19,5 @@ public class RecordScoreRequestDTO {
     private int correctAnswers;
     private int totalQuestions;
     private int maxStreak;
+    private Locale locale;
 } 

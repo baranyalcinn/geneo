@@ -6,11 +6,13 @@ import by.backend.model.enums.RelationshipType;
 import lombok.Builder;
 import lombok.Data;
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 
 import java.util.List;
 
 @Data
-@Builder(access = AccessLevel.PUBLIC, toBuilder = true) // toBuilder = true eklendi
+@Builder
+@AllArgsConstructor
 public class RelationshipDescriptionResult {
     private final RelationshipStatus status;
     private final String messageKey;
@@ -20,6 +22,7 @@ public class RelationshipDescriptionResult {
     private final PersonSummaryDTO person1; // PersonSummaryDTO olarak değiştirildi
     private final PersonSummaryDTO person2; // PersonSummaryDTO olarak değiştirildi
     private final RelationshipType directTypeIfApplicable;
+    private final RelationshipPathDTO relationshipPath;
 }
 
 /* Java 16+ Record alternative:

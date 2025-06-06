@@ -19,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.ArrayList;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/game")
@@ -33,15 +34,17 @@ public class GameController {
     }
 
     @PostMapping("/start")
-    public ResponseEntity<Object> startGame(@RequestBody StartGameRequestDTO startGameRequest) {
+    public ResponseEntity<Object> startGame(@RequestBody StartGameRequestDTO startGameRequest,
+                                              @RequestParam(name = "lang", required = false) String lang) {
         try {
+            Locale locale = lang != null ? Locale.forLanguageTag(lang) : Locale.getDefault();
             if (startGameRequest == null || startGameRequest.getPlayerName() == null || startGameRequest.getPlayerName().trim().isEmpty() || startGameRequest.getDifficulty() == null) {
                 logger.warn("POST /start: Geçersiz istek: {}", startGameRequest);
                 Map<String, Object> errorBody = Map.of("message", "Oyuncu adı ve zorluk seviyesi gereklidir.");
                 return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
             }
-            logger.info("POST /start: Oyuncu: {}, Zorluk: {}", startGameRequest.getPlayerName(), startGameRequest.getDifficulty());
-            InitialGameDataDTO initialData = gameService.startGame(startGameRequest.getPlayerName(), startGameRequest.getDifficulty());
+            logger.info("POST /start: Oyuncu: {}, Zorluk: {}, Dil: {}", startGameRequest.getPlayerName(), startGameRequest.getDifficulty(), locale.toLanguageTag());
+            InitialGameDataDTO initialData = gameService.startGame(startGameRequest.getPlayerName(), startGameRequest.getDifficulty(), locale);
             return new ResponseEntity<>(initialData, HttpStatus.OK);
         } catch (GameException e) {
             logger.error("POST /start: Oyun başlatılırken özel hata: {}", e.getMessage());
@@ -55,15 +58,17 @@ public class GameController {
     }
 
     @PostMapping("/answer")
-    public ResponseEntity<Object> answerQuestion(@RequestBody GameAnswerDTO gameAnswer) {
+    public ResponseEntity<Object> answerQuestion(@RequestBody GameAnswerDTO gameAnswer,
+                                                   @RequestParam(name = "lang", required = false) String lang) {
         try {
+            Locale locale = lang != null ? Locale.forLanguageTag(lang) : Locale.getDefault();
             if (gameAnswer == null || gameAnswer.getQuestionId() == null || gameAnswer.getAnswer() == null || gameAnswer.getDifficulty() == null) {
                 logger.warn("POST /answer: Eksik bilgi ile çağrıldı: {}", gameAnswer);
                 Map<String, Object> errorBody = Map.of("message", "Soru ID, cevap ve zorluk seviyesi gereklidir.");
                 return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
             }
-            logger.info("POST /answer: Oyuncu: {}, Soru ID: {}, Cevap: {}", gameAnswer.getPlayerName(), gameAnswer.getQuestionId(), gameAnswer.getAnswer());
-            AnswerResponseDTO answerResponse = gameService.answerQuestion(gameAnswer);
+            logger.info("POST /answer: Oyuncu: {}, Soru ID: {}, Cevap: {}, Dil: {}", gameAnswer.getPlayerName(), gameAnswer.getQuestionId(), gameAnswer.getAnswer(), locale.toLanguageTag());
+            AnswerResponseDTO answerResponse = gameService.answerQuestion(gameAnswer, locale);
             return new ResponseEntity<>(answerResponse, HttpStatus.OK);
         } catch (GameException e) {
             logger.error("POST /answer: Cevap işlenirken özel hata (Oyuncu: {}): {}", gameAnswer != null ? gameAnswer.getPlayerName() : "N/A", e.getMessage());
@@ -77,7 +82,8 @@ public class GameController {
     }
 
     @PostMapping("/record-result")
-    public ResponseEntity<Object> recordResult(@RequestBody RecordScoreRequestDTO scoreRequest) {
+    public ResponseEntity<Object> recordResult(@RequestBody RecordScoreRequestDTO scoreRequest,
+                                                 @RequestParam(name = "lang", required = false) String lang) {
         try {
             if (scoreRequest == null) {
                 logger.warn("POST /record-result: İstek gövdesi null");
@@ -91,12 +97,14 @@ public class GameController {
                 return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
             }
             
-            logger.info("POST /record-result: Oyuncu: {}, Skor: {}, Zorluk: {}, Doğru Cevaplar: {}/{}", 
+            Locale locale = lang != null ? Locale.forLanguageTag(lang) : Locale.getDefault();
+            scoreRequest.setLocale(locale);
+            
+            logger.info("POST /record-result: Oyuncu: {}, Skor: {}, Zorluk: {}, Dil: {}", 
                         scoreRequest.getPlayerName(), 
                         scoreRequest.getScore(), 
                         scoreRequest.getDifficulty(),
-                        scoreRequest.getCorrectAnswers(),
-                        scoreRequest.getTotalQuestions());
+                        locale.toLanguageTag());
             
             GameResultDTO savedResult = gameService.recordGameResult(scoreRequest);
             return new ResponseEntity<>(savedResult, HttpStatus.OK);
@@ -151,10 +159,18 @@ public class GameController {
     }
 
     @GetMapping("/question")
-    public ResponseEntity<GameQuestionDTO> getQuestionByDifficulty(@RequestParam("difficulty") String difficultyStr) {
+    public ResponseEntity<GameQuestionDTO> getQuestionByDifficulty(@RequestParam(value = "difficulty", required = false) String difficultyStr) {
         logger.info("GET /question: Zorluk seviyesine göre soru isteniyor: {}", difficultyStr);
         try {
-            Difficulty difficulty = Difficulty.valueOf(difficultyStr.toUpperCase());
+            Difficulty difficulty;
+            if (difficultyStr == null || difficultyStr.isEmpty()) {
+                // Varsayılan zorluk seviyesi
+                difficulty = Difficulty.MEDIUM;
+                logger.info("GET /question: Zorluk seviyesi belirtilmedi, varsayılan olarak {} kullanılıyor", difficulty);
+            } else {
+                difficulty = Difficulty.valueOf(difficultyStr.toUpperCase());
+            }
+            
             GameQuestionDTO question = gameService.generateQuestion(difficulty); 
             if (question != null) {
                 logger.debug("GET /question: Soru oluşturuldu: {}", question.getId());

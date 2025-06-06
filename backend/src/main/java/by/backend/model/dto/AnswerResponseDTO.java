@@ -4,9 +4,11 @@ import lombok.Builder;
 import lombok.Data;
 import java.util.List;
 import java.util.Set;
+import lombok.AllArgsConstructor;
 
 @Data
 @Builder(access = lombok.AccessLevel.PUBLIC)
+@AllArgsConstructor
 public class AnswerResponseDTO {
     private boolean correctAnswer;
     private String correctAnswerText;
@@ -18,7 +20,8 @@ public class AnswerResponseDTO {
     private String gameEndMessage;
     private GameResultDTO finalResult;
     private Long finalScoreId;
-    private List<RelationshipStepDTO> relationshipPath;
+    private RelationshipPathDTO relationshipPath;
     private Set<String> askedQuestionSignaturesInThisGame;
     private List<QuestionProgressionPoint> updatedProgression;
+    private AnalysisResultDTO analysisResult;
 } 

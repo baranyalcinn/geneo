@@ -9,10 +9,11 @@ import by.backend.model.dto.GameQuestionDTO;
 import by.backend.model.enums.Difficulty;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 
 public interface GameService {
-    InitialGameDataDTO startGame(String playerName, Difficulty difficulty);
-    AnswerResponseDTO answerQuestion(GameAnswerDTO answerDetails);
+    InitialGameDataDTO startGame(String playerName, Difficulty difficulty, Locale locale);
+    AnswerResponseDTO answerQuestion(GameAnswerDTO answerDetails, Locale locale);
     GameResultDTO recordGameResult(RecordScoreRequestDTO scoreDetails);
     Map<Difficulty, List<GameResultDTO>> getHighScores();
     GameQuestionDTO generateQuestion(Difficulty difficulty);

@@ -262,10 +262,11 @@ const FamilyRelationGame = () => {
   const [timeLeft, setTimeLeft] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [difficulty, setDifficulty] = useState<Difficulty>(Difficulty.EASY);
+  const [difficulty, setDifficulty] = useState<Difficulty>(Difficulty.MEDIUM);
   const [playerName, setPlayerName] = useState('');
   const [highScores, setHighScores] = useState<HighScoresType | null>(null);
   const [showScores, setShowScores] = useState(false);
+  const [sessionId, setSessionId] = useState<string>('');
 
   const gameAreaRef = useRef<HTMLDivElement>(null);
 
@@ -405,7 +406,8 @@ const FamilyRelationGame = () => {
         askedQuestionSignaturesInThisGame,
         currentScore: score,
         currentStreak: currentStreak,
-        timeTakenInSeconds: (currentQuestion.timeLimit || 60) - timeLeft
+        timeTakenInSeconds: (currentQuestion.timeLimit || 60) - timeLeft,
+        sessionId: sessionId
       } as any;
       const apiResult = await submitAnswer(gameAnswerPayload) as any;
       const gameResult: GameResult = {
@@ -531,8 +533,12 @@ const FamilyRelationGame = () => {
     setCurrentStreak(0);
     setMaxStreak(0);
     
+    // Yeni oturum ID'si oluştur
+    const newSessionId = `game_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    setSessionId(newSessionId);
+    
     try {
-      console.log(`Oyun başlatılıyor: ${playerName}, Zorluk: ${difficulty}`);
+      console.log(`Oyun başlatılıyor: ${playerName}, Zorluk: ${difficulty}, Oturum ID: ${newSessionId}`);
       // Oyuncu adını yerel depolamaya kaydet
       localStorage.setItem('lastPlayerName', playerName);
       
@@ -626,7 +632,8 @@ const FamilyRelationGame = () => {
         askedQuestionSignaturesInThisGame,
         currentScore: score,
         currentStreak: currentStreak,
-        timeTakenInSeconds: timeTaken
+        timeTakenInSeconds: timeTaken,
+        sessionId: sessionId
       } as any;
       
       console.log("Cevap gönderiliyor:", gameAnswerPayload);

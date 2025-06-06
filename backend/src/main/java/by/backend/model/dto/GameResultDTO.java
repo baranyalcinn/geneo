@@ -6,7 +6,7 @@ import lombok.Builder;
 import java.util.List;
 
 @Data
-@Builder
+@Builder(access = lombok.AccessLevel.PUBLIC)
 public class GameResultDTO {
     private String playerName;
     private int score;

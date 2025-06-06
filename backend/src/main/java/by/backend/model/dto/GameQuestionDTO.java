@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 @Data
-@Builder(toBuilder = true)
+@Builder(toBuilder = true, access = lombok.AccessLevel.PUBLIC)
 @NoArgsConstructor
 @AllArgsConstructor
 public class GameQuestionDTO {

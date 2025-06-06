@@ -25,6 +25,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSource;
 import org.springframework.context.NoSuchMessageException;
 import org.springframework.context.i18n.LocaleContextHolder;
+import by.backend.config.GameProperties;
+import by.backend.service.game.AnalysisService;
+import by.backend.service.game.session.GameSession;
+import by.backend.service.game.session.PlayerAnswer;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import by.backend.model.dto.RelationshipPathDTO;
 
 @Service
 public class GameServiceImpl implements GameService {
@@ -34,6 +41,8 @@ public class GameServiceImpl implements GameService {
     private final RelationshipService relationshipService;
     private final PersonMapper personMapper;
     private final MessageSource messageSource;
+    private final GameProperties gameProperties;
+    private final AnalysisService analysisService;
     private final Map<Difficulty, List<GameQuestionDTO>> preGeneratedQuestions;
     private final ScheduledExecutorService executorService;
     private final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors();
@@ -49,16 +58,22 @@ public class GameServiceImpl implements GameService {
     private long lastCacheRefreshTimeMillis = System.currentTimeMillis();
     private final Object cacheLock = new Object();
 
+    private final ConcurrentMap<String, GameSession> activeGameSessions = new ConcurrentHashMap<>();
+
     public GameServiceImpl(PersonRepository personRepository,
                          HighScoreRepository highScoreRepository,
                          RelationshipService relationshipService,
                          PersonMapper personMapper,
-                         MessageSource messageSource) {
+                         MessageSource messageSource,
+                         GameProperties gameProperties,
+                         AnalysisService analysisService) {
         this.personRepository = personRepository;
         this.highScoreRepository = highScoreRepository;
         this.relationshipService = relationshipService;
         this.personMapper = personMapper;
         this.messageSource = messageSource;
+        this.gameProperties = gameProperties;
+        this.analysisService = analysisService;
         this.preGeneratedQuestions = new EnumMap<>(Difficulty.class);
         for (Difficulty difficulty : Difficulty.values()) {
             preGeneratedQuestions.put(difficulty, Collections.synchronizedList(new ArrayList<>()));
@@ -107,7 +122,7 @@ public class GameServiceImpl implements GameService {
                 GameQuestionDTO question = generateQuestionInternal(difficulty, 
                     questionsForDifficulty.stream()
                                           .map(GameQuestionDTO::getId)
-                                          .collect(Collectors.toSet()));
+                                          .collect(Collectors.toSet()), LocaleContextHolder.getLocale());
                 if (question != null) {
                     questionsForDifficulty.add(question);
                     count++;
@@ -139,7 +154,7 @@ public class GameServiceImpl implements GameService {
                             break;
                         }
                         GameQuestionDTO question = generateQuestionInternal(difficulty, 
-                            questions.stream().map(GameQuestionDTO::getId).collect(Collectors.toSet()));
+                            questions.stream().map(GameQuestionDTO::getId).collect(Collectors.toSet()), LocaleContextHolder.getLocale());
                         if (question != null) {
                             questions.add(question);
                             addedCount++;
@@ -163,12 +178,12 @@ public class GameServiceImpl implements GameService {
 
     @Override
     @Transactional
-    public InitialGameDataDTO startGame(String playerName, Difficulty difficulty) {
-        log.info("Oyun başlatılıyor: Oyuncu '{}', Zorluk '{}'", playerName, difficulty);
-        GameQuestionDTO firstQuestion = generateQuestionInternal(difficulty, Collections.emptySet());
+    public InitialGameDataDTO startGame(String playerName, Difficulty difficulty, Locale locale) {
+        log.info("Starting game for player '{}' with difficulty '{}'", playerName, difficulty);
+        GameQuestionDTO firstQuestion = generateQuestionInternal(difficulty, Collections.emptySet(), locale);
         if (firstQuestion == null) {
             log.error("startGame: İlk soru üretilemedi. Oyuncu: {}, Zorluk: {}", playerName, difficulty);
-            throw new GameException(getMessage("game.error.start_failed_no_question"));
+            throw new GameException(getMessage("game.error.start_failed_no_question", locale));
         }
         GameQuestionDTO questionToSend = firstQuestion.toBuilder().build();
         questionToSend.setCorrectAnswer(null);
@@ -183,163 +198,176 @@ public class GameServiceImpl implements GameService {
 
     @Override
     @Transactional
-    public AnswerResponseDTO answerQuestion(GameAnswerDTO answerDetails) {
-        log.debug("Cevap işleniyor: Oyuncu '{}', Soru ID '{}', Cevap '{}'",
-            answerDetails.getPlayerName(), answerDetails.getQuestionId(), answerDetails.getAnswer());
+    public AnswerResponseDTO answerQuestion(GameAnswerDTO answerDetails, Locale locale) {
+        String sessionId = answerDetails.getSessionId();
+        log.debug("Processing answer for session '{}', question '{}'", sessionId, answerDetails.getQuestionId());
 
-        if (answerDetails.getQuestionId() == null || answerDetails.getAnswer() == null || answerDetails.getDifficulty() == null) {
-            log.warn("answerQuestion çağrısı eksik parametrelerle yapıldı: {}", answerDetails);
-            throw new GameException(getMessage("game.error.missing_parameters_for_answer"));
+        // Eğer sessionId null veya boş ise, bir session oluşturmaya gerek yok
+        // Doğrudan soruyu doğrulama kısmına geçebiliriz
+        GameSession session = null;
+        if (sessionId != null && !sessionId.isEmpty()) {
+            session = activeGameSessions.get(sessionId);
+            
+            if (session != null && session.isGameOver()) {
+                log.warn("Answer received for already finished game session '{}'.", sessionId);
+                activeGameSessions.remove(sessionId);
+                return createGameOverResponse(session, "game.error.game_already_over", locale);
+            }
         }
 
-        Person person1 = null;
-        Person person2 = null;
-        RelationshipDescriptionResult relationshipCheckResult;
-
+        // --- Start of inlined validation logic ---
+        String correctAnswerText;
+        String category;
+        boolean isCorrect;
+        RelationshipPathDTO relationshipPath = null;
         try {
             String[] ids = answerDetails.getQuestionId().split("_");
-            if (ids.length == 2) {
-                Optional<Person> optP1 = personRepository.findById(Long.parseLong(ids[0]));
-                Optional<Person> optP2 = personRepository.findById(Long.parseLong(ids[1]));
-                if (optP1.isPresent() && optP2.isPresent()) {
-                    person1 = optP1.get();
-                    person2 = optP2.get();
-                } else {
-                    log.warn("Cevaplanan soru için kişiler bulunamadı: P1 ID {} veya P2 ID {} bulunamadı.", ids[0], ids[1]);
-                    throw new GameException(getMessage("game.error.persons_not_found_for_question", answerDetails.getQuestionId()));
-                }
-            } else {
-                 log.warn("Geçersiz soru ID formatı: {}. Format P1ID_P2ID şeklinde olmalı.", answerDetails.getQuestionId());
-                 throw new GameException(getMessage("game.error.invalid_question_id_format", answerDetails.getQuestionId()));
+            if (ids.length != 2) throw new GameException("Invalid Question ID format");
+
+            Person p1 = personRepository.findById(Long.parseLong(ids[0])).orElseThrow(() -> new GameException("Person 1 not found"));
+            Person p2 = personRepository.findById(Long.parseLong(ids[1])).orElseThrow(() -> new GameException("Person 2 not found"));
+
+            RelationshipDescriptionResult result = relationshipService.findRelationshipDescription(personMapper.toSummaryDTO(p1), personMapper.toSummaryDTO(p2));
+            if (result.getStatus() != RelationshipStatus.FOUND) {
+                throw new GameException("Could not determine relationship for question ID: " + answerDetails.getQuestionId());
             }
             
-            if (person1 == null || person2 == null) {
-                 log.error("answerQuestion: person1 veya person2 null geldi. Soru ID: {}", answerDetails.getQuestionId());
-                 throw new GameException(getMessage("game.error.persons_not_found_for_question", answerDetails.getQuestionId()));
+            String correctAnswerKey = result.getMessageKey();
+            correctAnswerText = getMessage(correctAnswerKey, locale, p1.getFirstName(), p2.getFirstName());
+            category = getRelationshipCategory(correctAnswerKey);
+            isCorrect = normalizeAnswer(correctAnswerText).equals(normalizeAnswer(answerDetails.getAnswer()));
+            
+            // On correct answer, include the path for graph visualization
+            if(isCorrect) {
+                List<RelationshipStepDTO> path = result.getPath();
+                // Manuel olarak RelationshipPathDTO nesnesi oluştur
+                relationshipPath = new RelationshipPathDTO();
+                relationshipPath.setSteps(path);
+                relationshipPath.setDescription(correctAnswerText);
             }
 
-            PersonSummaryDTO person1Summary = personMapper.toSummaryDTO(person1);
-            PersonSummaryDTO person2Summary = personMapper.toSummaryDTO(person2);
-            relationshipCheckResult = relationshipService.findRelationshipDescription(person1Summary, person2Summary);
-
-            if (relationshipCheckResult.getStatus() != RelationshipStatus.FOUND) {
-                log.error("Doğru cevap {} için sistemden geçerli bir ilişki açıklaması alınamadı. Durum: {}, Mesaj Anahtarı: {}",
-                    answerDetails.getQuestionId(), relationshipCheckResult.getStatus(), relationshipCheckResult.getMessageKey());
-                throw new GameException(getMessage("game.error.could_not_determine_correct_answer"));
-            }
-
-        } catch (NumberFormatException e) {
-            log.warn("Soru ID'sindeki kişi IDleri ayrıştırılamadı: {}. Hata: {}", answerDetails.getQuestionId(), e.getMessage());
-            throw new GameException(getMessage("game.error.invalid_question_id_parsing", answerDetails.getQuestionId()));
-        } catch (GameException ge) {
-            throw ge;
         } catch (Exception e) {
-            log.error("answerQuestion içinde beklenmedik bir hata oluştu. Soru ID: {}, Hata: {}", answerDetails.getQuestionId(), e.getMessage(), e);
-            throw new GameException(getMessage("game.error.internal_processing_answer"));
+            log.error("Error validating answer for questionId '{}': {}", answerDetails.getQuestionId(), e.getMessage(), e);
+            throw new GameException(getMessage("game.error.could_not_determine_correct_answer", locale));
         }
+        // --- End of inlined validation logic ---
 
-        String userAnswer = normalizeAnswer(answerDetails.getAnswer());
-        boolean isCorrect = false;
-
-        String primaryCorrectAnswerKey = relationshipCheckResult.getMessageKey();
-        String primaryCorrectAnswerLocalized = getMessage(primaryCorrectAnswerKey, person1.getFirstName(), person2.getFirstName());
-
-        if (normalizeAnswer(primaryCorrectAnswerLocalized).equals(userAnswer)) {
-            isCorrect = true;
-        } else {
-            List<String> acceptableKeys = relationshipCheckResult.getAcceptableMessageKeys();
-            if (acceptableKeys != null) {
-                for (String key : acceptableKeys) {
-                    String acceptableAnswerLocalized = getMessage(key, person1.getFirstName(), person2.getFirstName());
-                    if (normalizeAnswer(acceptableAnswerLocalized).equals(userAnswer)) {
-                        isCorrect = true;
-                        break;
-                    }
-                }
+        int pointsEarned = 0;
+        Integer currentScore = answerDetails.getCurrentScore();
+        int updatedScore = currentScore != null ? currentScore : 0;
+        int updatedStreak = 0;
+        
+        // Eğer bir oturum varsa, puanı ve streak'i güncelleyelim
+        if (session != null) {
+            if (isCorrect) {
+                Long timeTaken = answerDetails.getTimeTakenInSeconds();
+                pointsEarned = calculatePointsInternal(true, answerDetails.getDifficulty(), 
+                    timeTaken != null ? timeTaken : 0L, 
+                    session.getCurrentStreak().get());
+                
+                session.recordAnswer(new PlayerAnswer(answerDetails.getQuestionId(), answerDetails.getAnswer(), correctAnswerText, true), pointsEarned);
+                
+                log.info("Correct answer by '{}' for question '{}', earned {} points. New score: {}, streak: {}", 
+                    session.getPlayerName(), answerDetails.getQuestionId(), pointsEarned, session.getScore().get(), session.getCurrentStreak().get());
+                
+                updatedScore = session.getScore().get();
+                updatedStreak = session.getCurrentStreak().get();
+            } else {
+                session.recordAnswer(new PlayerAnswer(answerDetails.getQuestionId(), answerDetails.getAnswer(), correctAnswerText, false), 0);
+                
+                log.info("Incorrect answer by '{}' for question '{}'. Score remains: {}, streak reset to 0", 
+                    session.getPlayerName(), answerDetails.getQuestionId(), session.getScore().get());
+                
+                updatedScore = session.getScore().get();
+                updatedStreak = 0;
             }
-        }
-
-        int points = calculatePointsInternal(isCorrect, answerDetails.getDifficulty(), answerDetails.getTimeTakenInSeconds(), answerDetails.getCurrentStreak());
-        int newStreak = isCorrect ? answerDetails.getCurrentStreak() + 1 : 0;
-        int totalScore = answerDetails.getCurrentScore() + points;
-
-        HighScore highScore = null;
-
-        Set<String> askedQuestionsInThisGame = answerDetails.getAskedQuestionSignaturesInThisGame() != null ?
-                new HashSet<>(answerDetails.getAskedQuestionSignaturesInThisGame()) : new HashSet<>();
-        askedQuestionsInThisGame.add(answerDetails.getQuestionId());
-
-        GameQuestionDTO nextQuestion = null;
-        String gameEndMessage = null;
-        boolean isGameEnd = false;
-
-        if (answerDetails.getGameQuestionCount() + 1 >= DEFAULT_QUESTIONS_PER_GAME) {
-            isGameEnd = true;
-            gameEndMessage = getMessage("game.feedback.end_of_game_all_questions_answered");
-            log.info("Oyun bitti (tüm sorular cevaplandı): Oyuncu '{}', Skor '{}'", answerDetails.getPlayerName(), totalScore);
-            highScore = processAndRecordHighScore(
-                answerDetails.getPlayerName(),
-                totalScore,
-                answerDetails.getDifficulty(),
-                isCorrect ? answerDetails.getCorrectAnswersCount() + 1 : answerDetails.getCorrectAnswersCount(),
-                DEFAULT_QUESTIONS_PER_GAME,
-                newStreak
-            );
-        } else {
-            nextQuestion = generateNewQuestion(answerDetails.getDifficulty(), askedQuestionsInThisGame);
-            if (nextQuestion == null) {
-                isGameEnd = true;
-                gameEndMessage = getMessage("game.feedback.end_of_game_no_more_questions");
-                log.warn("Oyun bitti (yeni soru üretilemedi): Oyuncu '{}'", answerDetails.getPlayerName());
-                highScore = processAndRecordHighScore(
-                    answerDetails.getPlayerName(),
-                    totalScore,
-                    answerDetails.getDifficulty(),
-                    isCorrect ? answerDetails.getCorrectAnswersCount() + 1 : answerDetails.getCorrectAnswersCount(),
-                    answerDetails.getGameQuestionCount() + 1,
-                    newStreak
-                );
+            
+            if (session.isGameOver()) {
+                log.info("Game over for session '{}'. Final score: {}, questions answered: {}/{}", 
+                    sessionId, session.getScore().get(), session.getQuestionsAnswered().get(), session.getTotalQuestions());
+                
+                activeGameSessions.remove(sessionId);
+                return createGameOverResponse(session, null, locale);
             }
-        }
-
-        AnswerResponseDTO.AnswerResponseDTOBuilder responseBuilder = AnswerResponseDTO.builder()
-                .correctAnswer(isCorrect)
-                .pointsEarned(points)
-                .updatedStreak(newStreak)
-                .gameOver(isGameEnd)
-                .gameEndMessage(gameEndMessage)
-                .updatedScore(totalScore)
-                .askedQuestionSignaturesInThisGame(askedQuestionsInThisGame);
-
-        if (isCorrect) {
-            responseBuilder.correctAnswerText(getMessage(relationshipCheckResult.getMessageKey(), person1.getFirstName(), person2.getFirstName()));
-            List<RelationshipStepDTO> path = relationshipService.getRelationshipPath(person1, person2);
-            responseBuilder.relationshipPath(path);
         } else {
-             responseBuilder.correctAnswerText(getMessage(relationshipCheckResult.getMessageKey(), person1.getFirstName(), person2.getFirstName()));
-        }
-
-        if (nextQuestion != null) {
-            GameQuestionDTO questionToSend = nextQuestion.toBuilder().build();
-            questionToSend.setCorrectAnswer(null);
-            questionToSend.setRelationshipPath(null);
-            responseBuilder.nextQuestion(questionToSend);
+            // Oturum yoksa, sadece istemci tarafındaki değerleri kullanalım
+            if (isCorrect) {
+                Long timeTaken = answerDetails.getTimeTakenInSeconds();
+                Integer currentStreak = answerDetails.getCurrentStreak();
+                pointsEarned = calculatePointsInternal(true, answerDetails.getDifficulty(), 
+                    timeTaken != null ? timeTaken : 0L, 
+                    currentStreak != null ? currentStreak : 0);
+                
+                currentScore = answerDetails.getCurrentScore();
+                updatedScore = currentScore != null ? currentScore + pointsEarned : pointsEarned;
+                updatedStreak = currentStreak != null ? currentStreak + 1 : 1;
+                
+                log.info("Correct answer by '{}' (no session) for question '{}', earned {} points. New score: {}, streak: {}", 
+                    answerDetails.getPlayerName(), answerDetails.getQuestionId(), pointsEarned, updatedScore, updatedStreak);
+            } else {
+                log.info("Incorrect answer by '{}' (no session) for question '{}'. Score remains: {}, streak reset to 0", 
+                    answerDetails.getPlayerName(), answerDetails.getQuestionId(), updatedScore);
+                
+                updatedStreak = 0;
+            }
         }
         
-        if (highScore != null) {
-            responseBuilder.finalScoreId(highScore.getId());
-            responseBuilder.finalResult(GameResultDTO.builder()
-                                .playerName(highScore.getPlayerName())
-                                .score(highScore.getScore())
-                                .difficulty(highScore.getDifficulty())
-                                .date(highScore.getPlayedAt().toLocalDate())
-                                .correctAnswers(highScore.getCorrectAnswers())
-                                .totalQuestions(highScore.getTotalQuestions())
-                                .maxStreak(highScore.getMaxStreak())
-                                .build());
+        // Next question generation (both session and non-session mode)
+        GameQuestionDTO nextQuestion = null;
+        if (answerDetails.getAskedQuestionSignaturesInThisGame() != null) {
+            Set<String> askedSignatures = new HashSet<>(answerDetails.getAskedQuestionSignaturesInThisGame());
+            nextQuestion = generateNewQuestion(answerDetails.getDifficulty(), askedSignatures);
+            
+            if (nextQuestion != null) {
+                // Don't send the correct answer to client
+                GameQuestionDTO clientQuestion = nextQuestion.toBuilder().build();
+                clientQuestion.setCorrectAnswer(null);
+                clientQuestion.setRelationshipPath(null);
+                nextQuestion = clientQuestion;
+            }
         }
+        
+        // Build the response (both session and non-session mode)
+        AnswerResponseDTO response = AnswerResponseDTO.builder()
+                .correctAnswer(isCorrect)
+                .correctAnswerText(correctAnswerText)
+                .pointsEarned(pointsEarned)
+                .updatedScore(updatedScore)
+                .updatedStreak(updatedStreak)
+                .nextQuestion(nextQuestion)
+                .gameOver(false)
+                .relationshipPath(relationshipPath)
+                .build();
+        
+        return response;
+    }
 
-        log.debug("Cevap işlendi ve yanıt hazırlandı: {}", responseBuilder.build());
+    private AnswerResponseDTO createGameOverResponse(GameSession session, String messageKey, Locale locale) {
+        AnalysisResultDTO analysis = analysisService.analyze(session.getPlayerAnswers(), locale);
+
+        GameResultDTO finalResult = GameResultDTO.builder()
+                .playerName(session.getPlayerName())
+                .score(session.getScore().get())
+                .difficulty(session.getDifficulty())
+                .date(LocalDate.now())
+                .correctAnswers(session.getScore().get() > 0 ? session.getQuestionsAnswered().get() : 0) // Approximation
+                .totalQuestions(session.getTotalQuestions())
+                .maxStreak(session.getMaxStreak().get())
+                .build();
+
+        var responseBuilder = AnswerResponseDTO.builder()
+                .correctAnswer(false)
+                .pointsEarned(0)
+                .updatedScore(session.getScore().get())
+                .updatedStreak(session.getCurrentStreak().get())
+                .gameOver(true)
+                .finalResult(finalResult)
+                .analysisResult(analysis);
+        
+        if (messageKey != null) {
+            responseBuilder.gameEndMessage(getMessage(messageKey, locale));
+        }
+        
         return responseBuilder.build();
     }
 
@@ -368,7 +396,7 @@ public class GameServiceImpl implements GameService {
         }
         log.info("Havuzda {} zorluğu için uygun yeni soru bulunamadı (veya hepsi sorulmuş). Dinamik olarak üretilecek.", difficulty);
         for (int attempt = 0; attempt < MAX_ATTEMPTS_FOR_QUESTION_GENERATION; attempt++) {
-            GameQuestionDTO question = generateQuestionInternal(difficulty, askedQuestionSignatures);
+            GameQuestionDTO question = generateQuestionInternal(difficulty, askedQuestionSignatures, LocaleContextHolder.getLocale());
             if (question != null) {
                 log.info("Dinamik olarak yeni soru üretildi: ID {}", question.getId());
                 return question;
@@ -382,10 +410,10 @@ public class GameServiceImpl implements GameService {
     @Override
     public GameQuestionDTO generateQuestion(Difficulty difficulty) {
         log.info("İsteğe bağlı soru üretiliyor, Zorluk: {}", difficulty);
-        GameQuestionDTO question = generateQuestionInternal(difficulty, Collections.emptySet());
+        GameQuestionDTO question = generateQuestionInternal(difficulty, Collections.emptySet(), LocaleContextHolder.getLocale());
         if (question == null) {
             log.error("generateQuestion: Soru üretilemedi. Zorluk: {}", difficulty);
-            throw new GameException(getMessage("game.error.generate_question_failed"));
+            throw new GameException(getMessage("game.error.generate_question_failed", LocaleContextHolder.getLocale()));
         }
         GameQuestionDTO questionToSend = question.toBuilder().build();
         questionToSend.setCorrectAnswer(null);
@@ -393,8 +421,8 @@ public class GameServiceImpl implements GameService {
         return questionToSend;
     }
 
-    private GameQuestionDTO generateQuestionInternal(Difficulty difficulty, Set<String> askedSignatures) {
-        log.debug("generateQuestionInternal çağrıldı. Zorluk: {}, Önceden sorulanlar: {}", difficulty, askedSignatures.size());
+    private GameQuestionDTO generateQuestionInternal(Difficulty difficulty, Set<String> askedSignatures, Locale locale) {
+        log.debug("generateQuestionInternal çağrıldı. Zorluk: {}, Önceden sorulanlar: {}, Yerel: {}", difficulty, askedSignatures.size(), locale.toLanguageTag());
         List<Person> candidates = getActivePersonsForQuestionGeneration();
         if (candidates.size() < 2) {
             log.warn("Soru üretmek için yeterli aktif kişi yok ({}).", candidates.size());
@@ -441,8 +469,8 @@ public class GameServiceImpl implements GameService {
                 continue;
             }
 
-            String questionTextValue = getMessage("game.question.text", p1.getFirstName() + " " + p1.getLastName(), p2.getLastName());
-            List<String> options = generateOptions(difficulty, actualRelationshipDescription, actualRelationshipMessageKey, p1, p2, descResult.getAcceptableMessageKeys());
+            String questionTextValue = getMessage("game.question.text", locale, p1.getFirstName() + " " + p1.getLastName(), p2.getLastName());
+            List<String> options = generateOptions(difficulty, actualRelationshipDescription, actualRelationshipMessageKey, p1, p2, descResult.getAcceptableMessageKeys(), locale);
 
             if (options.size() < 2) { 
                 log.warn("Soru için yeterli seçenek üretilemedi (P1:{}, P2:{}, Doğru Cevap Key: {}, Seçenek Sayısı: {}). Seçenekler: {}", p1.getId(), p2.getId(), actualRelationshipMessageKey, options.size(), options);
@@ -467,12 +495,12 @@ public class GameServiceImpl implements GameService {
         return null;
     }
 
-    private List<String> generateOptions(Difficulty difficulty, String correctAnswerText, String correctAnswerKey, Person p1, Person p2, List<String> acceptableCorrectAnswerKeys) {
+    private List<String> generateOptions(Difficulty difficulty, String correctAnswerText, String correctAnswerKey, Person p1, Person p2, List<String> acceptableCorrectAnswerKeys, Locale locale) {
         Set<String> options = new LinkedHashSet<>();
         options.add(correctAnswerText);
 
         // İlk olarak, gerçek ilişkilere dayalı yanlış seçenekler oluştur
-        List<String> possibleWrongRelations = getPossibleRelations(difficulty, p1, p2, correctAnswerKey, acceptableCorrectAnswerKeys)
+        List<String> possibleWrongRelations = getPossibleRelations(difficulty, p1, p2, correctAnswerKey, acceptableCorrectAnswerKeys, locale)
                 .stream()
                 .filter(relationText -> {
                     String lowerRelationText = relationText.toLowerCase();
@@ -539,7 +567,7 @@ public class GameServiceImpl implements GameService {
                 if (!key.equals(correctAnswerKey) && 
                     (acceptableCorrectAnswerKeys == null || !acceptableCorrectAnswerKeys.contains(key))) {
                     try {
-                        String localizedDistractor = getMessage(key, p1.getFirstName(), p2.getFirstName());
+                        String localizedDistractor = getMessage(key, locale, p1.getFirstName(), p2.getFirstName());
                         if (!options.contains(localizedDistractor) && !localizedDistractor.equals(correctAnswerText)) {
                             options.add(localizedDistractor);
                         }
@@ -552,7 +580,7 @@ public class GameServiceImpl implements GameService {
 
         // Hala yeterli seçenek yoksa, genel yanıltıcılar ekle
         if (options.size() < 4) {
-            String noRelationDistractor = getMessage("game.distractor.no_relation");
+            String noRelationDistractor = getMessage("game.distractor.no_relation", locale);
             if (!options.contains(noRelationDistractor) && !noRelationDistractor.equals(correctAnswerText)) {
                 options.add(noRelationDistractor);
             }
@@ -561,11 +589,11 @@ public class GameServiceImpl implements GameService {
         // Son çare olarak, jenerik yanıltıcılar ekle
         int placeholderCount = 1;
         while (options.size() < 4 && placeholderCount <= 5) {
-            String placeholderOption = getMessage("game.distractor.other_relative_placeholder", String.valueOf(placeholderCount));
+            String placeholderOption = getMessage("game.distractor.other_relative_placeholder", locale, String.valueOf(placeholderCount));
             if (!options.contains(placeholderOption)) {
                 options.add(placeholderOption);
             } else {
-                placeholderOption = getMessage("game.distractor.other_relative_placeholder", "Alt-" + String.valueOf(placeholderCount));
+                placeholderOption = getMessage("game.distractor.other_relative_placeholder", locale, "Alt-" + String.valueOf(placeholderCount));
                 if (!options.contains(placeholderOption)) {
                     options.add(placeholderOption);
                 }
@@ -589,7 +617,7 @@ public class GameServiceImpl implements GameService {
         return shuffledOptions;
     }
 
-    private List<String> getPossibleRelations(Difficulty difficulty, Person p1, Person p2, String actualCorrectAnswerKey, List<String> acceptableCorrectAnswerKeys) {
+    private List<String> getPossibleRelations(Difficulty difficulty, Person p1, Person p2, String actualCorrectAnswerKey, List<String> acceptableCorrectAnswerKeys, Locale locale) {
         Set<String> possibleRelationTexts = new HashSet<>();
 
         // Mevcut kişilerin tüm olası ilişkilerini al
@@ -607,10 +635,10 @@ public class GameServiceImpl implements GameService {
         }
         // ... (Daha fazla yanlış seçenek üretme mantığı eklenecek) ...
         // Örnek olarak birkaç genel yanlış seçenek ekleyelim (bu kısım geliştirilmeli)
-        possibleRelationTexts.add(getMessage("relationship.sibling", p1.getFirstName(), p2.getFirstName()));
-        possibleRelationTexts.add(getMessage("relationship.parent", p1.getFirstName(), p2.getFirstName()));
-        possibleRelationTexts.add(getMessage("relationship.child", p1.getFirstName(), p2.getFirstName()));
-        possibleRelationTexts.add(getMessage("relationship.spouse", p1.getFirstName(), p2.getFirstName()));
+        possibleRelationTexts.add(getMessage("relationship.sibling", locale, p1.getFirstName(), p2.getFirstName()));
+        possibleRelationTexts.add(getMessage("relationship.parent", locale, p1.getFirstName(), p2.getFirstName()));
+        possibleRelationTexts.add(getMessage("relationship.child", locale, p1.getFirstName(), p2.getFirstName()));
+        possibleRelationTexts.add(getMessage("relationship.spouse", locale, p1.getFirstName(), p2.getFirstName()));
         
         log.debug("Potansiyel yanlış ilişkiler bulundu (filtrelenmiş olabilir): {}", possibleRelationTexts.size());
         return new ArrayList<>(possibleRelationTexts);
@@ -820,17 +848,17 @@ public class GameServiceImpl implements GameService {
 
         if (scoreDetails.getPlayerName() == null || scoreDetails.getPlayerName().trim().isEmpty()) {
             log.warn("Geçersiz oyuncu adı ile skor kaydı yapılamaz: {}", scoreDetails.getPlayerName());
-            throw new GameException(getMessage("game.error.invalid_player_name"));
+            throw new GameException(getMessage("game.error.invalid_player_name", LocaleContextHolder.getLocale()));
         }
 
         if (scoreDetails.getDifficulty() == null) {
             log.warn("Zorluk seviyesi olmadan skor kaydedilemez");
-            throw new GameException(getMessage("game.error.difficulty_required"));
+            throw new GameException(getMessage("game.error.difficulty_required", LocaleContextHolder.getLocale()));
         }
 
         if (scoreDetails.getScore() < 0) {
             log.warn("Negatif skor kaydedilemez: {}", scoreDetails.getScore());
-            throw new GameException(getMessage("game.error.negative_score"));
+            throw new GameException(getMessage("game.error.negative_score", LocaleContextHolder.getLocale()));
         }
 
         String playerName = scoreDetails.getPlayerName().trim();
@@ -854,11 +882,8 @@ public class GameServiceImpl implements GameService {
                 newHighScoreBeaten = true;
                 log.info("Oyuncu '{}' için {} zorluğundaki mevcut yüksek skor ({}) aşıldı. Yeni skor: {}", playerName, difficulty, existingHighScore.getScore(), newScore);
             } else {
-                // Yeni skor mevcut en yüksek skordan düşük, bir şey yapma veya sadece istatistik güncelle
                 log.info("Oyuncu '{}' için {} zorluğundaki yeni skor ({}), mevcut en yüksek skordan ({}) düşük veya eşit. Skor tablosu güncellenmeyecek.", playerName, difficulty, newScore, existingHighScore.getScore());
-                // İsteğe bağlı: Her oyunu ayrı bir kayıt olarak tutmak isterseniz buraya farklı bir mantık ekleyebilirsiniz.
-                // Şimdilik sadece en yüksek skoru tutuyoruz.
-                return convertToGameResultDTO(existingHighScore); // Mevcut en yüksek skoru döndür
+                throw new GameException(getMessage("game.error.score_not_high_enough", LocaleContextHolder.getLocale(), existingHighScore.getScore()));
             }
         } else {
             // Bu oyuncu ve zorluk için ilk skor
@@ -879,12 +904,9 @@ public class GameServiceImpl implements GameService {
             HighScore savedScore = highScoreRepository.save(scoreToSaveOrUpdate);
             log.info("Oyun sonucu başarıyla {} (ID: {}), Oyuncu '{}'", existingHighScore != null && newHighScoreBeaten ? "güncellendi" : "kaydedildi", savedScore.getId(), savedScore.getPlayerName());
             GameResultDTO resultDTO = convertToGameResultDTO(savedScore);
-            // resultDTO.setHighScore(newHighScoreBeaten); // GameResultDTO'ya böyle bir alan ekleyebiliriz.
             return resultDTO;
         } catch (Exception e) {
             log.error("HighScore kaydedilirken/güncellenirken hata oluştu: Oyuncu '{}'. Hata: {}", playerName, e.getMessage(), e);
-            // Hata durumunda ne döndürüleceğine karar verilmeli.
-            // Belki de scoreDetails'den bir DTO oluşturup onu döndürmek daha iyi olabilir.
             return GameResultDTO.builder()
                     .playerName(playerName)
                     .score(newScore)
@@ -892,18 +914,21 @@ public class GameServiceImpl implements GameService {
                     .correctAnswers(scoreDetails.getCorrectAnswers())
                     .totalQuestions(scoreDetails.getTotalQuestions())
                     .maxStreak(scoreDetails.getMaxStreak())
-                    // .setGameOver(true) // GameResultDTO'da gameOver alanı yok, ama mantıksal olarak oyun bitmiş olmalı
                     .build();
         }
     }
 
-    private String getMessage(String code, Object... args) {
+    private String getMessage(String code, Locale locale, Object... args) {
         try {
-            return messageSource.getMessage(code, args, LocaleContextHolder.getLocale());
+            return messageSource.getMessage(code, args, locale);
         } catch (NoSuchMessageException e) {
-            log.warn("No message found for code: {} (Args: {})", code, Arrays.toString(args));
-            return code + " (Args: " + Arrays.toString(args) + ")"; 
+            log.warn("Missing message for key '{}' and locale '{}'", code, locale.toLanguageTag());
+            return code; // Fallback to the code itself
         }
+    }
+
+    private String getMessage(String code, Locale locale) {
+        return getMessage(code, locale, (Object[]) null);
     }
 
     protected synchronized void refreshActivePersonsCache() {
@@ -988,7 +1013,7 @@ public class GameServiceImpl implements GameService {
             GameQuestionDTO question = generateQuestionInternal(difficulty, 
                 questionsForDifficulty.stream()
                                       .map(GameQuestionDTO::getId)
-                                      .collect(Collectors.toSet()));
+                                      .collect(Collectors.toSet()), LocaleContextHolder.getLocale());
             if (question != null) {
                 synchronized (questionsForDifficulty) {
                     if (questionsForDifficulty.size() < PRE_GENERATED_QUESTIONS_COUNT && 

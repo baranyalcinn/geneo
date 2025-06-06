@@ -2,7 +2,7 @@ import { apiService } from './apiService';
 import {
   Difficulty,
   StartGameRequest,
-  InitialGameData,
+  InitialGameData as InitialGameDataType,
   HighScores,
   GameQuestion as GameQuestionType,
   GameAnswer as GameAnswerType,
@@ -48,7 +48,7 @@ export interface GameAnswer {
   questionId: string;
   difficulty: Difficulty;
   playerName: string;
-  sessionId?: string;
+  sessionId: string;
   timeTakenInSeconds?: number;
   askedQuestionSignaturesInThisGame?: string[];
   currentScore?: number;
@@ -65,6 +65,19 @@ export interface AnswerResponse {
   gameOver: boolean;
   finalResult?: GameResultType;
   relationshipPath?: RelationshipStep[];
+  analysisResult?: AnalysisResult;
+}
+
+export interface AnalysisResult {
+  successRateByCategory: Record<string, number>;
+  summaryMessage: string;
+}
+
+export interface InitialGameData extends InitialGameDataType {
+  sessionId: string;
+  gameDurationInSeconds: number;
+  totalQuestions: number;
+  firstQuestion: GameQuestionType;
 }
 
 // Game service functions
@@ -73,11 +86,12 @@ export interface AnswerResponse {
  * Starts a new game session.
  * @param playerName The name of the player.
  * @param difficulty The selected game difficulty.
+ * @param lang The selected language code (e.g., 'tr', 'en').
  * @returns A promise that resolves to the initial game data.
  */
-export const startGame = async (playerName: string, difficulty: Difficulty): Promise<InitialGameData> => {
+export const startGame = async (playerName: string, difficulty: Difficulty, lang: string): Promise<InitialGameData> => {
   const requestBody: StartGameRequest = { playerName, difficulty };
-  return apiService.post<InitialGameData>('game/start', requestBody);
+  return apiService.post<InitialGameData>('game/start', requestBody, { params: { lang } });
 };
 
 /**
@@ -163,20 +177,22 @@ export const getQuestion = async (difficulty: Difficulty): Promise<GameQuestionT
 /**
  * Submits an answer to a question and gets the result.
  * @param answerDetails The answer to submit, conforming to the GameAnswerType.
+ * @param lang The selected language code (e.g., 'tr', 'en').
  * @returns A promise that resolves to the result of the answer, conforming to the AnswerResponseType.
  */
-export const submitAnswer = async (answerDetails: GameAnswerType): Promise<AnswerResponseType> => {
-  return apiService.post<AnswerResponseType>('game/answer', answerDetails);
+export const submitAnswer = async (answerDetails: GameAnswer, lang: string): Promise<AnswerResponse> => {
+  return apiService.post<AnswerResponse>('game/answer', answerDetails, { params: { lang } });
 };
 
 /**
  * Records the game result to the database when a game is completed.
  * @param scoreDetails The game result object, conforming to RecordScoreRequest.
+ * @param lang The selected language code (e.g., 'tr', 'en').
  * @returns A promise that resolves to the recorded game result, of type GameResultType.
  */
-export const recordGameResult = async (scoreDetails: RecordScoreRequest): Promise<GameResultType> => {
+export const recordGameResult = async (scoreDetails: RecordScoreRequest, lang: string): Promise<GameResultType> => {
   try {
-    const result = await apiService.post<GameResultType>('game/record-score', scoreDetails);
+    const result = await apiService.post<GameResultType>('game/record-score', scoreDetails, { params: { lang } });
     return result;
   } catch (error) {
      console.error("Oyun sonucu kaydedilirken hata oluştu:", error);

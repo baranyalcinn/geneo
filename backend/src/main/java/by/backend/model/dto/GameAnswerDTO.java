@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.NonNull;
 
 import java.util.List;
 import java.util.Set;
@@ -14,7 +15,12 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 public class GameAnswerDTO {
+    @NonNull
+    private String sessionId;
+
+    @NonNull
     private String questionId;
+
     private String answer;
     private long timeTakenInSeconds;
     private Difficulty difficulty;
