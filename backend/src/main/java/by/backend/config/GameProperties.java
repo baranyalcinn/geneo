@@ -19,9 +19,9 @@ public class GameProperties {
      * Her bir zorluk seviyesi için oyun süresi (saniye cinsinden).
      */
     private Map<Difficulty, @Min(30) Integer> durationInSeconds = new EnumMap<>(Map.of(
-            Difficulty.EASY, 180,
-            Difficulty.MEDIUM, 120,
-            Difficulty.HARD, 90
+            Difficulty.EASY, 300,
+            Difficulty.MEDIUM, 300,
+            Difficulty.HARD, 300
     ));
 
     /**
@@ -29,4 +29,21 @@ public class GameProperties {
      */
     @Min(1)
     private int questionsPerGame = 10;
+
+    /**
+     * Her bir zorluk seviyesi için seçenek sayısı.
+     */
+    private Map<Difficulty, @Min(2) Integer> optionsCount = new EnumMap<>(Map.of(
+            Difficulty.EASY, 3,
+            Difficulty.MEDIUM, 4,
+            Difficulty.HARD, 6
+    ));
+
+    public int getTimeLimit(Difficulty difficulty) {
+        return durationInSeconds.getOrDefault(difficulty, 90);
+    }
+
+    public int getOptionsCount(Difficulty difficulty) {
+        return optionsCount.getOrDefault(difficulty, 4);
+    }
 } 

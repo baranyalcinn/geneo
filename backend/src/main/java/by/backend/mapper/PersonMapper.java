@@ -1,6 +1,7 @@
 package by.backend.mapper;
 
 import by.backend.model.dto.PersonDTO;
+import by.backend.model.dto.PersonInfoDTO;
 import by.backend.model.dto.PersonSummaryDTO;
 import by.backend.model.entity.Person;
 import org.mapstruct.Mapper;
@@ -32,6 +33,19 @@ public interface PersonMapper {
         @Mapping(source = "person", target = "spouse", qualifiedByName = "getSpouseSummary")
     })
     PersonDTO toDTO(Person person);
+
+    /**
+     * Person entity'sini PersonInfoDTO'ya dönüştürür. Oyun için gerekli temel bilgileri içerir.
+     *
+     * @param person Dönüştürülecek kişi entity'si
+     * @return Oyun için kişi bilgi DTO'su
+     */
+    @Mappings({
+        @Mapping(target = "name", expression = "java(person.getFirstName() + \" \" + person.getLastName())"),
+        @Mapping(target = "birthYear", expression = "java(person.getBirthDate() != null ? person.getBirthDate().getYear() : null)"),
+        @Mapping(target = "deathYear", expression = "java(person.getDeathDate() != null ? person.getDeathDate().getYear() : null)")
+    })
+    PersonInfoDTO personToPersonInfo(Person person);
 
     /**
      * PersonDTO'yu Person entity'sine dönüştürür

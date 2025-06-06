@@ -17,8 +17,8 @@ public class GameQuestionDTO {
     private String questionText;
     private String person1;
     private String person2;
-    private Map<String, Object> person1Info;
-    private Map<String, Object> person2Info;
+    private PersonInfoDTO person1Info;
+    private PersonInfoDTO person2Info;
     private List<String> options;
     private String correctAnswer;
     private Difficulty difficulty;

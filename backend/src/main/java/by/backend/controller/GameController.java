@@ -159,9 +159,12 @@ public class GameController {
     }
 
     @GetMapping("/question")
-    public ResponseEntity<GameQuestionDTO> getQuestionByDifficulty(@RequestParam(value = "difficulty", required = false) String difficultyStr) {
-        logger.info("GET /question: Zorluk seviyesine göre soru isteniyor: {}", difficultyStr);
+    public ResponseEntity<GameQuestionDTO> getQuestionByDifficulty(
+            @RequestParam(value = "difficulty", required = false) String difficultyStr,
+            @RequestParam(name = "lang", required = false) String lang) {
+        logger.info("GET /question: Zorluk seviyesine göre soru isteniyor: {}, Dil: {}", difficultyStr, lang);
         try {
+            Locale locale = lang != null ? Locale.forLanguageTag(lang) : Locale.getDefault();
             Difficulty difficulty;
             if (difficultyStr == null || difficultyStr.isEmpty()) {
                 // Varsayılan zorluk seviyesi
@@ -170,8 +173,8 @@ public class GameController {
             } else {
                 difficulty = Difficulty.valueOf(difficultyStr.toUpperCase());
             }
-            
-            GameQuestionDTO question = gameService.generateQuestion(difficulty); 
+
+            GameQuestionDTO question = gameService.generateQuestion(difficulty, locale);
             if (question != null) {
                 logger.debug("GET /question: Soru oluşturuldu: {}", question.getId());
                 return new ResponseEntity<>(question, HttpStatus.OK);
@@ -179,9 +182,6 @@ public class GameController {
                 logger.warn("GET /question: Zorluk seviyesi {} için soru oluşturulamadı.", difficulty);
                 return new ResponseEntity<>(null, HttpStatus.NOT_FOUND);
             }
-        } catch (IllegalArgumentException e) {
-            logger.error("GET /question: Geçersiz zorluk seviyesi parametresi: {}. Hata: {}", difficultyStr, e.getMessage());
-            return new ResponseEntity<>(null, HttpStatus.BAD_REQUEST);
         } catch (GameException e) {
             logger.error("GET /question: Soru oluşturulurken oyunla ilgili bir hata oluştu (Zorluk: {}): {}", difficultyStr, e.getMessage(), e);
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);

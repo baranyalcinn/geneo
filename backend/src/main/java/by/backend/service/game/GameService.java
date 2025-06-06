@@ -16,5 +16,5 @@ public interface GameService {
     AnswerResponseDTO answerQuestion(GameAnswerDTO answerDetails, Locale locale);
     GameResultDTO recordGameResult(RecordScoreRequestDTO scoreDetails);
     Map<Difficulty, List<GameResultDTO>> getHighScores();
-    GameQuestionDTO generateQuestion(Difficulty difficulty);
+    GameQuestionDTO generateQuestion(Difficulty difficulty, Locale locale);
 }

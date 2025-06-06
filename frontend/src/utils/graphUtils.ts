@@ -96,31 +96,31 @@ export const transformDataToFlow = (
                 id: `e${nodeId}-${nextNodeId}`,
                 source: nodeId,
                 target: nextNodeId,
-                type: EDGE_TYPE_DEFAULT, // Kenar tipi config'den alınabilir
+                type: EDGE_TYPE_DEFAULT,
                 markerEnd: {
                     type: MarkerType.ArrowClosed,
-                    width: 15,
-                    height: 15,
-                    color: edgeColor, // Dinamik renk
+                    width: 20,
+                    height: 20,
+                    color: edgeColor,
                 },
                 style: {
-                    strokeWidth: 2,
-                    stroke: edgeColor, // Dinamik renk
+                    strokeWidth: 2.5,
+                    stroke: edgeColor,
                 },
                 label: relationshipType,
                 labelStyle: {
-                    fill: themeColors.edgeLabelColor,
-                    fontWeight: 500,
-                    fontSize: 12,
+                    fill: '#fff',
+                    fontWeight: 'bold',
+                    fontSize: 14,
                 },
                 labelBgPadding: [8, 4],
                 labelBgBorderRadius: 4,
                 labelBgStyle: {
-                    fill: themeColors.edgeLabelBg,
-                    fillOpacity: 0.8,
+                    fill: edgeColor,
+                    fillOpacity: 1,
                 },
                 data: {
-                    relationshipType: relationshipType, // İlişki türünü data'ya ekleyelim
+                    relationshipType: relationshipType,
                 }
             });
         }

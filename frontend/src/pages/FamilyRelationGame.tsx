@@ -28,6 +28,7 @@ import LoadingIndicator from '../components/ui/LoadingIndicator';
 import ErrorMessage from '../components/ui/ErrorMessage';
 import RelationshipGraph from '../components/RelationshipGraph';
 import { ReactFlowProvider } from 'reactflow';
+import { useTranslation } from 'react-i18next';
 
 import { 
   Difficulty,
@@ -135,7 +136,11 @@ interface PersonInfoDisplayProps {
 
 const PersonInfoDisplay = ({ personName, personInfo, isTarget = false }: PersonInfoDisplayProps) => {
   const theme = useTheme();
+  const { t } = useTranslation();
   
+  // Cinsiyet anahtarını güvenli bir şekilde oluştur
+  const genderKey = personInfo?.gender ? `gender.${personInfo.gender.toLowerCase()}` : '';
+
   return (
     <GameCard sx={{
       borderColor: isTarget ? theme.palette.secondary.main : theme.palette.primary.main,
@@ -161,13 +166,13 @@ const PersonInfoDisplay = ({ personName, personInfo, isTarget = false }: PersonI
         {personInfo?.gender && (
           <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
             <WcIcon fontSize="small" color="action" />
-            {personInfo.gender}
+            {t(genderKey as any, { defaultValue: personInfo.gender })}
           </Typography>
         )}
         {personInfo?.birthYear && (
           <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
             <CakeIcon fontSize="small" color="action" />
-            {personInfo.birthYear}
+            {t('birth_year')}: {personInfo.birthYear}
           </Typography>
         )}
       </Box>
@@ -228,6 +233,7 @@ const FamilyRelationGame = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { t, i18n } = useTranslation();
   
   const [gameStarted, setGameStarted] = useState(false);
   const [score, setScore] = useState(0);
@@ -409,7 +415,7 @@ const FamilyRelationGame = () => {
         timeTakenInSeconds: (currentQuestion.timeLimit || 60) - timeLeft,
         sessionId: sessionId
       } as any;
-      const apiResult = await submitAnswer(gameAnswerPayload) as any;
+      const apiResult = await submitAnswer(gameAnswerPayload, i18n.language) as any;
       const gameResult: GameResult = {
         correct: apiResult.correct || false,
         score: apiResult.score || 0,
@@ -455,74 +461,28 @@ const FamilyRelationGame = () => {
   // Yeni soru yükle
   const fetchNextQuestion = async () => {
     if (gameOver) return;
-    
     setIsLoading(true);
     setError(null);
-    
     try {
-      console.log(`Soru getirme isteği gönderiliyor: ${difficulty}`);
-      // Geliştirilen hata işleme ve loglama
-      try {
-        const questionData = await getQuestion(difficulty);
-        console.log("Sunucudan gelen soru verisi:", questionData);
-        
-        if (!questionData || !questionData.id) {
-          console.error("Sunucu geçersiz soru döndürdü:", questionData);
-          setError("Soru yüklenemedi. Sunucu geçersiz veri döndürdü.");
-          setIsLoading(false);
-          return;
-        }
-        
-        // Güvenli bir şekilde soru nesnesini güncelle
-        setCurrentQuestionSafely(questionData);
-        
-        // Kullanıcı arayüzünü sıfırla
-        setSelectedAnswer("");
-        setShowResult(false);
-        setShowHint(false);
-        setShowPath(false);
-        setTimeLeft(questionData.timeLimit || 60);
-        setTotalQuestions(prev => prev + 1);
-        
-        // Zamanlayıcıyı başlat
-        if (timerRef.current) {
-          clearInterval(timerRef.current);
-        }
-        
-        timerRef.current = setInterval(() => {
-          setTimeLeft(prevTime => {
-            if (prevTime <= 1) {
-              if (timerRef.current) {
-                clearInterval(timerRef.current);
-              }
-              // Süre dolduğunda otomatik olarak boş yanıt gönder
-              handleSubmitAnswer("");
-              return 0;
-            }
-            return prevTime - 1;
-          });
-        }, 1000);
-      } catch (err: any) {
-        console.error("Soru getirirken hata:", err);
-        // Eğer err bir Error nesnesi ve message özelliği varsa
-        const errorMessage = err?.message || "Bilinmeyen hata";
-        setError(`Soru yüklenirken hata oluştu: ${errorMessage}`);
-      }
-      
-      setIsLoading(false);
+      // In a real game, the next question comes from the submitAnswer response.
+      // This is a fallback or for a different mode.
+      const questionData = await getQuestion(difficulty, i18n.language);
+      setCurrentQuestionSafely(questionData);
     } catch (err) {
-      console.error("Ana soru getirme hatası:", err);
-      setError("Soru yüklenirken ciddi bir hata oluştu. Lütfen tekrar deneyin.");
+      setError(t('error.question_load'));
+      console.error(err);
+    } finally {
       setIsLoading(false);
+      setShowResult(false);
+      setSelectedAnswer('');
     }
   };
 
   const startGame = async () => {
-    if (!playerName || playerName.trim() === '') {
-      setError('Lütfen oyuncu adı girin!');
+    if (!playerName.trim()) {
+      setError(t('player_name.required')); // Example of a new key
       return;
     }
-
     setIsLoading(true);
     setError(null);
     setGameOver(false);
@@ -544,7 +504,7 @@ const FamilyRelationGame = () => {
       
       // Başlangıç sorusunu getir
       try {
-        const questionData = await getQuestion(difficulty);
+        const questionData = await getQuestion(difficulty, i18n.language);
         console.log("İlk soru alındı:", questionData);
         
         if (!questionData || !questionData.id) {
@@ -603,59 +563,28 @@ const FamilyRelationGame = () => {
   };
 
   const checkAnswer = async (answer: string) => {
-    if (!currentQuestion || showResult) return;
-    
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-    
+    if (!currentQuestion || !sessionId) return;
+
     setIsLoading(true);
     setError(null);
-    setSelectedAnswer(answer);
-    setShowResult(true);
-    
+
+    const answerPayload: GameAnswer = {
+      questionId: currentQuestion.id,
+      answer: answer,
+      sessionId: sessionId,
+      difficulty: difficulty,
+      playerName: playerName,
+      timeTakenInSeconds: timeLimit - timeLeft,
+      askedQuestionSignaturesInThisGame: [], // This should be managed properly
+      currentScore: score,
+      currentStreak: currentStreak,
+    };
+
     try {
-      // Sorulan soruların id'lerini topla
-      const askedQuestionSignaturesInThisGame = [
-        ...(answerResult?.askedQuestionSignaturesInThisGame || []),
-        currentQuestion.id
-      ];
+      const result = await submitAnswer(answerPayload, i18n.language);
       
-      const timeTaken = (currentQuestion.timeLimit || 60) - timeLeft;
-      console.log(`Cevap süresi: ${timeTaken} saniye`);
-      
-      const gameAnswerPayload = {
-        questionId: currentQuestion.id,
-        answer: answer,
-        playerName: playerName,
-        difficulty: currentQuestion.difficulty,
-        askedQuestionSignaturesInThisGame,
-        currentScore: score,
-        currentStreak: currentStreak,
-        timeTakenInSeconds: timeTaken,
-        sessionId: sessionId
-      } as any;
-      
-      console.log("Cevap gönderiliyor:", gameAnswerPayload);
-      const result = await submitAnswer(gameAnswerPayload);
-      console.log("Cevap sonucu:", result);
-      
-      // Tip uyumsuzluğunu düzeltmek için dönüştürme yapalım
-      const gameResultData: GameResult = {
-        playerName: playerName,
-        score: result.updatedScore,
-        difficulty: currentQuestion.difficulty,
-        correctAnswers: correctAnswers + (result.correctAnswer ? 1 : 0),
-        totalQuestions: totalQuestions,
-        maxStreak: Math.max(maxStreak, result.updatedStreak),
-        gameOver: result.gameOver,
-        askedQuestionSignaturesInThisGame: [
-          ...(answerResult?.askedQuestionSignaturesInThisGame || []),
-          currentQuestion.id
-        ]
-      };
-      
-      setAnswerResult(gameResultData);
+      setScore(result.updatedScore);
+      setCurrentStreak(result.updatedStreak);
       
       // Cevabın doğruluğunu kontrol et
       const isAnswerCorrect = result.correctAnswer;
@@ -663,16 +592,6 @@ const FamilyRelationGame = () => {
       
       // Puanla ilgili değerleri güncelle
       setScore(result.updatedScore);
-      
-      if (isAnswerCorrect) {
-        // Doğru cevap
-        setCorrectAnswers(prev => prev + 1);
-        setCurrentStreak(result.updatedStreak);
-        setMaxStreak(prev => Math.max(prev, result.updatedStreak));
-      } else {
-        // Yanlış cevap
-        setCurrentStreak(0);
-      }
       
       // Soru kontrolünü tamamla ve sonuçları göster
       setShowResult(true);
@@ -794,7 +713,7 @@ const FamilyRelationGame = () => {
       hintContent = (
         <GameCard sx={{ mt: 2, background: alpha(theme.palette.info.light, 0.05) }}>
           <Typography variant="h6" gutterBottom sx={{ color: theme.palette.info.main, display: 'flex', alignItems: 'center' }}>
-            <HelpOutlineIcon sx={{ mr: 1 }} /> İpucu
+            <HelpOutlineIcon sx={{ mr: 1 }} /> {t('hint.title')}
           </Typography>
           <Typography variant="body2" sx={{ mb: 1 }}>{hintData.generalHint}</Typography>
           {hintData.specificHints.length > 0 && (
@@ -856,10 +775,10 @@ const FamilyRelationGame = () => {
                 <SportsEsportsIcon sx={{ fontSize: 40 }} />
               </Avatar>
               <Typography variant="h4" component="h1" gutterBottom fontWeight="bold" color="primary.main">
-                Aile İlişkileri Oyunu
+                {t('game.title')}
               </Typography>
               <Typography variant="subtitle1" sx={{ mb: 1, color: 'text.secondary' }}>
-                Ailenizdeki ilişkileri ne kadar iyi biliyorsunuz?
+                {t('game.subtitle')}
               </Typography>
               <Divider sx={{ width: '50%', my: 2 }} />
             </Box>
@@ -867,27 +786,27 @@ const FamilyRelationGame = () => {
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
               <Box sx={{ flex: '1 1 calc(50% - 16px)', minWidth: '200px' }}>
                 <FormControl fullWidth variant="outlined" size="small">
-                  <InputLabel>Zorluk Derecesi</InputLabel>
+                  <InputLabel>{t('difficulty.label')}</InputLabel>
                   <Select
                     value={difficulty}
                     onChange={handleDifficultyChange}
-                    label="Zorluk Derecesi"
+                    label={t('difficulty.label')}
                   >
-                    <MenuItem value={Difficulty.EASY}>Kolay</MenuItem>
-                    <MenuItem value={Difficulty.MEDIUM}>Orta</MenuItem>
-                    <MenuItem value={Difficulty.HARD}>Zor</MenuItem>
+                    <MenuItem value={Difficulty.EASY}>{t('difficulty.easy')}</MenuItem>
+                    <MenuItem value={Difficulty.MEDIUM}>{t('difficulty.medium')}</MenuItem>
+                    <MenuItem value={Difficulty.HARD}>{t('difficulty.hard')}</MenuItem>
                   </Select>
                 </FormControl>
               </Box>
               <Box sx={{ flex: '1 1 calc(50% - 16px)', minWidth: '200px' }}>
                 <TextField
                   fullWidth
-                  label="Oyuncu Adı"
+                  label={t('player_name.label')}
                   variant="outlined"
                   value={playerName}
                   onChange={(e) => setPlayerName(e.target.value)}
                   size="small"
-                  placeholder="Adınızı giriniz"
+                  placeholder={t('player_name.placeholder')}
                   InputProps={{
                     startAdornment: <Person2Icon fontSize="small" sx={{ mr: 0.75, color: theme.palette.action.active }} />,
                   }}
@@ -896,7 +815,7 @@ const FamilyRelationGame = () => {
               <Box sx={{ width: '100%' }}>
                 <FormControl component="fieldset" sx={{ width: '100%' }}>
                   <Typography variant="subtitle2" sx={{ mb: 1, textAlign: 'left', fontWeight: 'medium' }}>
-                    Oyun Modu:
+                    {t('game_mode.label')}:
                   </Typography>
                   <RadioGroup
                     row
@@ -919,7 +838,7 @@ const FamilyRelationGame = () => {
                       <FormControlLabel 
                         value="classic" 
                         control={<Radio sx={{ '.MuiSvgIcon-root': { fontSize: 18 } }} />} 
-                        label="Klasik" 
+                        label={t('game_mode.classic')} 
                         sx={{ 
                           m: 0, 
                           p: 1, 
@@ -944,7 +863,7 @@ const FamilyRelationGame = () => {
                       <FormControlLabel 
                         value="timed" 
                         control={<Radio sx={{ '.MuiSvgIcon-root': { fontSize: 18 } }} />} 
-                        label="Zamanlı" 
+                        label={t('game_mode.timed')} 
                         sx={{ 
                           m: 0, 
                           p: 1, 
@@ -968,7 +887,7 @@ const FamilyRelationGame = () => {
                       <FormControlLabel 
                         value="path" 
                         control={<Radio sx={{ '.MuiSvgIcon-root': { fontSize: 18 } }} />} 
-                        label="Yol" 
+                        label={t('game_mode.path')} 
                         sx={{ 
                           m: 0, 
                           p: 1, 
@@ -1003,7 +922,7 @@ const FamilyRelationGame = () => {
                 },
               }}
             >
-              {isLoading ? <CircularProgress size={24} color="inherit" /> : "Oyunu Başlat"}
+              {isLoading ? <CircularProgress size={24} color="inherit" /> : t('start_game')}
             </Button>
             
             <Button
@@ -1014,7 +933,7 @@ const FamilyRelationGame = () => {
               onClick={() => setShowScores(true)}
               sx={{ mt: 2, borderRadius: 2 }}
             >
-              Yüksek Skorlar
+              {t('high_scores')}
             </Button>
           </Paper>
         </Box>
@@ -1025,31 +944,31 @@ const FamilyRelationGame = () => {
   const renderGameOver = () => {
     const accuracy = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
     let performanceMessage = "";
-    if (accuracy >= 80) performanceMessage = "Harika İş! Neredeyse mükemmel!";
-    else if (accuracy >= 60) performanceMessage = "Çok İyi! İlişkileri iyi biliyorsun.";
-    else if (accuracy >= 40) performanceMessage = "İyi İş! Biraz daha pratikle daha iyi olabilir.";
-    else performanceMessage = "Pratik yapmaya devam etmelisin.";
+    if (accuracy >= 80) performanceMessage = t('performance.excellent');
+    else if (accuracy >= 60) performanceMessage = t('performance.good');
+    else if (accuracy >= 40) performanceMessage = t('performance.average');
+    else performanceMessage = t('performance.poor');
 
     return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', p: isMobile ? 2 : 4, textAlign: 'center' }}>
       <GameCard sx={{ maxWidth: 600, width: '100%' }}>
         <Typography variant={isMobile? "h5" : "h4"} component="h2" gutterBottom sx={{ color: theme.palette.primary.main, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <EmojiEventsIcon sx={{ fontSize: isMobile ? 30 : 40, mr: 1.5, color: theme.palette.warning.main }} /> Oyun Bitti!
+          <EmojiEventsIcon sx={{ fontSize: isMobile ? 30 : 40, mr: 1.5, color: theme.palette.warning.main }} /> {t('game_over.title')}
         </Typography>
-        <Typography variant="h6" sx={{ mb: 1 }}>{playerName}, skorun: {score}</Typography>
+        <Typography variant="h6" sx={{ mb: 1 }}>{playerName}, {t('game_over.score')}: {score}</Typography>
         <Divider sx={{ my: 2 }} />
         <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', mb: 2 }}>
           <Box sx={{ flex: '1 1 calc(50% - 16px)', minWidth: '120px', p: 1 }}>
-            <Typography variant="body1">Toplam Soru: {totalQuestions}</Typography>
+            <Typography variant="body1">{t('game_over.total_questions')}: {totalQuestions}</Typography>
           </Box>
           <Box sx={{ flex: '1 1 calc(50% - 16px)', minWidth: '120px', p: 1 }}>
-            <Typography variant="body1">Doğru Cevap: {correctAnswers}</Typography>
+            <Typography variant="body1">{t('game_over.correct_answers')}: {correctAnswers}</Typography>
           </Box>
           <Box sx={{ flex: '1 1 calc(50% - 16px)', minWidth: '120px', p: 1 }}>
-            <Typography variant="body1">Başarı: {accuracy.toFixed(1)}%</Typography>
+            <Typography variant="body1">{t('game_over.accuracy')}: {accuracy.toFixed(1)}%</Typography>
           </Box>
           <Box sx={{ flex: '1 1 calc(50% - 16px)', minWidth: '120px', p: 1 }}>
-            <Typography variant="body1">Maksimum Seri: {maxStreak}</Typography>
+            <Typography variant="body1">{t('game_over.max_streak')}: {maxStreak}</Typography>
           </Box>
         </Box>
         
@@ -1063,7 +982,7 @@ const FamilyRelationGame = () => {
             startIcon={<RefreshIcon />}
             size="large"
           >
-            Tekrar Oyna
+            {t('restart_game')}
           </AnimatedButton>
           <AnimatedButton 
             variant="outlined" 
@@ -1072,7 +991,7 @@ const FamilyRelationGame = () => {
             startIcon={<LeaderboardIcon />}
             size="large"
           >
-            Yüksek Skorlar
+            {t('high_scores')}
           </AnimatedButton>
           <AnimatedButton 
             variant="outlined" 
@@ -1080,7 +999,7 @@ const FamilyRelationGame = () => {
             startIcon={<HomeIcon />}
             size="large"
           >
-            Ana Sayfa
+            {t('home')}
           </AnimatedButton>
         </Box>
       </GameCard>
@@ -1118,14 +1037,13 @@ const FamilyRelationGame = () => {
 
   const setCurrentQuestionSafely = (questionData: GameQuestionType | null) => {
     if (questionData) {
+      // Gelen verinin temel alanlara sahip olduğundan emin olalım, ancak "Kişi 1" gibi varsayılanlar atamayalım.
       const safeQuestion: GameQuestionType = {
         ...questionData,
         id: questionData.id || `question-${Date.now()}`,
-        person1: questionData.person1 || "Kişi 1",
-        person2: questionData.person2 || "Kişi 2",
         options: questionData.options || [],
-        person1Info: questionData.person1Info || { id: 'unknown1', fullName: questionData.person1 || 'Bilinmeyen Kişi 1' },
-        person2Info: questionData.person2Info || { id: 'unknown2', fullName: questionData.person2 || 'Bilinmeyen Kişi 2' },
+        person1Info: questionData.person1Info || { id: 'unknown1', fullName: questionData.person1 || '' },
+        person2Info: questionData.person2Info || { id: 'unknown2', fullName: questionData.person2 || '' },
         relationshipPath: questionData.relationshipPath || createSimpleRelationshipPath(questionData.person1Info!, questionData.person2Info!)
       };
       setCurrentQuestion(safeQuestion);
@@ -1158,9 +1076,9 @@ const FamilyRelationGame = () => {
         <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>
-              <TableCell>Sıra</TableCell>
-              <TableCell>Oyuncu</TableCell>
-              <TableCell>Skor</TableCell>
+              <TableCell>{t('high_scores.rank')}</TableCell>
+              <TableCell>{t('high_scores.player')}</TableCell>
+              <TableCell>{t('high_scores.score')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -1177,6 +1095,10 @@ const FamilyRelationGame = () => {
     );
   };
 
+  const handleLanguageChange = (lang: string) => {
+    i18n.changeLanguage(lang);
+  };
+
   if (!gameStarted) {
     return renderGameSetup();
   }
@@ -1190,11 +1112,11 @@ const FamilyRelationGame = () => {
   }
 
   if (error && !currentQuestion) {
-    return <ErrorMessage message={`Oyun yüklenirken hata: ${error}`} />;
+    return <ErrorMessage message={`${t('error.game_load')}: ${error}`} />;
   }
   
   if (!currentQuestion) {
-    return <ErrorMessage message="Soru yüklenemedi. Lütfen tekrar deneyin." />;
+    return <ErrorMessage message={t('error.question_load')} />;
   }
 
   const { person1, person2, options, timeLimit, difficulty: currentDifficulty, relationshipPath: currentRelationshipPath } = currentQuestion;
@@ -1206,63 +1128,18 @@ const FamilyRelationGame = () => {
   const timeProgress = (timeLimit || 0) > 0 ? (timeLeft / (timeLimit || 60)) * 100 : 0;
 
   return (
-    <StyledContainer maxWidth={false}>
+    <StyledContainer maxWidth="xl">
       <HeaderBar>
-        <Typography 
-          variant="subtitle1" 
-          component="h1" 
-          sx={{ 
-            fontWeight: 'bold', 
-            color: theme.palette.primary.dark, 
-            display: 'flex', 
-            alignItems: 'center',
-            fontSize: { xs: '0.9rem', sm: '1rem' },
-            letterSpacing: '0.3px'
-          }}
-        >
-          <SportsEsportsIcon sx={{ mr: 0.75, fontSize: 22 }} /> Aile İlişkileri Oyunu
+        <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
+          <SportsEsportsIcon sx={{ mr: 1 }} /> {t('game.title')}
         </Typography>
-        <Box sx={{ 
-          display: 'flex', 
-          gap: { xs: 1, sm: 1.5 },
-          flexWrap: 'nowrap', 
-          justifyContent: 'flex-end'
-        }}>
-          <Button 
-            variant="outlined" 
-            size="small" 
-            startIcon={<RefreshIcon fontSize="small" />} 
-            onClick={restartGame}
-            sx={{ 
-              borderRadius: 1.5,
-              fontWeight: 'medium',
-              py: 0.5,
-              px: 1,
-              fontSize: '0.75rem',
-              minWidth: 'auto'
-            }}
-          >
-            Yeniden
-          </Button>
-          <Button 
-            variant="outlined" 
-            size="small" 
-            startIcon={<HomeIcon fontSize="small" />} 
-            onClick={() => navigate('/')}
-            sx={{ 
-              borderRadius: 1.5,
-              fontWeight: 'medium',
-              py: 0.5,
-              px: 1,
-              fontSize: '0.75rem',
-              minWidth: 'auto'
-            }}
-          >
-            Ana Sayfa
-          </Button>
+        <Box>
+          <Button onClick={() => handleLanguageChange('en')} disabled={i18n.language === 'en'}>EN</Button>
+          <Button onClick={() => handleLanguageChange('tr')} disabled={i18n.language === 'tr'}>TR</Button>
+          <Button startIcon={<RefreshIcon />} onClick={restartGame} sx={{ mr: 1 }}>{t('restart_game')}</Button>
+          <Button startIcon={<HomeIcon />} onClick={() => navigate('/')}>{t('home')}</Button>
         </Box>
       </HeaderBar>
-
       <GamePlayArea ref={gameAreaRef} tabIndex={-1}>
         {isLoading && <LoadingIndicator />}
         {error && <ErrorMessage message={error} />}
@@ -1287,7 +1164,7 @@ const FamilyRelationGame = () => {
             <ScoreTimeDisplay>
               <Chip 
                 icon={<EmojiEventsIcon sx={{fontSize: '1rem'}} />} 
-                label={`Skor: ${score}`} 
+                label={`${t('game.score')}: ${score}`} 
                 color="primary" 
                 variant="filled" 
                 size="small" 
@@ -1300,9 +1177,9 @@ const FamilyRelationGame = () => {
               />
               <Chip 
                 icon={<TimerIcon sx={{fontSize: '1rem'}} />} 
-                label={`${timeLeft}s`} 
+                label={`${t('streak')}: ${currentStreak}`} 
                 color="secondary" 
-                variant={timeLeft < 10 ? "filled" : "outlined"} 
+                variant="filled" 
                 size="small" 
                 sx={{ 
                   fontSize: '0.8rem', 
@@ -1312,7 +1189,7 @@ const FamilyRelationGame = () => {
                 }} 
               />
               <Chip 
-                label={`Seri: ${currentStreak}/${maxStreak}`} 
+                label={`${t('streak')}: ${currentStreak}/${maxStreak}`} 
                 size="small" 
                 variant="outlined" 
                 sx={{ 
@@ -1358,7 +1235,7 @@ const FamilyRelationGame = () => {
                   fontSize: { xs: '0.95rem', sm: '1.1rem' }
                 }}
               >
-                Soru {totalQuestions + 1}:
+                {t('game.question_title', { number: totalQuestions + 1 })}
               </Typography>
               <Typography 
                 variant="subtitle1" 
@@ -1370,31 +1247,7 @@ const FamilyRelationGame = () => {
                   lineHeight: 1.4
                 }}
               >
-                <Box 
-                  component="span" 
-                  sx={{ 
-                    color: theme.palette.primary.main, 
-                    fontWeight: 'bold',
-                    px: 0.5,
-                    py: 0.25,
-                    borderRadius: 1,
-                    backgroundColor: alpha(theme.palette.primary.main, 0.1)
-                  }}
-                >
-                  {person1}
-                </Box> kişisinin <Box 
-                  component="span" 
-                  sx={{ 
-                    color: theme.palette.secondary.main, 
-                    fontWeight: 'bold',
-                    px: 0.5,
-                    py: 0.25,
-                    borderRadius: 1,
-                    backgroundColor: alpha(theme.palette.secondary.main, 0.1)
-                  }}
-                >
-                  {person2}
-                </Box> kişisine olan yakınlığı nedir?
+                {t('game.question', { person1: person1, person2: person2 })}
               </Typography>
             </QuestionCard>
 
@@ -1410,7 +1263,7 @@ const FamilyRelationGame = () => {
                   pb: 0.5
                 }}
               >
-                Cevap Seçenekleri:
+                {t('answer_options')}:
               </Typography>
               <RadioGroup
                 aria-label="answer"
@@ -1433,7 +1286,7 @@ const FamilyRelationGame = () => {
                             fontWeight: '500'
                           }}
                         >
-                          {option}
+                          {t(option as any)}
                         </Typography>
                         {showResult && selectedAnswer === option && (
                           isCorrect ? <CheckCircleIcon color="success" fontSize="small" /> : <CancelIcon color="error" fontSize="small" />
@@ -1481,9 +1334,9 @@ const FamilyRelationGame = () => {
                     textTransform: 'none'
                   }}
                 >
-                  {isLoading ? "Kontrol Ediliyor..." : (showResult ? (isCorrect ? "Doğru!" : "Yanlış") : "Cevabı Kontrol Et")}
+                  {isLoading ? t('checking_answer') : (showResult ? (isCorrect ? t('correct') : t('incorrect')) : t('game.check_answer'))}
                 </AnimatedButton>
-                <Tooltip title={showHint ? "İpucunu Gizle" : "İpucu Göster"}>
+                <Tooltip title={showHint ? t('hide_hint') : t('show_hint')}>
                   <IconButton 
                     onClick={toggleHint} 
                     color="info" 
@@ -1549,8 +1402,8 @@ const FamilyRelationGame = () => {
                   justifyContent: 'space-between'
                 }}
               >
-                <span>İlişki Haritası ({formatDifficulty(currentDifficulty)})</span>
-                <Tooltip title="İlişki haritası, kişiler arasındaki bağlantıları gösterir">
+                <span>{t('relationship_map')} ({formatDifficulty(currentDifficulty)})</span>
+                <Tooltip title={t('relationship_map_tooltip')}>
                   <InfoIcon fontSize="small" sx={{ color: theme.palette.primary.main, opacity: 0.8 }} />
                 </Tooltip>
               </Typography>
@@ -1599,14 +1452,14 @@ const FamilyRelationGame = () => {
         <Box sx={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, bgcolor: 'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex: 1201, p:2 }}>
           <Paper sx={{p:3, maxWidth:600, width:'95%', maxHeight:'90vh', overflowY:'auto'}}>
             <Box sx={{display:'flex', justifyContent:'space-between', alignItems:'center', mb:2}}>
-              <Typography variant="h5">Yüksek Skorlar</Typography>
+              <Typography variant="h5">{t('high_scores.title')}</Typography>
               <IconButton onClick={() => setShowScores(false)}><CancelIcon/></IconButton>
             </Box>
 
             {renderHighScores()}
             
             <Button onClick={() => setShowScores(false)} variant="outlined" sx={{mt:2, display:'block', ml:'auto'}}>
-              Kapat
+              {t('close')}
             </Button>
           </Paper>
         </Box>

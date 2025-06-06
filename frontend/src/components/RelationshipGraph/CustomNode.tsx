@@ -112,11 +112,11 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data }) => {
                     {data.name?.charAt(0).toUpperCase()}
                 </Avatar>
                 <Typography
-                    variant="subtitle1"
-                    fontWeight="700"
+                    variant="h6"
+                    fontWeight="bold"
                     sx={{
-                        fontSize: "0.95rem",
-                        color: isHighlighted ? "#FFFFFF" : theme.palette.text.primary,
+                        fontSize: "1rem",
+                        color: "#FFFFFF",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",

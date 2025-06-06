@@ -155,11 +155,12 @@ export const getHighScores = async (): Promise<HighScores> => {
 /**
  * Fetches a question based on difficulty. (This is for ad-hoc question generation, not typically during a game flow)
  * @param difficulty The difficulty level for the question.
+ * @param lang The selected language code (e.g., 'tr', 'en').
  * @returns A promise that resolves to a question conforming to the GameQuestionType type.
  */
-export const getQuestion = async (difficulty: Difficulty): Promise<GameQuestionType> => {
+export const getQuestion = async (difficulty: Difficulty, lang: string): Promise<GameQuestionType> => {
   try {
-    const questionData = await apiService.get<GameQuestionType>('game/question', { params: { difficulty } });
+    const questionData = await apiService.get<GameQuestionType>('game/question', { params: { difficulty, lang } });
     
     if (questionData) {
       return {
