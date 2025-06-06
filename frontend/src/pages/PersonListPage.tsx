@@ -188,21 +188,23 @@ const PersonListPage: React.FC = () => {
 
       // Eş ilişkilerini kur
       personMap.forEach((personNode) => {
-        if (personNode.motherId) {
-          const mother = personMap.get(personNode.motherId);
+        // Mother ilişkisi
+        if (personNode.mother && personNode.mother.id) {
+          const mother = personMap.get(personNode.mother.id);
           if (mother) {
             mother.children.push(personNode);
           }
         }
-        if (personNode.fatherId) {
-          const father = personMap.get(personNode.fatherId);
+        // Father ilişkisi
+        if (personNode.father && personNode.father.id) {
+          const father = personMap.get(personNode.father.id);
           if (father) {
             father.children.push(personNode);
           }
         }
         // Eş bilgisini de TreePerson'a ekleyelim, eğer varsa
-        if (personNode.spouseId) {
-          const spouse = personMap.get(personNode.spouseId);
+        if (personNode.spouse && personNode.spouse.id) {
+          const spouse = personMap.get(personNode.spouse.id);
           if (spouse) {
             // Dairesel referansı önlemek için spouse nesnesinin tamamını değil,
             // temel bilgilerini veya sadece ID'sini atayabiliriz.
@@ -216,7 +218,7 @@ const PersonListPage: React.FC = () => {
       const rootNodes: TreePerson[] = [];
       personMap.forEach((person: TreePerson) => {
         // Anne-babası olmayan kişiler kök olabilir
-        if (!person.motherId && !person.fatherId) {
+        if (!person.mother && !person.father) {
           rootNodes.push(person);
         }
       });
@@ -262,13 +264,13 @@ const PersonListPage: React.FC = () => {
 
   // Sütun başlıkları için yapılandırma
   const headCells = [
-    { id: 'name', label: t('nameLastname') },
-    { id: 'gender', label: t('gender') },
-    { id: 'birthDate', label: t('birthDate') },
-    { id: 'deathDate', label: t('deathDate') },
-    { id: 'mother', label: t('mother') },
-    { id: 'father', label: t('father') },
-    { id: 'spouse', label: t('spouse') },
+    { id: 'name', label: t('nameLastname'), numeric: false, disablePadding: false },
+    { id: 'gender', label: t('gender'), numeric: false, disablePadding: false },
+    { id: 'birthDate', label: t('birthDate'), numeric: false, disablePadding: false },
+    { id: 'deathDate', label: t('deathDate'), numeric: false, disablePadding: false },
+    { id: 'mother', label: t('mother'), numeric: false, disablePadding: false },
+    { id: 'father', label: t('father'), numeric: false, disablePadding: false },
+    { id: 'spouse', label: t('spouse'), numeric: false, disablePadding: false },
   ];
 
   if (loading) {
@@ -371,8 +373,8 @@ const PersonListPage: React.FC = () => {
                   {headCells.map((headCell) => (
                     <TableCell
                       key={headCell.id}
-                      align={headCell.numeric ? 'right' : 'left'}
-                      padding={headCell.disablePadding ? 'none' : 'normal'}
+                      align={'left'}
+                      padding={'normal'}
                       sortDirection={orderBy === headCell.id ? order : false}
                     >
                       <TableSortLabel

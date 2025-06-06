@@ -5,7 +5,7 @@ export const StyledFormSection = styled(Paper, {
   shouldForwardProp: (prop) => prop !== 'isDarkMode',
 })< { isDarkMode?: boolean }>(({ theme, isDarkMode }) => ({
   padding: theme.spacing(2),
-  borderRadius: theme.shape.borderRadius * 3,
+  borderRadius: `${theme.shape.borderRadius}px`,
   marginBottom: theme.spacing(2),
   backgroundColor: alpha(theme.palette.background.paper, isDarkMode ? 0.05 : 0.4),
   backdropFilter: 'blur(10px)',

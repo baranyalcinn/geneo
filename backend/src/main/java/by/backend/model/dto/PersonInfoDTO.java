@@ -1,11 +1,14 @@
 package by.backend.model.dto;
 
 import by.backend.model.enums.Gender;
-import lombok.Builder;
-import lombok.Data;
+import lombok.*;
 
-@Data
+@Getter
+@Setter
+@ToString
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class PersonInfoDTO {
     private Long id;
     private String name;

@@ -22,8 +22,10 @@ import GraphLoadingIndicator from "./RelationshipGraph/GraphLoadingIndicator";
 import GraphEmptyState from "./RelationshipGraph/GraphEmptyState";
 import GraphNodeErrorState from "./RelationshipGraph/GraphNodeErrorState";
 import SingleNodeView from "./RelationshipGraph/SingleNodeView";
+import { RelationshipStep } from "../types/game";
 
 // Backend'den gelecek DTO'nun arayüz tanımı
+/*
 interface RelationshipStep {
   id: string | number; // SingleNodeView ve ReactFlow node'ları için ID gerekli
   personId: number;
@@ -35,6 +37,7 @@ interface RelationshipStep {
   sourcePerson: boolean;
   targetPerson: boolean;
 }
+*/
 
 interface RelationshipGraphProps {
   path?: RelationshipStep[];
@@ -88,7 +91,7 @@ const FlowComponent: React.FC<{
           bottom: 15,
           boxShadow: `0 3px 10px ${alpha(theme.palette.common.black, 0.15)}`,
           border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
-          borderRadius: theme.shape.borderRadius * 1.5,
+          borderRadius: `${Number(theme.shape.borderRadius) * 1.5}px`,
           padding: theme.spacing(0.5),
           gap: theme.spacing(0.5),
         }}
@@ -128,7 +131,7 @@ const FlowComponent: React.FC<{
           width: 150,
           backgroundColor: alpha(theme.palette.background.paper, 0.9),
           border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
-          borderRadius: theme.shape.borderRadius * 1.5,
+          borderRadius: `${Number(theme.shape.borderRadius) * 1.5}px`,
           boxShadow: `0 3px 12px ${alpha(theme.palette.common.black, 0.18)}`,
         }}
       />
@@ -194,7 +197,7 @@ const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
         height: height,
         minHeight: "350px",
         border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-        borderRadius: theme.shape.borderRadius * 1.5,
+        borderRadius: `${Number(theme.shape.borderRadius) * 1.5}px`,
         overflow: "hidden",
         position: "relative",
         display: "flex",

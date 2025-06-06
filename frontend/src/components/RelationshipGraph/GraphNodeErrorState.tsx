@@ -30,7 +30,7 @@ const GraphNodeErrorState: React.FC<GraphNodeErrorStateProps> = ({
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: alpha(theme.palette.background.paper, 0.7),
-        borderRadius: theme.shape.borderRadius * 1.5,
+        borderRadius: `${theme.shape.borderRadius}px`,
         border: `1px dashed ${alpha(theme.palette.warning.main, 0.4)}`,
         padding: theme.spacing(3),
         textAlign: 'center',

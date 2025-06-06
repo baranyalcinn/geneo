@@ -1,4 +1,5 @@
 import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
+import i18n from '../config/i18n';
 
 const API_URL = 'http://localhost:8080/api'; // TODO: Ortam değişkenlerinden al
 const MAX_RETRIES = 3;
@@ -19,6 +20,18 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(
   (config) => {
     console.log(`API İsteği: ${config.method?.toUpperCase()} ${config.url}`, config.data || {});
+    
+    // İstek parametrelerine dil kodunu ekle
+    if (!config.params) {
+      config.params = {};
+    }
+    config.params.lang = i18n.language || 'tr'; // Varsayılan olarak Türkçe
+    
+    // Accept-Language header'ını ekle
+    // Axios v1.x için headers objesini güvenli bir şekilde kullan
+    if (config.headers) {
+      config.headers['Accept-Language'] = i18n.language || 'tr';
+    }
 
     return config;
   },
@@ -92,7 +105,8 @@ export const apiService = {
     const url = `${endpoint}${queryString ? `?${queryString}` : ''}`;
     console.log(`GET isteği hazırlanıyor: ${url}`);
     
-    const cacheKey = `GET:${url}`;
+    // Cache key'e dil bilgisini ekleyelim ki farklı diller için farklı cache tutalım
+    const cacheKey = `GET:${url}:${i18n.language}`;
     const cachedResponse = cache.get(cacheKey);
     
     if (cachedResponse && Date.now() - cachedResponse.timestamp < CACHE_DURATION) {

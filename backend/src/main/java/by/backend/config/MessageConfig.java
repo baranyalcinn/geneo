@@ -5,12 +5,22 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.support.ReloadableResourceBundleMessageSource;
 import org.springframework.web.servlet.LocaleResolver;
-import org.springframework.web.servlet.i18n.SessionLocaleResolver;
+import org.springframework.web.servlet.i18n.AcceptHeaderLocaleResolver;
+import org.springframework.web.servlet.i18n.LocaleChangeInterceptor;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.Locale;
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
-public class MessageConfig {
+public class MessageConfig implements WebMvcConfigurer {
+
+    private static final List<Locale> SUPPORTED_LOCALES = Arrays.asList(
+            Locale.forLanguageTag("tr"),
+            Locale.forLanguageTag("en")
+    );
 
     @Bean
     public MessageSource messageSource() {
@@ -27,8 +37,21 @@ public class MessageConfig {
 
     @Bean
     public LocaleResolver localeResolver() {
-        SessionLocaleResolver resolver = new SessionLocaleResolver();
-        resolver.setDefaultLocale(Locale.forLanguageTag("tr"));
+        AcceptHeaderLocaleResolver resolver = new AcceptHeaderLocaleResolver();
+        resolver.setSupportedLocales(SUPPORTED_LOCALES);
+        resolver.setDefaultLocale(Locale.forLanguageTag("tr")); // Varsayılan locale Türkçe
         return resolver;
+    }
+    
+    @Bean
+    public LocaleChangeInterceptor localeChangeInterceptor() {
+        LocaleChangeInterceptor lci = new LocaleChangeInterceptor();
+        lci.setParamName("lang");
+        return lci;
+    }
+    
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(localeChangeInterceptor());
     }
 } 

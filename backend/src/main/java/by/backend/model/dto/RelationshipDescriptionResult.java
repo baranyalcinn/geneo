@@ -5,14 +5,13 @@ import by.backend.model.enums.RelationshipStatus;
 import by.backend.model.enums.RelationshipType;
 import lombok.Builder;
 import lombok.Data;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
+
 
 import java.util.List;
 
 @Data
 @Builder
-@AllArgsConstructor
+// @AllArgsConstructor anotasyonunu kaldırıyorum çünkü @Builder zaten constructor oluşturuyor
 public class RelationshipDescriptionResult {
     private final RelationshipStatus status;
     private final String messageKey;

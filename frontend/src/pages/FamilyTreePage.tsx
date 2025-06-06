@@ -84,9 +84,12 @@ function descendingComparator<T>(
   if (orderBy === 'name') {
     valA = `${(a as any).firstName} ${(a as any).lastName}`.toLowerCase();
     valB = `${(b as any).firstName} ${(b as any).lastName}`.toLowerCase();
-  } else if (orderBy === 'motherId' || orderBy === 'fatherId' || orderBy === 'spouseId') {
-    valA = getFullName((a as any)[orderBy]);
-    valB = getFullName((b as any)[orderBy]);
+  } else if (orderBy === 'mother' || orderBy === 'father' || orderBy === 'spouse') {
+    // OrderByKey tipi ile Person'daki alan adları uyumlu
+    const personA = (a as any)[orderBy];
+    const personB = (b as any)[orderBy];
+    valA = personA ? `${personA.firstName} ${personA.lastName}`.toLowerCase() : '';
+    valB = personB ? `${personB.firstName} ${personB.lastName}`.toLowerCase() : '';
   } else if (orderBy === 'birthDate' || orderBy === 'deathDate') {
     valA = getDateValue((a as any)[orderBy]);
     valB = getDateValue((b as any)[orderBy]);

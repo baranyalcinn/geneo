@@ -22,6 +22,7 @@ export interface RelationshipStep {
   personName: string;
   personGender?: 'Erkek' | 'Kadın' | string;
   personBirthYear?: number;
+  personDeathYear?: number;
   relationshipToNextPerson?: string;
   sourcePerson?: boolean;
   targetPerson?: boolean;
@@ -34,6 +35,9 @@ export interface GameQuestion {
   difficulty: Difficulty;
   person1Info?: PersonInfo;
   person2Info?: PersonInfo;
+  timeLimit?: number;
+  relationshipPath?: RelationshipStep[];
+  correctAnswer?: string;
 }
 
 export interface InitialGameData {
@@ -67,6 +71,7 @@ export interface GameAnswer {
   currentStreak: number;
   gameQuestionCount: number;
   correctAnswersCount: number;
+  sessionId?: string;
 }
 
 export interface AnswerResponse {
@@ -79,8 +84,6 @@ export interface AnswerResponse {
   gameOver: boolean;
   finalResult?: GameResult;
   relationshipPath?: RelationshipStep[];
-  askedQuestionSignaturesInThisGame: string[];
-  finalScoreId?: string;
 }
 
 export interface GameResult {

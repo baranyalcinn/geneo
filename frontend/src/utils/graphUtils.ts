@@ -11,9 +11,11 @@ import {
     RELATIONSHIP_COLOR_SPOUSE,
     RELATIONSHIP_COLOR_PARENT_CHILD
 } from "../config/graphConfig";
+import { RelationshipStep } from "../types/game";
 
 // RelationshipStep arayüzü buraya kopyalanabilir veya 
 // types klasöründen import edilebilir. Şimdilik kopyalayalım.
+/*
 interface RelationshipStep {
     personId: number;
     personName: string;
@@ -24,6 +26,7 @@ interface RelationshipStep {
     sourcePerson: boolean;
     targetPerson: boolean;
 }
+*/
 
 // Tema renkleri için arayüz
 interface GraphThemeColors {

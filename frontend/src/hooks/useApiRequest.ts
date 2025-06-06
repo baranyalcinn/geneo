@@ -10,7 +10,7 @@ import { useQuery, UseQueryOptions } from '@tanstack/react-query';
  * @param queryFn API isteğini yapan async fonksiyon
  * @param options Ek sorgu seçenekleri
  */
-export function useApiRequest<TData = unknown, TError = Error>(
+export function useApiRequest<TData = unknown, TError extends Error = Error>(
   queryKey: string | string[],
   queryFn: () => Promise<TData>,
   options?: Omit<UseQueryOptions<TData, TError, TData>, 'queryKey' | 'queryFn'>

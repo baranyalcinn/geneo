@@ -30,7 +30,7 @@ const GraphEmptyState: React.FC<GraphEmptyStateProps> = ({
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: alpha(theme.palette.background.paper, 0.7),
-        borderRadius: theme.shape.borderRadius * 1.5,
+        borderRadius: `${theme.shape.borderRadius}px`,
         border: `1px dashed ${alpha(theme.palette.primary.main, 0.3)}`,
         padding: theme.spacing(3),
         textAlign: 'center',
