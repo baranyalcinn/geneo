@@ -11,16 +11,9 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.Locale;
-import java.util.Arrays;
-import java.util.List;
 
 @Configuration
 public class MessageConfig implements WebMvcConfigurer {
-
-    private static final List<Locale> SUPPORTED_LOCALES = Arrays.asList(
-            Locale.forLanguageTag("tr"),
-            Locale.forLanguageTag("en")
-    );
 
     @Bean
     public MessageSource messageSource() {

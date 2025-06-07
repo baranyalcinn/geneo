@@ -32,6 +32,7 @@ import by.backend.service.game.session.PlayerAnswer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import by.backend.model.dto.RelationshipPathDTO;
+import java.util.UUID;
 
 @Service
 public class GameServiceImpl implements GameService {
@@ -184,11 +185,29 @@ public class GameServiceImpl implements GameService {
             log.error("startGame: İlk soru üretilemedi. Oyuncu: {}, Zorluk: {}", playerName, difficulty);
             throw new GameException(getMessage("game.error.start_failed_no_question", locale));
         }
+
+        String sessionId = UUID.randomUUID().toString();
+        // TODO: Bu değerler yapılandırmadan (örn. GameProperties) okunmalıdır.
+        long gameDurationInSeconds = 300; // 5 dakika
+        int totalQuestions = 10; // Toplam 10 soru
+
+        GameSession newSession = new GameSession(
+                sessionId,
+                playerName,
+                difficulty,
+                gameDurationInSeconds,
+                totalQuestions,
+                new ArrayList<>() // Sorular oyun sırasında tek tek üretildiği için başlangıç listesi boş.
+        );
+        activeGameSessions.put(newSession.getSessionId(), newSession);
+        log.info("New game session created with ID '{}' for player '{}'", newSession.getSessionId(), playerName);
+
         GameQuestionDTO questionToSend = firstQuestion.toBuilder().build();
         questionToSend.setCorrectAnswer(null);
         questionToSend.setRelationshipPath(null);
 
         return InitialGameDataDTO.builder()
+                .sessionId(newSession.getSessionId())
                 .firstQuestion(questionToSend)
                 .playerName(playerName)
                 .difficulty(difficulty)
@@ -199,19 +218,23 @@ public class GameServiceImpl implements GameService {
     @Transactional
     public AnswerResponseDTO answerQuestion(GameAnswerDTO answerDetails, Locale locale) {
         String sessionId = answerDetails.getSessionId();
+        if (sessionId == null || sessionId.isEmpty()) {
+            log.warn("answerQuestion: Session ID is missing in the request.");
+            throw new GameException(getMessage("game.error.session_not_found", locale));
+        }
+
         log.debug("Processing answer for session '{}', question '{}'", sessionId, answerDetails.getQuestionId());
 
-        // Eğer sessionId null veya boş ise, bir session oluşturmaya gerek yok
-        // Doğrudan soruyu doğrulama kısmına geçebiliriz
-        GameSession session = null;
-        if (sessionId != null && !sessionId.isEmpty()) {
-            session = activeGameSessions.get(sessionId);
-
-            if (session != null && session.isGameOver()) {
-                log.warn("Answer received for already finished game session '{}'.", sessionId);
-                activeGameSessions.remove(sessionId);
-                return createGameOverResponse(session, "game.error.game_already_over", locale);
-            }
+        GameSession session = activeGameSessions.get(sessionId);
+        if (session == null) {
+            log.warn("No active game session found for ID '{}'. It might have expired or never existed.", sessionId);
+            throw new GameException(getMessage("game.error.session_not_found", locale));
+        }
+        
+        if (session.isGameOver()) {
+            log.warn("Answer received for already finished game session '{}'.", sessionId);
+            activeGameSessions.remove(sessionId);
+            return createGameOverResponse(session, "game.error.game_already_over", locale);
         }
 
         // --- Start of inlined validation logic ---

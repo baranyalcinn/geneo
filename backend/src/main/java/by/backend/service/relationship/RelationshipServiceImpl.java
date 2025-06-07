@@ -99,7 +99,7 @@ public class RelationshipServiceImpl implements RelationshipService {
 
     @Override
     @Transactional(readOnly = true)
-    @Cacheable(value = "relationships", key = "#person1Summary.id() + '-' + #person2Summary.id()")
+    @Cacheable(value = "relationships", key = "#person1Summary.id() + '-' + #person2Summary.id()", condition = "#person1Summary != null && #person2Summary != null")
     public RelationshipDescriptionResult findRelationshipDescription(PersonSummaryDTO person1Summary, PersonSummaryDTO person2Summary) {
         Person person1 = personRepository.findById(person1Summary.id())
             .orElseThrow(() -> new IllegalArgumentException("Kişi 1 bulunamadı: " + person1Summary.id()));

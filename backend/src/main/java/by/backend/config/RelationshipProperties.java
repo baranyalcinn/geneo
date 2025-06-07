@@ -20,7 +20,7 @@ public class RelationshipProperties {
     private int maxBfsPathsToCollect = 5;
 
     @Min(0) // Minimum ebeveyn yaşı 0 olabilir, ancak mantıksal olarak daha yüksek olmalı
-    private int minParentAge = 12;
+    private int minParentAge = 16;
 
     // Örnek olarak eklendi, isterseniz kullanabilirsiniz.
     // @Min(100)
