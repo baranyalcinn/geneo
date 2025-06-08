@@ -10,7 +10,7 @@ import {
 } from "@mui/material";
 import CakeIcon from "@mui/icons-material/Cake";
 import WcIcon from "@mui/icons-material/Wc";
-import { Handle, Position, NodeProps } from "reactflow";
+import { Handle, Position, NodeProps } from "@xyflow/react";
 import { GRAPH_NODE_WIDTH, GRAPH_NODE_HEIGHT } from '../../config/graphConfig';
 
 interface CustomNodeData {
@@ -22,7 +22,7 @@ interface CustomNodeData {
     isTarget?: boolean;
 }
 
-const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data }) => {
+const CustomNode: React.FC<NodeProps<any>> = ({ data }) => {
     const theme = useTheme();
 
     const getGenderColor = (gender?: string): string => {
@@ -36,7 +36,7 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data }) => {
         return theme.palette.grey[400];
     };
 
-    const isHighlighted = data.isSource || data.isTarget;
+    const isHighlighted = data?.isSource || data?.isTarget;
 
     return (
         <Paper
@@ -51,7 +51,7 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data }) => {
                 textAlign: "center",
                 background: isHighlighted
                     ? (theme.palette.mode === "dark" ? "#1B4332" : "#2D6A4F")
-                    : (theme.palette.mode === "dark" ? alpha(theme.palette.background.paper, 0.7) : alpha(theme.palette.background.default, 0.7)),
+                    : (theme.palette.mode === "dark" ? alpha(theme.palette.background.paper, 0.9) : alpha(theme.palette.background.paper, 0.95)),
                 border: `1px solid ${isHighlighted
                     ? (theme.palette.mode === "dark" ? "#2D6A4F" : "#40916C")
                     : (theme.palette.mode === "dark" ? alpha(theme.palette.divider, 0.2) : alpha(theme.palette.divider, 0.4))
@@ -102,21 +102,21 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data }) => {
                         width: 36,
                         height: 36,
                         mr: 1.5,
-                        bgcolor: getGenderColor(data.gender),
+                        bgcolor: getGenderColor(data?.gender),
                         fontSize: "1rem",
                         fontWeight: "600",
                         color: "#fff",
-                        boxShadow: `0 2px 8px ${alpha(getGenderColor(data.gender), 0.4)}`,
+                        boxShadow: `0 2px 8px ${alpha(getGenderColor(data?.gender), 0.4)}`,
                     }}
                 >
-                    {data.name?.charAt(0).toUpperCase()}
+                    {data?.name?.charAt(0).toUpperCase()}
                 </Avatar>
                 <Typography
                     variant="h6"
                     fontWeight="bold"
                     sx={{
                         fontSize: "1rem",
-                        color: "#FFFFFF",
+                        color: isHighlighted ? "#FFFFFF" : theme.palette.text.primary,
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
@@ -124,7 +124,7 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data }) => {
                         textAlign: "left",
                     }}
                 >
-                    {data.name}
+                    {data?.name}
                 </Typography>
             </Box>
 
@@ -142,7 +142,7 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data }) => {
                     color: isHighlighted ? alpha("#FFFFFF", 0.9) : theme.palette.text.secondary,
                 }}
             >
-                {data.gender && (
+                {data?.gender && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, fontSize: "0.8rem", fontWeight: "500" }}>
                         <WcIcon sx={{ fontSize: "0.9rem" }} />
                         {data.gender}
@@ -151,8 +151,8 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data }) => {
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, fontSize: "0.8rem", fontWeight: "500" }}>
                     <CakeIcon sx={{ fontSize: "0.9rem" }} />
                     <Typography component="span" sx={{ fontSize: "0.8rem" }}>
-                        {data.birthYear ? `Doğum: ${data.birthYear}` : "Doğum: ?"}
-                        {data.deathYear ? ` - Ölüm: ${data.deathYear}` : ""}
+                        {data?.birthYear ? `Doğum: ${data.birthYear}` : "Doğum: ?"}
+                        {data?.deathYear ? ` - Ölüm: ${data.deathYear}` : ""}
                     </Typography>
                 </Box>
             </Box>

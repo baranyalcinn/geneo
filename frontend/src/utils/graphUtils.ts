@@ -3,7 +3,7 @@ import {
     Edge,
     Position,
     MarkerType
-} from "reactflow";
+} from "@xyflow/react";
 import {
     GRAPH_NODE_WIDTH,
     GRAPH_NODE_HEIGHT,
@@ -110,17 +110,20 @@ export const transformDataToFlow = (
                     strokeWidth: 2.5,
                     stroke: edgeColor,
                 },
-                label: relationshipType,
+                label: relationshipType || "?",
                 labelStyle: {
                     fill: '#fff',
                     fontWeight: 'bold',
-                    fontSize: 14,
+                    fontSize: 12,
+                    fontFamily: 'Inter, system-ui, sans-serif',
                 },
-                labelBgPadding: [8, 4],
-                labelBgBorderRadius: 4,
+                labelBgPadding: [10, 6],
+                labelBgBorderRadius: 8,
                 labelBgStyle: {
                     fill: edgeColor,
-                    fillOpacity: 1,
+                    fillOpacity: 0.95,
+                    stroke: '#fff',
+                    strokeWidth: 1,
                 },
                 data: {
                     relationshipType: relationshipType,

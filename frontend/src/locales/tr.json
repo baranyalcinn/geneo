@@ -15,6 +15,7 @@
   "relationship.indirect.found": "Dolaylı Akraba",
   "relationship.no_relation": "Akrabalık ilişkisi yok",
   "game.question_template": "{{person1}}, {{person2}}'nin nesidir?",
+  "game.question": "{{person1}}, {{person2}}'nin nesidir?",
   "game.score": "Skor",
   "game.streak": "Seri",
   "game.question_title": "Soru {{number}}",
@@ -64,5 +65,8 @@
   "hide_hint": "İpucunu Gizle",
   "show_hint": "İpucu Göster",
   "relationship_map_tooltip": "İlişki haritası, kişiler arasındaki bağlantıları gösterir.",
-  "close": "Kapat"
+  "close": "Kapat",
+  "player_name.required": "Oyuncu adı gereklidir",
+  "error.game_start": "Oyun başlatılırken hata oluştu",
+  "error.answer_submit": "Cevap gönderilirken hata oluştu"
 } 

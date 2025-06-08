@@ -9,7 +9,6 @@ import by.backend.model.entity.Person;
 import by.backend.model.entity.Relationship;
 import by.backend.model.enums.RelationshipStatus;
 import by.backend.model.enums.RelationshipType;
-import by.backend.repository.PersonRepository; // Direkt PersonSummaryDTO için değil, Person yüklemek için
 import by.backend.repository.RelationshipRepository;
 import by.backend.service.pathfinding.RelationshipPathFinder;
 import lombok.RequiredArgsConstructor;
@@ -26,12 +25,11 @@ import java.util.stream.Collectors;
 @Slf4j
 public class RelationshipDescriptionResolverImpl implements RelationshipDescriptionResolver {
 
-    private final PersonRepository personRepository; // Kişi ID'lerinden Person yüklemek için eklendi
     private final RelationshipRepository relationshipRepository;
     private final PersonMapper personMapper;
     private final MessageSource messageSource;
     private final RelationshipPathFinder relationshipPathFinder;
-    private final RelationshipProperties relationshipProperties; // findIndirectRelationship içindeki getRelationshipPath maxDepth için
+    private final RelationshipProperties relationshipProperties;
 
     private static final String GENDER_MALE = "ERKEK";
     private static final String GENDER_FEMALE = "KADIN";
@@ -39,7 +37,6 @@ public class RelationshipDescriptionResolverImpl implements RelationshipDescript
 
     @Override
     public RelationshipDescriptionResult resolveDescription(Person person1, Person person2, Locale locale) {
-        // person1 ve person2 zaten yüklü geldiği için tekrar yüklemeye gerek yok.
         PersonSummaryDTO person1Summary = personMapper.toSummaryDTO(person1);
         PersonSummaryDTO person2Summary = personMapper.toSummaryDTO(person2);
 

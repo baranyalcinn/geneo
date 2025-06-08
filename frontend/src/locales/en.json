@@ -15,6 +15,7 @@
   "relationship.indirect.found": "Indirect Relative",
   "relationship.no_relation": "No relation",
   "game.question_template": "What is {{person1}} to {{person2}}?",
+  "game.question": "What is {{person1}} to {{person2}}?",
   "game.score": "Score",
   "game.streak": "Streak",
   "game.question_title": "Question {{number}}",
@@ -64,5 +65,8 @@
   "hide_hint": "Hide Hint",
   "show_hint": "Show Hint",
   "relationship_map_tooltip": "The relationship map shows the connections between people.",
-  "close": "Close"
+  "close": "Close",
+  "player_name.required": "Player name is required",
+  "error.game_start": "Error starting game",
+  "error.answer_submit": "Error submitting answer"
 } 

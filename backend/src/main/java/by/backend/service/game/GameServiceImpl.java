@@ -19,6 +19,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,8 +31,7 @@ import by.backend.config.GameProperties;
 import by.backend.service.game.AnalysisService;
 import by.backend.service.game.session.GameSession;
 import by.backend.service.game.session.PlayerAnswer;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import by.backend.service.game.GameAnalysisService;
 import by.backend.model.dto.RelationshipPathDTO;
 import java.util.UUID;
 
@@ -44,6 +45,7 @@ public class GameServiceImpl implements GameService {
     private final MessageSource messageSource;
     private final GameProperties gameProperties;
     private final AnalysisService analysisService;
+    private final GameAnalysisService gameAnalysisService;
     private final Map<Difficulty, List<GameQuestionDTO>> preGeneratedQuestions;
     private final ScheduledExecutorService executorService;
     private final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors();
@@ -66,7 +68,8 @@ public class GameServiceImpl implements GameService {
                          PersonMapper personMapper,
                          MessageSource messageSource,
                          GameProperties gameProperties,
-                         AnalysisService analysisService) {
+                         AnalysisService analysisService,
+                         GameAnalysisService gameAnalysisService) {
         this.personRepository = personRepository;
         this.highScoreRepository = highScoreRepository;
         this.relationshipService = relationshipService;
@@ -74,6 +77,7 @@ public class GameServiceImpl implements GameService {
         this.messageSource = messageSource;
         this.gameProperties = gameProperties;
         this.analysisService = analysisService;
+        this.gameAnalysisService = gameAnalysisService;
         this.preGeneratedQuestions = new EnumMap<>(Difficulty.class);
         for (Difficulty difficulty : Difficulty.values()) {
             preGeneratedQuestions.put(difficulty, Collections.synchronizedList(new ArrayList<>()));
@@ -187,9 +191,9 @@ public class GameServiceImpl implements GameService {
         }
 
         String sessionId = UUID.randomUUID().toString();
-        // TODO: Bu değerler yapılandırmadan (örn. GameProperties) okunmalıdır.
-        long gameDurationInSeconds = 300; // 5 dakika
-        int totalQuestions = 10; // Toplam 10 soru
+        // GameProperties'den değerler okunuyor
+        long gameDurationInSeconds = gameProperties.getDurationInSeconds().get(difficulty);
+        int totalQuestions = gameProperties.getQuestionsPerGame();
 
         GameSession newSession = new GameSession(
                 sessionId,
@@ -199,18 +203,25 @@ public class GameServiceImpl implements GameService {
                 totalQuestions,
                 new ArrayList<>() // Sorular oyun sırasında tek tek üretildiği için başlangıç listesi boş.
         );
+        
+        // İlk soruyu session'da kaydet
+        newSession.getAskedQuestionSignatures().add(firstQuestion.getId());
+        
         activeGameSessions.put(newSession.getSessionId(), newSession);
-        log.info("New game session created with ID '{}' for player '{}'", newSession.getSessionId(), playerName);
+        log.info("New game session created with ID '{}' for player '{}', first question: {}", 
+                newSession.getSessionId(), playerName, firstQuestion.getId());
 
         GameQuestionDTO questionToSend = firstQuestion.toBuilder().build();
         questionToSend.setCorrectAnswer(null);
-        questionToSend.setRelationshipPath(null);
+        // relationshipPath'i null yapmıyoruz, çünkü frontend'de harita göstermek için gerekli
 
         return InitialGameDataDTO.builder()
                 .sessionId(newSession.getSessionId())
                 .firstQuestion(questionToSend)
                 .playerName(playerName)
                 .difficulty(difficulty)
+                .gameDurationInSeconds(gameDurationInSeconds)
+                .totalQuestions(totalQuestions)
                 .build();
     }
 
@@ -254,7 +265,7 @@ public class GameServiceImpl implements GameService {
             }
 
             String correctAnswerKey = result.getMessageKey();
-            correctAnswerText = getMessage(correctAnswerKey, locale, p1.getFirstName(), p2.getFirstName());
+            correctAnswerText = getMessage(correctAnswerKey, locale);
             isCorrect = normalizeAnswer(correctAnswerText).equals(normalizeAnswer(answerDetails.getAnswer()));
 
             // On correct answer, include the path for graph visualization
@@ -285,7 +296,7 @@ public class GameServiceImpl implements GameService {
                     timeTaken != null ? timeTaken : 0L,
                     session.getCurrentStreak().get());
 
-                session.recordAnswer(new PlayerAnswer(answerDetails.getQuestionId(), answerDetails.getAnswer(), correctAnswerText, true), pointsEarned);
+                session.recordAnswer(new PlayerAnswer(answerDetails.getQuestionId(), "family", answerDetails.getAnswer(), true), pointsEarned);
 
                 log.info("Correct answer by '{}' for question '{}', earned {} points. New score: {}, streak: {}",
                     session.getPlayerName(), answerDetails.getQuestionId(), pointsEarned, session.getScore().get(), session.getCurrentStreak().get());
@@ -293,7 +304,7 @@ public class GameServiceImpl implements GameService {
                 updatedScore = session.getScore().get();
                 updatedStreak = session.getCurrentStreak().get();
             } else {
-                session.recordAnswer(new PlayerAnswer(answerDetails.getQuestionId(), answerDetails.getAnswer(), correctAnswerText, false), 0);
+                session.recordAnswer(new PlayerAnswer(answerDetails.getQuestionId(), "family", answerDetails.getAnswer(), false), 0);
 
                 log.info("Incorrect answer by '{}' for question '{}'. Score remains: {}, streak reset to 0",
                     session.getPlayerName(), answerDetails.getQuestionId(), session.getScore().get());
@@ -302,13 +313,7 @@ public class GameServiceImpl implements GameService {
                 updatedStreak = 0;
             }
 
-            if (session.isGameOver()) {
-                log.info("Game over for session '{}'. Final score: {}, questions answered: {}/{}",
-                    sessionId, session.getScore().get(), session.getQuestionsAnswered().get(), session.getTotalQuestions());
-
-                activeGameSessions.remove(sessionId);
-                return createGameOverResponse(session, null, locale);
-            }
+            // Oyun bitme kontrolünü erken yapmıyoruz, sonraki soru üretildikten sonra yapacağız
         } else {
             // Oturum yoksa, sadece istemci tarafındaki değerleri kullanalım
             if (isCorrect) {
@@ -334,19 +339,73 @@ public class GameServiceImpl implements GameService {
 
         // Next question generation (both session and non-session mode)
         GameQuestionDTO nextQuestion = null;
-        if (answerDetails.getAskedQuestionSignaturesInThisGame() != null) {
-            Set<String> askedSignatures = new HashSet<>(answerDetails.getAskedQuestionSignaturesInThisGame());
+        boolean shouldGenerateNext = true;
+        
+        // Session tabanlı oyunlarda kontroller
+        if (session != null) {
+            // Süre kontrolü
+            long currentTime = System.currentTimeMillis();
+            long elapsedSeconds = (currentTime - session.getStartTime()) / 1000;
+            if (elapsedSeconds >= session.getGameDurationInSeconds()) {
+                shouldGenerateNext = false;
+                log.info("Oyun süresi doldu, yeni soru üretilmiyor. Session: {}, Geçen süre: {}s", sessionId, elapsedSeconds);
+            }
+            
+            // Soru sayısı kontrolü
+            if (session.getQuestionsAnswered().get() >= session.getTotalQuestions()) {
+                shouldGenerateNext = false;
+                log.info("Toplam soru sayısına ulaşıldı, yeni soru üretilmiyor. Session: {}, Cevaplanan: {}/{}", 
+                        sessionId, session.getQuestionsAnswered().get(), session.getTotalQuestions());
+            }
+        }
+        
+        if (shouldGenerateNext) {
+            Set<String> askedSignatures = new HashSet<>();
+            
+            // Session varsa session'dan sorulan soruları ekle
+            if (session != null) {
+                askedSignatures.addAll(session.getAskedQuestionSignatures());
+            }
+            
+            // Frontend'den gelen soruları da ekle (fallback için)
+            if (answerDetails.getAskedQuestionSignaturesInThisGame() != null) {
+                askedSignatures.addAll(answerDetails.getAskedQuestionSignaturesInThisGame());
+            }
+            
             nextQuestion = generateNewQuestion(answerDetails.getDifficulty(), askedSignatures);
 
             if (nextQuestion != null) {
                 // Don't send the correct answer to client
                 GameQuestionDTO clientQuestion = nextQuestion.toBuilder().build();
                 clientQuestion.setCorrectAnswer(null);
-                clientQuestion.setRelationshipPath(null);
+                // relationshipPath'i null yapmıyoruz, çünkü frontend'de harita göstermek için gerekli
                 nextQuestion = clientQuestion;
+                
+                // Session'da yeni soruyu kaydet
+                if (session != null) {
+                    session.getAskedQuestionSignatures().add(nextQuestion.getId());
+                }
+                log.info("Yeni soru üretildi. Session: {}, Soru ID: {}, Toplam soru: {}", 
+                        sessionId, nextQuestion.getId(), session != null ? session.getAskedQuestionSignatures().size() : "N/A");
+            } else {
+                log.warn("Yeni soru üretilemedi, oyunu bitirme sinyali göndereceğiz. Session: {}", sessionId);
             }
         }
 
+        // Oyun bitme kontrolü - sadece yeni soru üretilemediğinde ya da session limitine ulaşıldığında
+        boolean isGameOver = false;
+        if (session != null) {
+            // Session varsa: toplam soru sayısına ulaşıldıysa ya da süre dolduya ya da yeni soru üretilemediğinde oyun biter
+            isGameOver = session.areAllQuestionsAnswered() || session.isTimeUp() || nextQuestion == null;
+            
+            if (isGameOver) {
+                log.info("Game over for session '{}'. Final score: {}, questions answered: {}/{}",
+                    sessionId, session.getScore().get(), session.getQuestionsAnswered().get(), session.getTotalQuestions());
+            }
+        } else if (nextQuestion == null) {
+            isGameOver = true;
+        }
+        
         // Build the response (both session and non-session mode)
         AnswerResponseDTO response = AnswerResponseDTO.builder()
                 .correctAnswer(isCorrect)
@@ -355,9 +414,15 @@ public class GameServiceImpl implements GameService {
                 .updatedScore(updatedScore)
                 .updatedStreak(updatedStreak)
                 .nextQuestion(nextQuestion)
-                .gameOver(false)
+                .gameOver(isGameOver)
                 .relationshipPath(relationshipPath)
                 .build();
+
+        // Oyun bitti ise session'ı temizle
+        if (isGameOver && session != null) {
+            activeGameSessions.remove(sessionId);
+            log.info("Oyun bitti, session temizlendi: {}", sessionId);
+        }
 
         return response;
     }
@@ -488,21 +553,21 @@ public class GameServiceImpl implements GameService {
                 continue;
             }
 
-            GameQuestionDTO question = createQuestionDTO(p1, p2, descResult, difficulty);
+            GameQuestionDTO question = createQuestionDTO(p1, p2, descResult, difficulty, locale);
 
             if (question.getOptions().size() < 2) {
-                log.warn("Soru için yeterli seçenek üretilemedi (P1:{}, P2:{}, Doğru Cevap Key: {}, Seçenek Sayısı: {}).", p1.getId(), p2.getId(), question.getCorrectAnswer(), question.getOptions().size());
+                log.warn("Soru için yeterli seçenek üretilemedi (P1:{}, P2:{}, Doğru Cevap: {}, Seçenek Sayısı: {}).", p1.getId(), p2.getId(), question.getCorrectAnswer(), question.getOptions().size());
                 continue;
             }
 
-            log.info("Geçerli soru üretildi: ID {}, P1:{}, P2:{}, Zorluk: {}, Cevap Key: {}", question.getId(), p1.getId(), p2.getId(), difficulty, question.getCorrectAnswer());
+            log.info("Geçerli soru üretildi: ID {}, P1:{}, P2:{}, Zorluk: {}, Cevap: {}", question.getId(), p1.getId(), p2.getId(), difficulty, question.getCorrectAnswer());
             return question;
         }
         log.warn("{} denemeden sonra {} zorluğunda geçerli bir soru üretilemedi.", MAX_ATTEMPTS_IN_GENERATE_INTERNAL, difficulty);
         return null;
     }
 
-    private List<String> generateOptions(Difficulty difficulty, String correctAnswerKey, List<String> acceptableCorrectAnswerKeys) {
+    private List<String> generateOptions(Difficulty difficulty, String correctAnswerKey, List<String> acceptableCorrectAnswerKeys, Locale locale) {
         Set<String> optionKeys = new LinkedHashSet<>();
         if (correctAnswerKey != null) {
             optionKeys.add(correctAnswerKey);
@@ -510,20 +575,18 @@ public class GameServiceImpl implements GameService {
 
         Set<String> allPossibleKeys = new HashSet<>();
         // Genel ve temel anahtarlar
-        allPossibleKeys.add("relationship.parent");
-        allPossibleKeys.add("relationship.child");
-        allPossibleKeys.add("relationship.spouse");
-        allPossibleKeys.add("relationship.sibling");
-        allPossibleKeys.add("relationship.grandparent");
-        allPossibleKeys.add("relationship.grandchild");
-        allPossibleKeys.add("relationship.aunt_uncle");
-        allPossibleKeys.add("relationship.nephew_niece");
+        allPossibleKeys.add("relationship.direct.parent.parent");
+        allPossibleKeys.add("relationship.reverse.child.child");
+        allPossibleKeys.add("relationship.direct.spouse.spouse");
+        allPossibleKeys.add("relationship.sibling.neutral");
+        allPossibleKeys.add("relationship.grandparent.neutral");
+        allPossibleKeys.add("relationship.grandchild.neutral");
+        allPossibleKeys.add("relationship.auntuncle.neutral");
+        allPossibleKeys.add("relationship.nephewniece.neutral");
         allPossibleKeys.add("relationship.cousin");
-        allPossibleKeys.add("relationship.inlaw.parent");
-        allPossibleKeys.add("relationship.inlaw.sibling");
-        allPossibleKeys.add("relationship.inlaw.father");
-        allPossibleKeys.add("relationship.inlaw.mother");
-        allPossibleKeys.add("relationship.no_relation");
+        allPossibleKeys.add("relationship.inlawparent.neutral");
+        allPossibleKeys.add("relationship.inlawchild.neutral");
+        allPossibleKeys.add("relationship.not_found");
 
         // Doğru cevapları ve kabul edilebilir alternatiflerini seçenek havuzundan çıkar
         optionKeys.forEach(allPossibleKeys::remove);
@@ -541,9 +604,15 @@ public class GameServiceImpl implements GameService {
             optionKeys.add(key);
         }
 
-        List<String> finalOptions = new ArrayList<>(optionKeys);
-        Collections.shuffle(finalOptions);
-        return finalOptions;
+        // Anahtarları çevirilen metinlere dönüştür
+        List<String> translatedOptions = new ArrayList<>();
+        for (String key : optionKeys) {
+            String translatedText = getMessage(key, locale);
+            translatedOptions.add(translatedText);
+        }
+
+        Collections.shuffle(translatedOptions);
+        return translatedOptions;
     }
 
     private boolean isUnwantedRelationshipKey(String messageKey) {
@@ -557,6 +626,11 @@ public class GameServiceImpl implements GameService {
 
     private boolean isAppropriateForDifficulty(RelationshipDescriptionResult relationshipResult, Difficulty gameDifficulty, Person p1, Person p2) {
         if (relationshipResult.getStatus() != RelationshipStatus.FOUND) {
+            return false;
+        }
+        
+        if (p1 == null || p2 == null) {
+            log.warn("isAppropriateForDifficulty called with null parameters: p1={}, p2={}", p1, p2);
             return false;
         }
 
@@ -764,7 +838,7 @@ public class GameServiceImpl implements GameService {
 
         if (existingHighScore != null) {
             if (newScore > existingHighScore.getScore()) {
-                // Mevcut skoru güncelle
+                // Mevcut yüksek skoru güncelle
                 existingHighScore.setScore(newScore);
                 existingHighScore.setCorrectAnswers(scoreDetails.getCorrectAnswers() >= 0 ? scoreDetails.getCorrectAnswers() : 0);
                 existingHighScore.setTotalQuestions(scoreDetails.getTotalQuestions() >= 0 ? scoreDetails.getTotalQuestions() : 0);
@@ -774,8 +848,11 @@ public class GameServiceImpl implements GameService {
                 newHighScoreBeaten = true;
                 log.info("Oyuncu '{}' için {} zorluğundaki mevcut yüksek skor ({}) aşıldı. Yeni skor: {}", playerName, difficulty, existingHighScore.getScore(), newScore);
             } else {
-                log.info("Oyuncu '{}' için {} zorluğundaki yeni skor ({}), mevcut en yüksek skordan ({}) düşük veya eşit. Skor tablosu güncellenmeyecek.", playerName, difficulty, newScore, existingHighScore.getScore());
-                throw new GameException(getMessage("game.error.score_not_high_enough", LocaleContextHolder.getLocale(), existingHighScore.getScore()));
+                // Düşük skor olsa da oyun sonucunu kaydet, sadece yüksek skor tablosunu güncelleme
+                log.info("Oyuncu '{}' için {} zorluğundaki yeni skor ({}), mevcut en yüksek skordan ({}) düşük veya eşit. Yüksek skor tablosu güncellenmeyecek ancak oyun sonucu kaydediliyor.", playerName, difficulty, newScore, existingHighScore.getScore());
+                // Mevcut en yüksek skoru referans olarak kullan ama yeni GameResultDTO döndür
+                scoreToSaveOrUpdate = null;
+                newHighScoreBeaten = false;
             }
         } else {
             // Bu oyuncu ve zorluk için ilk skor
@@ -793,19 +870,33 @@ public class GameServiceImpl implements GameService {
         }
 
         try {
-            HighScore savedScore = highScoreRepository.save(scoreToSaveOrUpdate);
-            log.info("Oyun sonucu başarıyla {} (ID: {}), Oyuncu '{}'", existingHighScore != null && newHighScoreBeaten ? "güncellendi" : "kaydedildi", savedScore.getId(), savedScore.getPlayerName());
-            GameResultDTO resultDTO = convertToGameResultDTO(savedScore);
-            return resultDTO;
+            if (scoreToSaveOrUpdate != null) {
+                HighScore savedScore = highScoreRepository.save(scoreToSaveOrUpdate);
+                log.info("Oyun sonucu başarıyla {} (ID: {}), Oyuncu '{}'", existingHighScore != null && newHighScoreBeaten ? "güncellendi" : "kaydedildi", savedScore.getId(), savedScore.getPlayerName());
+                return convertToGameResultDTO(savedScore);
+            } else {
+                // Yüksek skor tablosu güncellenmedi ama oyun sonucu kaydedildi
+                log.info("Oyuncu '{}' için {} zorluğunda oyun sonucu başarıyla kaydedildi (skor: {})", playerName, difficulty, newScore);
+                return GameResultDTO.builder()
+                        .playerName(playerName)
+                        .score(newScore)
+                        .difficulty(difficulty)
+                        .date(LocalDate.now())
+                        .correctAnswers(scoreDetails.getCorrectAnswers() >= 0 ? scoreDetails.getCorrectAnswers() : 0)
+                        .totalQuestions(scoreDetails.getTotalQuestions() >= 0 ? scoreDetails.getTotalQuestions() : 0)
+                        .maxStreak(scoreDetails.getMaxStreak() >= 0 ? scoreDetails.getMaxStreak() : 0)
+                        .build();
+            }
         } catch (Exception e) {
             log.error("HighScore kaydedilirken/güncellenirken hata oluştu: Oyuncu '{}'. Hata: {}", playerName, e.getMessage(), e);
             return GameResultDTO.builder()
                     .playerName(playerName)
                     .score(newScore)
                     .difficulty(difficulty)
-                    .correctAnswers(scoreDetails.getCorrectAnswers())
-                    .totalQuestions(scoreDetails.getTotalQuestions())
-                    .maxStreak(scoreDetails.getMaxStreak())
+                    .date(LocalDate.now())
+                    .correctAnswers(scoreDetails.getCorrectAnswers() >= 0 ? scoreDetails.getCorrectAnswers() : 0)
+                    .totalQuestions(scoreDetails.getTotalQuestions() >= 0 ? scoreDetails.getTotalQuestions() : 0)
+                    .maxStreak(scoreDetails.getMaxStreak() >= 0 ? scoreDetails.getMaxStreak() : 0)
                     .build();
         }
     }
@@ -943,27 +1034,147 @@ public class GameServiceImpl implements GameService {
         return currentCache;
     }
 
-    private GameQuestionDTO createQuestionDTO(Person p1, Person p2, RelationshipDescriptionResult descResult, Difficulty difficulty) {
+    private GameQuestionDTO createQuestionDTO(Person p1, Person p2, RelationshipDescriptionResult descResult, Difficulty difficulty, Locale locale) {
         String questionSignature = p1.getId() + "_" + p2.getId();
 
         String correctAnswerKey = descResult.getMessageKey();
-        List<String> optionKeys = generateOptions(difficulty, correctAnswerKey, descResult.getAcceptableMessageKeys());
+        String correctAnswerText = getMessage(correctAnswerKey, locale);
+        List<String> translatedOptions = generateOptions(difficulty, correctAnswerKey, descResult.getAcceptableMessageKeys(), locale);
 
         // DTO'ya kişi isimlerini ekle
         String person1FullName = p1.getFirstName() + " " + p1.getLastName();
         String person2FullName = p2.getFirstName() + " " + p2.getLastName();
+        
+        // Soru metnini oluştur
+        String questionText = getMessage("game.question.text", locale, person1FullName, person2FullName);
+
+        // Zorluk derecesine göre ilişki yolunu filtreleme
+        List<RelationshipStepDTO> filteredPath = filterPathByDifficulty(descResult.getPath(), difficulty);
 
         return GameQuestionDTO.builder()
                 .id(questionSignature)
+                .questionText(questionText) // Soru metni eklendi
                 .person1(person1FullName) // `person1` alanını kullanıyoruz
                 .person2(person2FullName) // `person2` alanını kullanıyoruz
-                .options(optionKeys)
-                .correctAnswer(correctAnswerKey)
+                .options(translatedOptions)
+                .correctAnswer(correctAnswerText) // Çevrilmiş doğru cevap
                 .difficulty(difficulty)
                 .timeLimit(gameProperties.getTimeLimit(difficulty))
                 .person1Info(personMapper.personToPersonInfo(p1))
                 .person2Info(personMapper.personToPersonInfo(p2))
-                .relationshipPath(descResult.getPath())
+                .relationshipPath(filteredPath)
                 .build();
+    }
+
+    /**
+     * Zorluk derecesine göre ilişki yolunu filtreler
+     * EASY: Sadece başlangıç ve bitiş düğümlerini göster
+     * MEDIUM: Tüm düğümleri göster ama ilişki etiketlerini "?" ile gizle
+     * HARD: Tüm düğümler ve ilişki etiketlerini göster
+     */
+    private List<RelationshipStepDTO> filterPathByDifficulty(List<RelationshipStepDTO> originalPath, Difficulty difficulty) {
+        if (originalPath == null || originalPath.isEmpty()) {
+            return originalPath;
+        }
+
+        switch (difficulty) {
+            case EASY:
+                // Sadece ilk ve son düğümü göster, aralarında "?" ile bağla
+                if (originalPath.size() <= 1) {
+                    return originalPath;
+                }
+                RelationshipStepDTO firstStep = originalPath.get(0);
+                RelationshipStepDTO lastStep = originalPath.get(originalPath.size() - 1);
+                
+                // İlk adımı kopyala ve ilişkiyi gizle
+                RelationshipStepDTO hiddenFirstStep = new RelationshipStepDTO(
+                    firstStep.getPersonId(),
+                    firstStep.getPersonName(),
+                    firstStep.getPersonGender(),
+                    firstStep.getPersonBirthYear(),
+                    "?", // İlişkiyi gizle
+                    firstStep.isSourcePerson(),
+                    false, // Ara düğüm değil
+                    lastStep.getPersonId(),
+                    lastStep.getPersonName(),
+                    firstStep.getRelationshipTypeName(),
+                    firstStep.getRelationshipStartDate(),
+                    firstStep.getRelationshipEndDate()
+                );
+                
+                return Arrays.asList(hiddenFirstStep);
+
+            case MEDIUM:
+                // Tüm düğümleri göster ama ilişki etiketlerini gizle
+                return originalPath.stream()
+                    .map(step -> new RelationshipStepDTO(
+                        step.getPersonId(),
+                        step.getPersonName(),
+                        step.getPersonGender(),
+                        step.getPersonBirthYear(),
+                        "?", // İlişkiyi gizle
+                        step.isSourcePerson(),
+                        step.isTargetPerson(),
+                        step.getNextPersonId(),
+                        step.getNextPersonName(),
+                        step.getRelationshipTypeName(),
+                        step.getRelationshipStartDate(),
+                        step.getRelationshipEndDate()
+                    ))
+                    .collect(Collectors.toList());
+
+            case HARD:
+            default:
+                // Tüm düğümler ve ilişki etiketlerini göster
+                return originalPath;
+        }
+    }
+
+    @Override
+    public GameAnalysisDTO getGameAnalysis(String sessionId) {
+        log.info("Oyun analizi isteniyor, Session ID: {}", sessionId);
+        
+        GameSession session = activeGameSessions.get(sessionId);
+        if (session == null) {
+            log.warn("Session bulunamadı: {}", sessionId);
+            throw new GameException("Oyun oturumu bulunamadı: " + sessionId);
+        }
+        
+        try {
+            GameAnalysisDTO analysis = gameAnalysisService.analyzeGameSession(session);
+            log.info("Analiz başarıyla oluşturuldu, Session: {}", sessionId);
+            return analysis;
+        } catch (Exception e) {
+            log.error("Analiz oluşturulurken hata: {}", e.getMessage(), e);
+            throw new GameException("Analiz oluşturulurken hata: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public GameAnalysisDTO endGame(String sessionId) {
+        log.info("Oyun bitiriliyor, Session ID: {}", sessionId);
+        
+        GameSession session = activeGameSessions.get(sessionId);
+        if (session == null) {
+            log.warn("Session bulunamadı: {}", sessionId);
+            throw new GameException("Oyun oturumu bulunamadı: " + sessionId);
+        }
+        
+        try {
+            // Session'ı pasif hale getir
+            session.setActive(false);
+            
+            // Final analizi oluştur
+            GameAnalysisDTO finalAnalysis = gameAnalysisService.analyzeGameSession(session);
+            
+            // Session'ı temizle
+            activeGameSessions.remove(sessionId);
+            
+            log.info("Oyun başarıyla bitirildi ve analiz oluşturuldu, Session: {}", sessionId);
+            return finalAnalysis;
+        } catch (Exception e) {
+            log.error("Oyun bitirilirken hata: {}", e.getMessage(), e);
+            throw new GameException("Oyun bitirilirken hata: " + e.getMessage());
+        }
     }
 } 

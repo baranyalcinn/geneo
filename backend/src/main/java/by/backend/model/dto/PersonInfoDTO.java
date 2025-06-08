@@ -6,7 +6,7 @@ import lombok.*;
 @Getter
 @Setter
 @ToString
-@Builder
+@Builder(access = lombok.AccessLevel.PUBLIC)
 @NoArgsConstructor
 @AllArgsConstructor
 public class PersonInfoDTO {

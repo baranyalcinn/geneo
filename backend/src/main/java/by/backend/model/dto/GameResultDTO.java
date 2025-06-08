@@ -3,10 +3,14 @@ package by.backend.model.dto;
 import by.backend.model.enums.Difficulty;
 import lombok.Data;
 import lombok.Builder;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 import java.util.List;
 
 @Data
-@Builder(access = lombok.AccessLevel.PUBLIC)
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class GameResultDTO {
     private String playerName;
     private int score;

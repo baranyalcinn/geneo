@@ -16,19 +16,28 @@ import by.backend.model.enums.Difficulty;
 public class GameProperties {
 
     /**
-     * Her bir zorluk seviyesi için oyun süresi (saniye cinsinden).
+     * Her bir zorluk seviyesi için oyun süresi (saniye cinsinden) - 3 dakika toplam oyun
      */
     private Map<Difficulty, @Min(30) Integer> durationInSeconds = new EnumMap<>(Map.of(
-            Difficulty.EASY, 300,
-            Difficulty.MEDIUM, 300,
-            Difficulty.HARD, 300
+            Difficulty.EASY, 180,    // 3 dakika
+            Difficulty.MEDIUM, 180,  // 3 dakika
+            Difficulty.HARD, 180     // 3 dakika
     ));
 
     /**
-     * Bir oyun oturumunda sorulacak toplam soru sayısı.
+     * Bir oyun oturumunda sorulacak toplam soru sayısı - Sabit 10 soru
      */
     @Min(1)
     private int questionsPerGame = 10;
+    
+    /**
+     * Her soru için maksimum süre (saniye cinsinden) - 18 saniye ortalama
+     */
+    private Map<Difficulty, @Min(5) Integer> questionTimeLimit = new EnumMap<>(Map.of(
+            Difficulty.EASY, 20,     // Kolay sorular için 20 saniye
+            Difficulty.MEDIUM, 18,   // Orta sorular için 18 saniye
+            Difficulty.HARD, 15      // Zor sorular için 15 saniye
+    ));
 
     /**
      * Her bir zorluk seviyesi için seçenek sayısı.
@@ -45,5 +54,9 @@ public class GameProperties {
 
     public int getOptionsCount(Difficulty difficulty) {
         return optionsCount.getOrDefault(difficulty, 4);
+    }
+    
+    public int getQuestionTimeLimit(Difficulty difficulty) {
+        return questionTimeLimit.getOrDefault(difficulty, 18);
     }
 } 

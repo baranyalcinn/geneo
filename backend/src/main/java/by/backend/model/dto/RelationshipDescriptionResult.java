@@ -3,25 +3,27 @@ package by.backend.model.dto;
 // import by.backend.model.entity.Person; // Person importu kaldırıldı
 import by.backend.model.enums.RelationshipStatus;
 import by.backend.model.enums.RelationshipType;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
 @Data
 @Builder
-// @AllArgsConstructor anotasyonunu kaldırıyorum çünkü @Builder zaten constructor oluşturuyor
+@NoArgsConstructor
+@AllArgsConstructor
 public class RelationshipDescriptionResult {
-    private final RelationshipStatus status;
-    private final String messageKey;
-    private final List<String> acceptableMessageKeys;
-    private final String localizedDescription;
-    private final List<RelationshipStepDTO> path;
-    private final PersonSummaryDTO person1; // PersonSummaryDTO olarak değiştirildi
-    private final PersonSummaryDTO person2; // PersonSummaryDTO olarak değiştirildi
-    private final RelationshipType directTypeIfApplicable;
-    private final RelationshipPathDTO relationshipPath;
+    private RelationshipStatus status;
+    private String messageKey;
+    private List<String> acceptableMessageKeys;
+    private String localizedDescription;
+    private List<RelationshipStepDTO> path;
+    private PersonSummaryDTO person1;
+    private PersonSummaryDTO person2;
+    private RelationshipType directTypeIfApplicable;
+    private RelationshipPathDTO relationshipPath;
 }
 
 /* Java 16+ Record alternative:

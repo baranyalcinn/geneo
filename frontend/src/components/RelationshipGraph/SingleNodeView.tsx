@@ -1,10 +1,10 @@
 import React from 'react';
 import { Box } from '@mui/material';
-import { NodeProps, Position } from 'reactflow';
-import CustomNode from './CustomNode'; // CustomNode aynı dizinde veya doğru yolda olmalı
+import { NodeProps, Position } from '@xyflow/react';
+import CustomNode from './CustomNode';
 
 interface SingleNodeViewProps {
-  node: NodeProps['data']; // CustomNode'un beklediği data tipi
+  node: any;
   width?: string;
   height?: string;
 }
@@ -15,20 +15,25 @@ const SingleNodeView: React.FC<SingleNodeViewProps> = ({
   height = "100%",
 }) => {
   // CustomNode'a geçilecek NodeProps benzeri bir obje oluşturalım
-  // CustomNode'un beklentilerine göre bu props'ları ayarlamanız gerekebilir.
-  const nodePropsForCustomNode: NodeProps = {
-    id: node.id || 'single-node', // Eğer node.id yoksa varsayılan bir id
-    data: node, // Gelen node verisi doğrudan data olarak geçiliyor
+  const nodePropsForCustomNode: any = {
+    id: node.id || 'single-node',
+    data: node.data || node,
     type: 'custom',
     selected: false,
     isConnectable: false,
-    xPos: 0, // Merkezi konum için x
-    yPos: 0, // Merkezi konum için y
     zIndex: 1,
     dragging: false,
     targetPosition: Position.Left,
     sourcePosition: Position.Right,
-    // CustomNode'un beklediği diğer zorunlu olmayan propslar varsa buraya eklenebilir
+    width: node.width,
+    height: node.height,
+    dragHandle: node.dragHandle,
+    parentId: node.parentId,
+    deletable: false,
+    focusable: node.focusable,
+    selectable: node.selectable,
+    measured: node.measured || { width: 0, height: 0 },
+    resizing: false,
   };
 
   return (

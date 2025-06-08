@@ -1,5 +1,6 @@
 import React, { useMemo, useEffect, useState } from "react";
-import ReactFlow, {
+import {
+  ReactFlow,
   Controls,
   Background,
   MiniMap,
@@ -8,8 +9,8 @@ import ReactFlow, {
   Edge,
   useReactFlow,
   BackgroundVariant,
-} from "reactflow";
-import "reactflow/dist/style.css"; // React Flow stilleri
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css"; // React Flow stilleri
 import {
   Box,
   useTheme,
@@ -24,21 +25,6 @@ import GraphNodeErrorState from "./RelationshipGraph/GraphNodeErrorState";
 import SingleNodeView from "./RelationshipGraph/SingleNodeView";
 import { RelationshipStep } from "../types/game";
 
-// Backend'den gelecek DTO'nun arayüz tanımı
-/*
-interface RelationshipStep {
-  id: string | number; // SingleNodeView ve ReactFlow node'ları için ID gerekli
-  personId: number;
-  personName: string;
-  personGender?: "Erkek" | "Kadın" | string;
-  personBirthYear?: number;
-  personDeathYear?: number;
-  relationshipToNextPerson?: string;
-  sourcePerson: boolean;
-  targetPerson: boolean;
-}
-*/
-
 interface RelationshipGraphProps {
   path?: RelationshipStep[];
   height?: string;
@@ -46,7 +32,7 @@ interface RelationshipGraphProps {
 }
 
 // Bileşen dışında tipleri tanımla - CustomNode import edildiği için nodeTypes'ı güncelle
-export const nodeTypes = { custom: CustomNode };
+export const nodeTypes: any = { custom: CustomNode };
 export const edgeTypes = {};
 
 // Flow bileşeni - ReactFlow Provider içerisinde
@@ -67,24 +53,27 @@ const FlowComponent: React.FC<{
   }, [nodes, fitView]);
 
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      fitView
-      fitViewOptions={{ padding: 0.25, duration: 450 }}
-      style={{
-        background:
-          theme.palette.mode === "dark"
-            ? alpha(theme.palette.grey[900], 0.9)
-            : alpha(theme.palette.grey[50], 0.9),
-      }}
-      proOptions={{ hideAttribution: true }}
-      zoomOnScroll={true}
-      panOnScroll={true}
-      minZoom={0.5}
-      maxZoom={1.5}
-    >
+    <div style={{ width: "100%", height: "100%" }}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        fitView
+        fitViewOptions={{ padding: 0.25, duration: 450 }}
+        style={{
+          width: "100%",
+          height: "100%",
+          background:
+            theme.palette.mode === "dark"
+              ? alpha(theme.palette.grey[900], 0.9)
+              : alpha(theme.palette.grey[50], 0.9),
+        }}
+        proOptions={{ hideAttribution: true }}
+        zoomOnScroll={true}
+        panOnScroll={true}
+        minZoom={0.5}
+        maxZoom={1.5}
+      >
       <Controls
         style={{
           left: 15,
@@ -136,6 +125,7 @@ const FlowComponent: React.FC<{
         }}
       />
     </ReactFlow>
+    </div>
   );
 };
 
@@ -145,6 +135,9 @@ const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
   height = "600px",
   width = "100%",
 }) => {
+  // React Flow için minimum boyutları garanti etmek
+  const containerHeight = height === "100%" ? "100%" : (parseInt(height as string) < 300 ? "300px" : height);
+  const containerWidth = width === "100%" ? "100%" : (parseInt(width as string) < 300 ? "300px" : width);
   const theme = useTheme();
   const [isLoading, setIsLoading] = useState(true);
   const themeMode = theme.palette.mode;
@@ -174,28 +167,28 @@ const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
   }, []);
 
   if (isLoading) {
-    return <GraphLoadingIndicator width={width} height={height} />;
+    return <GraphLoadingIndicator width={containerWidth} height={containerHeight} />;
   }
 
   if (!path || path.length === 0) {
-    return <GraphEmptyState width={width} height={height} />;
+    return <GraphEmptyState width={containerWidth} height={containerHeight} />;
   }
 
   if (initialNodes.length === 0 && path && path.length > 0) {
-    return <GraphNodeErrorState width={width} height={height} />;
+    return <GraphNodeErrorState width={containerWidth} height={containerHeight} />;
   }
   
   if (layoutedNodes.length === 1 && layoutedNodes[0]?.data) {
-    const singleNodeData = layoutedNodes[0].data as RelationshipStep;
-    return <SingleNodeView node={singleNodeData} width={width} height={height} />;
+    return <SingleNodeView node={layoutedNodes[0]} width={containerWidth} height={containerHeight} />;
   }
   
   return (
     <Box
       sx={{
-        width: width,
-        height: height,
+        width: containerWidth,
+        height: containerHeight,
         minHeight: "350px",
+        minWidth: "300px",
         border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
         borderRadius: `${Number(theme.shape.borderRadius) * 1.5}px`,
         overflow: "hidden",
@@ -239,6 +232,10 @@ const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
         "& .react-flow__attribution": {
           background: "transparent",
           color: theme.palette.text.secondary,
+        },
+        "& .react-flow__pane": {
+          width: "100%",
+          height: "100%",
         },
       }}
     >

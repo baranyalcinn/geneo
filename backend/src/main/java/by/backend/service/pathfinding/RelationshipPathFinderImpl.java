@@ -12,7 +12,6 @@ import org.springframework.context.MessageSource;
 import org.springframework.context.NoSuchMessageException;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;//used for constructor
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -25,12 +24,10 @@ public class RelationshipPathFinderImpl implements RelationshipPathFinder {
     private final MessageSource messageSource;
     private final RelationshipProperties relationshipProperties;
 
-    // Constants for gender, can be shared or defined locally if not accessed elsewhere
     private static final String GENDER_MALE = "ERKEK";
     private static final String GENDER_FEMALE = "KADIN";
     private static final String GENDER_UNKNOWN = "BILINMEYEN";
 
-    // Helper record for BFS state (copied from RelationshipServiceImpl)
     private record PathExpansionState(List<Relationship> relationsInPath, Person currentEndPerson, Set<Long> personsInThisPathIds) {}
 
     @Override

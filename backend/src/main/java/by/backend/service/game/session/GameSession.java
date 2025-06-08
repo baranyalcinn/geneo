@@ -5,7 +5,7 @@ import by.backend.model.enums.Difficulty;
 import lombok.Data;
 import lombok.NonNull;
 
-import java.time.Instant;
+
 import java.util.List;
 import java.util.Queue;
 import java.util.Set;
@@ -36,13 +36,14 @@ public class GameSession {
     private final Queue<GameQuestionDTO> questions;
     private final Set<String> askedQuestionSignatures = new CopyOnWriteArraySet<>();
     private final List<PlayerAnswer> playerAnswers = new CopyOnWriteArrayList<>();
+    private boolean active = true;
 
     public GameSession(@NonNull String sessionId, @NonNull String playerName, @NonNull Difficulty difficulty,
                        long gameDurationInSeconds, int totalQuestions, List<GameQuestionDTO> gameQuestions) {
         this.sessionId = sessionId;
         this.playerName = playerName;
         this.difficulty = difficulty;
-        this.startTime = Instant.now().getEpochSecond();
+        this.startTime = System.currentTimeMillis();
         this.gameDurationInSeconds = gameDurationInSeconds;
         this.totalQuestions = totalQuestions;
         this.questions = new ConcurrentLinkedQueue<>(gameQuestions);
@@ -51,7 +52,9 @@ public class GameSession {
     }
 
     public boolean isTimeUp() {
-        return (Instant.now().getEpochSecond() - startTime) > gameDurationInSeconds;
+        long currentTime = System.currentTimeMillis();
+        long elapsedSeconds = (currentTime - startTime) / 1000;
+        return elapsedSeconds > gameDurationInSeconds;
     }
 
     public boolean areAllQuestionsAnswered() {
@@ -78,5 +81,9 @@ public class GameSession {
         } else {
             currentStreak.set(0);
         }
+    }
+
+    public int getCorrectAnswers() {
+        return (int) playerAnswers.stream().filter(PlayerAnswer::isCorrect).count();
     }
 } 

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Node, Edge } from 'reactflow';
+import { Node, Edge } from '@xyflow/react';
 import dagre from 'dagre';
 import {
     GRAPH_NODE_WIDTH,
@@ -43,8 +43,8 @@ export const useRelationshipGraphLayout = ({
 
         nodes.forEach((node) => {
             // graphUtils'ta node.data içine width ve height ekledik, onları kullanalım
-            const nodeWidth = node.data?.width || GRAPH_NODE_WIDTH;
-            const nodeHeight = node.data?.height || GRAPH_NODE_HEIGHT;
+            const nodeWidth = (node.data as any)?.width || GRAPH_NODE_WIDTH;
+            const nodeHeight = (node.data as any)?.height || GRAPH_NODE_HEIGHT;
             dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
         });
 
@@ -62,8 +62,8 @@ export const useRelationshipGraphLayout = ({
                     // Dagre düğümün merkezini verir, React Flow sol üst köşeyi bekler.
                     // Bu yüzden düğüm genişliğinin/yüksekliğinin yarısını çıkarıyoruz.
                     position: {
-                        x: nodeWithPosition.x - (node.data?.width || GRAPH_NODE_WIDTH) / 2,
-                        y: nodeWithPosition.y - (node.data?.height || GRAPH_NODE_HEIGHT) / 2,
+                        x: nodeWithPosition.x - ((node.data as any)?.width || GRAPH_NODE_WIDTH) / 2,
+                        y: nodeWithPosition.y - ((node.data as any)?.height || GRAPH_NODE_HEIGHT) / 2,
                     },
                 };
             }

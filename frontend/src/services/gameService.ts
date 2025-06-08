@@ -32,6 +32,7 @@ export interface RelationshipStep {
 
 export interface GameQuestion {
   id: string;
+  questionText?: string;
   person1: string;
   person2: string;
   options: string[];

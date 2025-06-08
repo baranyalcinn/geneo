@@ -27,7 +27,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import LoadingIndicator from '../components/ui/LoadingIndicator';
 import ErrorMessage from '../components/ui/ErrorMessage';
 import RelationshipGraph from '../components/RelationshipGraph';
-import { ReactFlowProvider } from 'reactflow';
+import { ReactFlowProvider } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 
 import { 
@@ -44,7 +44,8 @@ import {
   getQuestion, 
   submitAnswer, 
   getHighScores,
-  recordGameResult
+  recordGameResult,
+  startGame as startGameSession
 } from '../services/gameService';
 
 // Styled components tanımlamaları
@@ -107,15 +108,19 @@ const GameCard = styled(Paper)(({ theme }) => ({
   boxShadow: `0 2px 10px ${alpha(theme.palette.common.black, 0.1)}`,
 }));
 
-const OptionButton = styled(FormControlLabel)(({ theme }) => ({
+const OptionButton = styled(FormControlLabel, {
+  shouldForwardProp: (prop) => prop !== 'isSelected'
+})<{ isSelected?: boolean }>(({ theme, isSelected }) => ({
   width: '100%',
   margin: theme.spacing(0.5, 0),
   padding: theme.spacing(1),
   borderRadius: theme.shape.borderRadius,
-  border: `1px solid ${theme.palette.divider}`,
+  border: `2px solid ${isSelected ? theme.palette.primary.main : theme.palette.divider}`,
+  backgroundColor: isSelected ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
   transition: 'all 0.2s ease',
+  cursor: 'pointer',
   '&:hover': {
-    backgroundColor: alpha(theme.palette.primary.main, 0.05),
+    backgroundColor: isSelected ? alpha(theme.palette.primary.main, 0.15) : alpha(theme.palette.primary.main, 0.05),
     transform: 'translateY(-1px)',
     boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.08)}`,
   },
@@ -239,6 +244,11 @@ const FamilyRelationGame = () => {
       return currentRelationshipPath;
     }
 
+    // Backend'den gelen relationshipPath varsa onu kullan
+    if (currentQuestion?.relationshipPath && currentQuestion.relationshipPath.length > 0) {
+      return currentQuestion.relationshipPath;
+    }
+
     // Eğer soru bilgisi yoksa, boş bir grafik göster
     if (!currentQuestion || !currentQuestion.person1Info || !currentQuestion.person2Info) {
       return undefined;
@@ -248,7 +258,7 @@ const FamilyRelationGame = () => {
     const { person1Info, person2Info } = currentQuestion;
     const relationshipLabel = showResult ? (lastAnswerResponse?.correctAnswerText || '...') : `?`;
 
-    return [
+    const basicPath = [
       {
         personId: String(person1Info.id),
         personName: person1Info.fullName,
@@ -267,6 +277,8 @@ const FamilyRelationGame = () => {
         targetPerson: true,
       }
     ];
+
+    return basicPath;
   }, [currentQuestion, currentRelationshipPath, showResult, lastAnswerResponse, t]);
   const person1InfoToDisplay = currentQuestion?.person1Info || null;
   const person2InfoToDisplay = currentQuestion?.person2Info || null;
@@ -304,22 +316,32 @@ const FamilyRelationGame = () => {
   const resetTimer = () => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
+      timerRef.current = null;
     }
     setTimeRemaining(currentQuestion?.timeLimit || 30);
   };
   
   useEffect(() => {
-    if (gameStarted && !gameOver && timeRemaining > 0) {
+    if (gameStarted && !gameOver && !showResult && timeRemaining > 0) {
       timerRef.current = setInterval(() => {
-        setTimeRemaining((prev) => prev - 1);
+        setTimeRemaining((prev) => {
+          if (prev <= 1) {
+            handleTimerEnd();
+            return 0;
+          }
+          return prev - 1;
+        });
       }, 1000);
-    } else if (timeRemaining === 0 && gameStarted && !gameOver) {
-        checkAnswer(''); // Süre dolunca boş cevapla kontrol et
+    } else if (timeRemaining === 0 && gameStarted && !gameOver && !showResult) {
+      checkAnswer(''); // Süre dolunca boş cevapla kontrol et
     }
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     };
-  }, [gameStarted, gameOver, timeRemaining]);
+  }, [gameStarted, gameOver, showResult, timeRemaining]);
 
 
   const handleTimerEnd = () => {
@@ -331,18 +353,24 @@ const FamilyRelationGame = () => {
     }
   };
 
-  const handleNextQuestion = () => {
+  const handleNextQuestion = (nextQuestion?: GameQuestionType, result?: AnswerResponse) => {
     setShowResult(false);
     setSelectedAnswer('');
     setLastAnswerResponse(null);
     setCurrentRelationshipPath(undefined);
     setShowHint(false);
     
-    if (lastAnswerResponse?.nextQuestion) {
-      setCurrentQuestionSafely(lastAnswerResponse.nextQuestion);
+    const questionToUse = nextQuestion || result?.nextQuestion || lastAnswerResponse?.nextQuestion;
+    
+    if (questionToUse) {
+      setCurrentQuestionSafely(questionToUse);
+      setAskedQuestions(prev => [...prev, questionToUse.id]);
+      setTotalQuestions(prev => prev + 1);
       resetTimer();
+      console.log('Sıradaki soru set edildi:', questionToUse.id, 'Toplam soru:', totalQuestions + 1);
     } else {
-      handleGameOver(lastAnswerResponse?.finalResult);
+      console.log('Sonraki soru bulunamadı, oyun bitiyor');
+      handleGameOver(result?.finalResult || lastAnswerResponse?.finalResult);
     }
   };
   
@@ -357,7 +385,7 @@ const FamilyRelationGame = () => {
     setShowHint(false);
 
     try {
-      const responseData = await getQuestion(currentDifficulty, askedQuestions.join(','));
+      const responseData = await getQuestion(currentDifficulty, i18n.language);
       setCurrentQuestionSafely(responseData);
       if (responseData) {
         setAskedQuestions(prev => [...prev, responseData.id]);
@@ -393,10 +421,16 @@ const FamilyRelationGame = () => {
     
     try {
       localStorage.setItem('playerName', playerName);
-      const questionData = await getQuestion(currentDifficulty, '');
-      if (questionData) {
-        setCurrentQuestionSafely(questionData);
-        setAskedQuestions([questionData.id]);
+      
+      // Start the game session on backend
+      const initialGameData = await startGameSession(playerName, currentDifficulty, i18n.language);
+      
+      if (initialGameData && initialGameData.sessionId && initialGameData.firstQuestion) {
+        // Store session ID from backend
+        localStorage.setItem('gameSessionId', initialGameData.sessionId);
+        
+        setCurrentQuestionSafely(initialGameData.firstQuestion);
+        setAskedQuestions([initialGameData.firstQuestion.id.toString()]);
         setTotalQuestions(1);
         resetTimer();
       } else {
@@ -419,18 +453,23 @@ const FamilyRelationGame = () => {
     setError(null);
     if (timerRef.current) clearInterval(timerRef.current);
 
+    const sessionId = localStorage.getItem('gameSessionId') || `session-${Date.now()}`;
+    if (!localStorage.getItem('gameSessionId')) {
+      localStorage.setItem('gameSessionId', sessionId);
+    }
+
     const answerPayload = {
-      questionId: currentQuestion.id,
-      answer: answer,
+      sessionId: sessionId,
+      questionId: currentQuestion.id.toString(),
+      answer: answer || "",
+      timeTakenInSeconds: Math.max(0, (currentQuestion.timeLimit || 30) - timeRemaining),
       difficulty: currentDifficulty,
-      playerName: playerName,
-      timeTakenInSeconds: (currentQuestion.timeLimit || 30) - timeRemaining,
-      askedQuestionSignaturesInThisGame: askedQuestions,
+      askedQuestionSignaturesInThisGame: askedQuestions.map(q => q.toString()),
       currentScore: score,
       currentStreak: currentStreak,
+      playerName: playerName || "Anonymous",
       gameQuestionCount: totalQuestions,
-      correctAnswersCount: correctAnswers,
-      sessionId: localStorage.getItem('gameSessionId') || `session-${Date.now()}`
+      correctAnswersCount: correctAnswers
     };
 
     try {
@@ -451,8 +490,12 @@ const FamilyRelationGame = () => {
 
       if (result.gameOver) {
         setTimeout(() => handleGameOver(result.finalResult), 2000);
+      } else if (result.nextQuestion) {
+        setTimeout(() => handleNextQuestion(result.nextQuestion as GameQuestionType, result as AnswerResponse), 2000);
       } else {
-        setTimeout(handleNextQuestion, 2000);
+        // Eğer nextQuestion yok ama gameOver de değilse, oyunu bitir
+        console.log('NextQuestion yok ve gameOver da false, oyunu bitiriyorum');
+        setTimeout(() => handleGameOver(result.finalResult), 2000);
       }
       
     } catch (err: any) {
@@ -600,6 +643,17 @@ const FamilyRelationGame = () => {
                     <MenuItem value={Difficulty.HARD}>{t('difficulty.hard')}</MenuItem>
                   </Select>
                 </FormControl>
+                <FormControl fullWidth variant="outlined" size="small">
+                  <InputLabel>Dil / Language</InputLabel>
+                  <Select
+                    value={i18n.language}
+                    onChange={(e) => handleLanguageChange(e.target.value)}
+                    label="Dil / Language"
+                  >
+                    <MenuItem value="tr">🇹🇷 Türkçe</MenuItem>
+                    <MenuItem value="en">🇺🇸 English</MenuItem>
+                  </Select>
+                </FormControl>
             </Box>
 
             <AnimatedButton
@@ -698,18 +752,29 @@ const FamilyRelationGame = () => {
 
   const handleGameOver = async (finalResultParam?: GameResult | null) => {
     setGameOver(true);
-    if (timerRef.current) clearInterval(timerRef.current);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
 
-    const resultToSave = finalResultParam || finalResult;
+    // Eğer backend'den final result gelmemişse, frontend'deki verilerle oluştur
+    const resultToSave = finalResultParam || {
+      playerName: playerName,
+      score: score,
+      difficulty: currentDifficulty,
+      correctAnswers: correctAnswers,
+      totalQuestions: totalQuestions,
+      maxStreak: maxStreak,
+      date: new Date().toISOString().split('T')[0]
+    };
 
-    if (resultToSave) {
-      setFinalResult(resultToSave);
-      try {
-        await recordGameResult({ ...resultToSave }, i18n.language);
-        fetchHighScores();
-      } catch (err) {
-        console.error("Skor kaydedilirken hata:", err);
-      }
+    setFinalResult(resultToSave);
+    
+    try {
+      await recordGameResult({ ...resultToSave }, i18n.language);
+      fetchHighScores();
+    } catch (err) {
+      console.error("Skor kaydedilirken hata:", err);
     }
   };
 
@@ -777,6 +842,10 @@ const FamilyRelationGame = () => {
 
   const handleLanguageChange = (lang: string) => {
     i18n.changeLanguage(lang);
+    // Eğer oyun başlamışsa yeni dilde devam etmek için sorunu yeniden al
+    if (gameStarted && currentQuestion) {
+      fetchNextQuestion();
+    }
   };
   
   if (!gameStarted) {
@@ -875,7 +944,7 @@ const FamilyRelationGame = () => {
                 variant="body1" 
                 sx={{ mb: 1.5, fontWeight: "500" }}
               >
-                {t('game.question', { person1: person1, person2: person2 })}
+                {currentQuestion.questionText || t('game.question', { person1: person1, person2: person2 })}
               </Typography>
             </QuestionCard>
 
@@ -891,15 +960,16 @@ const FamilyRelationGame = () => {
                 value={selectedAnswer}
                 onChange={(e) => setSelectedAnswer(e.target.value)}
               >
-                {options.map((option) => (
+                {options.map((option, index) => (
                   <OptionButton
-                    key={option}
+                    key={`${option}-${index}`}
                     value={option}
+                    isSelected={selectedAnswer === option}
                     control={<Radio sx={{display: 'none'}} />}
                     label={
                       <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                        <Typography variant="body1" sx={{ flexGrow: 1 }}>
-                          {t(option as any, { ns: 'relationships', defaultValue: option })}
+                        <Typography variant="body1" sx={{ flexGrow: 1, fontWeight: selectedAnswer === option ? 600 : 400 }}>
+                          {option}
                         </Typography>
                         {showResult && selectedAnswer === option && (
                           isCorrect ? <CheckCircleIcon color="success" /> : <CancelIcon color="error" />
@@ -912,12 +982,12 @@ const FamilyRelationGame = () => {
                     disabled={showResult || isLoading}
                     sx={{
                       ...(showResult && lastAnswerResponse?.correctAnswerText === option && {
-                        borderColor: theme.palette.success.main,
-                        backgroundColor: alpha(theme.palette.success.light, 0.2),
+                        borderColor: `${theme.palette.success.main} !important`,
+                        backgroundColor: `${alpha(theme.palette.success.light, 0.2)} !important`,
                       }),
                       ...(showResult && selectedAnswer === option && !isCorrect && {
-                        borderColor: theme.palette.error.main,
-                        backgroundColor: alpha(theme.palette.error.light, 0.2),
+                        borderColor: `${theme.palette.error.main} !important`,
+                        backgroundColor: `${alpha(theme.palette.error.light, 0.2)} !important`,
                       }),
                     }}
                     onClick={() => !showResult && !isLoading && setSelectedAnswer(option)}
@@ -960,18 +1030,24 @@ const FamilyRelationGame = () => {
               </Box>
             </Box>
             
-            <GameCard sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <GameCard sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: '400px' }}>
               <Typography variant="subtitle1" fontWeight="medium" sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
                 {t('relationship_map')} ({formatDifficulty(questionDifficulty)})
               </Typography>
-              <Box sx={{ flexGrow: 1, position: 'relative' }}>
-                <ReactFlowProvider>
-                  <RelationshipGraph 
-                    path={relationshipPathForGraph}
-                    height="100%"
-                    width="100%"
-                  />
-                </ReactFlowProvider>
+              <Box sx={{ 
+                flexGrow: 1, 
+                position: 'relative', 
+                width: '100%', 
+                height: '350px', // Sabit yükseklik
+                minHeight: '350px',
+                maxHeight: '500px', // Maksimum yükseklik
+                '& > *': { width: '100%', height: '100%' } // Child elementlere boyut veriyoruz
+              }}>
+                <RelationshipGraph 
+                  path={relationshipPathForGraph}
+                  height="100%"
+                  width="100%"
+                />
               </Box>
             </GameCard>
           </Box>

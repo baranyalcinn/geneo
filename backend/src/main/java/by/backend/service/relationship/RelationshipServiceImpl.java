@@ -125,15 +125,20 @@ public class RelationshipServiceImpl implements RelationshipService {
 
     @Override
     @Transactional(readOnly = true)
-    @Cacheable(value = "relationshipStatus", key = "#person1.id + '-' + #person2.id + '-' + #type")
+    @Cacheable(value = "relationshipStatus", key = "#person1.id + '-' + #person2.id + '-' + #type", condition = "#person1 != null && #person2 != null")
     public boolean hasActiveRelationship(Person person1, Person person2, by.backend.model.enums.RelationshipType type) {
         return relationshipRepository.findActiveRelationship(person1, person2, type).isPresent();
     }
 
     @Override
     @Transactional(readOnly = true)
-    @Cacheable(value = "relationshipPaths", key = "#person1.id + '-' + #person2.id")
+    @Cacheable(value = "relationshipPaths", key = "#person1.id + '-' + #person2.id", condition = "#person1 != null && #person2 != null")
     public List<RelationshipStepDTO> getRelationshipPath(Person person1, Person person2) {
+        if (person1 == null || person2 == null) {
+            log.warn("getRelationshipPath called with null parameters: person1={}, person2={}", person1, person2);
+            return Collections.emptyList();
+        }
+        
         if (person1.getId().equals(person2.getId())) {
             return Collections.emptyList();
         }

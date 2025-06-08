@@ -8,8 +8,10 @@ import by.backend.model.dto.RecordScoreRequestDTO;
 import by.backend.model.dto.GameResultDTO;
 import by.backend.model.dto.StartGameRequestDTO;
 import by.backend.model.dto.GameQuestionDTO;
+import by.backend.model.dto.GameAnalysisDTO;
 import by.backend.model.enums.Difficulty;
 import by.backend.service.game.GameService;
+import by.backend.service.game.GameAnalysisService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -28,9 +30,11 @@ public class GameController {
 
     private static final Logger logger = LoggerFactory.getLogger(GameController.class);
     private final GameService gameService;
+    private final GameAnalysisService gameAnalysisService;
 
-    public GameController(GameService gameService) {
+    public GameController(GameService gameService, GameAnalysisService gameAnalysisService) {
         this.gameService = gameService;
+        this.gameAnalysisService = gameAnalysisService;
     }
 
     @PostMapping("/start")
@@ -62,12 +66,46 @@ public class GameController {
                                                    @RequestParam(name = "lang", required = false) String lang) {
         try {
             Locale locale = lang != null ? Locale.forLanguageTag(lang) : Locale.getDefault();
-            if (gameAnswer == null || gameAnswer.getQuestionId() == null || gameAnswer.getAnswer() == null || gameAnswer.getDifficulty() == null) {
-                logger.warn("POST /answer: Eksik bilgi ile çağrıldı: {}", gameAnswer);
-                Map<String, Object> errorBody = Map.of("message", "Soru ID, cevap ve zorluk seviyesi gereklidir.");
+            
+            // Improved validation
+            if (gameAnswer == null) {
+                logger.warn("POST /answer: Request body is null");
+                Map<String, Object> errorBody = Map.of("message", "Request body gereklidir.");
                 return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
             }
-            logger.info("POST /answer: Oyuncu: {}, Soru ID: {}, Cevap: {}, Dil: {}", gameAnswer.getPlayerName(), gameAnswer.getQuestionId(), gameAnswer.getAnswer(), locale.toLanguageTag());
+            
+            if (gameAnswer.getSessionId() == null || gameAnswer.getSessionId().trim().isEmpty()) {
+                logger.warn("POST /answer: Session ID eksik: {}", gameAnswer);
+                Map<String, Object> errorBody = Map.of("message", "Session ID gereklidir.");
+                return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
+            }
+            
+            if (gameAnswer.getQuestionId() == null || gameAnswer.getQuestionId().trim().isEmpty()) {
+                logger.warn("POST /answer: Question ID eksik: {}", gameAnswer);
+                Map<String, Object> errorBody = Map.of("message", "Soru ID gereklidir.");
+                return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
+            }
+            
+            if (gameAnswer.getAnswer() == null) {
+                logger.warn("POST /answer: Answer is null, setting empty string: {}", gameAnswer);
+                gameAnswer.setAnswer("");
+            }
+            
+            if (gameAnswer.getDifficulty() == null) {
+                logger.warn("POST /answer: Difficulty eksik: {}", gameAnswer);
+                Map<String, Object> errorBody = Map.of("message", "Zorluk seviyesi gereklidir.");
+                return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
+            }
+            
+            if (gameAnswer.getPlayerName() == null || gameAnswer.getPlayerName().trim().isEmpty()) {
+                logger.warn("POST /answer: Player name eksik, setting default: {}", gameAnswer);
+                gameAnswer.setPlayerName("Anonymous");
+            }
+            
+            logger.info("POST /answer: Oyuncu: {}, Soru ID: {}, Cevap: {}, Session: {}, Dil: {}", 
+                       gameAnswer.getPlayerName(), gameAnswer.getQuestionId(), gameAnswer.getAnswer(), 
+                       gameAnswer.getSessionId(), locale.toLanguageTag());
+            
             AnswerResponseDTO answerResponse = gameService.answerQuestion(gameAnswer, locale);
             return new ResponseEntity<>(answerResponse, HttpStatus.OK);
         } catch (GameException e) {
@@ -81,8 +119,8 @@ public class GameController {
         }
     }
 
-    @PostMapping("/record-result")
-    public ResponseEntity<Object> recordResult(@RequestBody RecordScoreRequestDTO scoreRequest,
+    @PostMapping("/record-score")
+    public ResponseEntity<Object> recordScore(@RequestBody RecordScoreRequestDTO scoreRequest,
                                                  @RequestParam(name = "lang", required = false) String lang) {
         try {
             if (scoreRequest == null) {
@@ -166,12 +204,17 @@ public class GameController {
         try {
             Locale locale = lang != null ? Locale.forLanguageTag(lang) : Locale.getDefault();
             Difficulty difficulty;
-            if (difficultyStr == null || difficultyStr.isEmpty()) {
+            if (difficultyStr == null || difficultyStr.trim().isEmpty()) {
                 // Varsayılan zorluk seviyesi
                 difficulty = Difficulty.MEDIUM;
                 logger.info("GET /question: Zorluk seviyesi belirtilmedi, varsayılan olarak {} kullanılıyor", difficulty);
             } else {
-                difficulty = Difficulty.valueOf(difficultyStr.toUpperCase());
+                try {
+                    difficulty = Difficulty.valueOf(difficultyStr.toUpperCase());
+                } catch (IllegalArgumentException e) {
+                    logger.warn("GET /question: Geçersiz zorluk seviyesi: {}, varsayılan {} kullanılıyor", difficultyStr, Difficulty.MEDIUM);
+                    difficulty = Difficulty.MEDIUM;
+                }
             }
 
             GameQuestionDTO question = gameService.generateQuestion(difficulty, locale);
@@ -188,6 +231,68 @@ public class GameController {
         } catch (Exception e) {
             logger.error("GET /question: Soru oluşturulurken beklenmedik bir hata oluştu (Zorluk: {}): {}", difficultyStr, e.getMessage(), e);
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PostMapping("/analysis")
+    public ResponseEntity<Object> getGameAnalysis(@RequestParam String sessionId) {
+        try {
+            logger.info("POST /analysis: Oyun analizi isteniyor, Session ID: {}", sessionId);
+            
+            if (sessionId == null || sessionId.trim().isEmpty()) {
+                logger.warn("POST /analysis: Session ID eksik");
+                Map<String, Object> errorBody = Map.of("message", "Session ID gereklidir.");
+                return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
+            }
+            
+            GameAnalysisDTO analysis = gameService.getGameAnalysis(sessionId);
+            if (analysis != null) {
+                logger.info("POST /analysis: Analiz başarıyla oluşturuldu, Session: {}", sessionId);
+                return new ResponseEntity<>(analysis, HttpStatus.OK);
+            } else {
+                logger.warn("POST /analysis: Session bulunamadı: {}", sessionId);
+                Map<String, Object> errorBody = Map.of("message", "Oyun oturumu bulunamadı.");
+                return new ResponseEntity<>(errorBody, HttpStatus.NOT_FOUND);
+            }
+        } catch (GameException e) {
+            logger.error("POST /analysis: Analiz oluşturulurken özel hata (Session: {}): {}", sessionId, e.getMessage());
+            Map<String, Object> errorBody = Map.of("message", e.getMessage());
+            return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
+        } catch (Exception e) {
+            logger.error("POST /analysis: Analiz oluşturulurken beklenmeyen hata (Session: {}): {}", sessionId, e.getMessage(), e);
+            Map<String, Object> errorBody = Map.of("message", "Analiz oluşturulurken bir hata oluştu: " + e.getMessage());
+            return new ResponseEntity<>(errorBody, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PostMapping("/end")
+    public ResponseEntity<Object> endGame(@RequestParam String sessionId) {
+        try {
+            logger.info("POST /end: Oyun bitiriliyor, Session ID: {}", sessionId);
+            
+            if (sessionId == null || sessionId.trim().isEmpty()) {
+                logger.warn("POST /end: Session ID eksik");
+                Map<String, Object> errorBody = Map.of("message", "Session ID gereklidir.");
+                return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
+            }
+            
+            GameAnalysisDTO finalAnalysis = gameService.endGame(sessionId);
+            if (finalAnalysis != null) {
+                logger.info("POST /end: Oyun başarıyla bitirildi, Session: {}", sessionId);
+                return new ResponseEntity<>(finalAnalysis, HttpStatus.OK);
+            } else {
+                logger.warn("POST /end: Session bulunamadı: {}", sessionId);
+                Map<String, Object> errorBody = Map.of("message", "Oyun oturumu bulunamadı.");
+                return new ResponseEntity<>(errorBody, HttpStatus.NOT_FOUND);
+            }
+        } catch (GameException e) {
+            logger.error("POST /end: Oyun bitirilirken özel hata (Session: {}): {}", sessionId, e.getMessage());
+            Map<String, Object> errorBody = Map.of("message", e.getMessage());
+            return new ResponseEntity<>(errorBody, HttpStatus.BAD_REQUEST);
+        } catch (Exception e) {
+            logger.error("POST /end: Oyun bitirilirken beklenmeyen hata (Session: {}): {}", sessionId, e.getMessage(), e);
+            Map<String, Object> errorBody = Map.of("message", "Oyun bitirilirken bir hata oluştu: " + e.getMessage());
+            return new ResponseEntity<>(errorBody, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 } 

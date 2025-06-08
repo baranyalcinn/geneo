@@ -2,12 +2,14 @@ package by.backend.model.dto;
 
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 import java.util.List;
 import java.util.Set;
-import lombok.AllArgsConstructor;
 
 @Data
-@Builder(access = lombok.AccessLevel.PUBLIC)
+@Builder
+@NoArgsConstructor
 @AllArgsConstructor
 public class AnswerResponseDTO {
     private boolean correctAnswer;
