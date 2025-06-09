@@ -92,7 +92,9 @@ export interface InitialGameData extends InitialGameDataType {
  */
 export const startGame = async (playerName: string, difficulty: Difficulty, lang: string): Promise<InitialGameData> => {
   const requestBody: StartGameRequest = { playerName, difficulty };
-  return apiService.post<InitialGameData>('game/start', requestBody, { params: { lang } });
+  return apiService.post<InitialGameData>('game/start', requestBody, { 
+    params: { lang } 
+  });
 };
 
 /**
@@ -161,7 +163,9 @@ export const getHighScores = async (): Promise<HighScores> => {
  */
 export const getQuestion = async (difficulty: Difficulty, lang: string): Promise<GameQuestionType> => {
   try {
-    const questionData = await apiService.get<GameQuestionType>('game/question', { params: { difficulty, lang } });
+    const questionData = await apiService.get<GameQuestionType>('game/question', { 
+      params: { difficulty, lang } 
+    });
     
     if (questionData) {
       return {
@@ -183,7 +187,9 @@ export const getQuestion = async (difficulty: Difficulty, lang: string): Promise
  * @returns A promise that resolves to the result of the answer, conforming to the AnswerResponseType.
  */
 export const submitAnswer = async (answerDetails: GameAnswer, lang: string): Promise<AnswerResponse> => {
-  return apiService.post<AnswerResponse>('game/answer', answerDetails, { params: { lang } });
+  return apiService.post<AnswerResponse>('game/answer', answerDetails, { 
+    params: { lang } 
+  });
 };
 
 /**
@@ -194,7 +200,9 @@ export const submitAnswer = async (answerDetails: GameAnswer, lang: string): Pro
  */
 export const recordGameResult = async (scoreDetails: RecordScoreRequest, lang: string): Promise<GameResultType> => {
   try {
-    const result = await apiService.post<GameResultType>('game/record-score', scoreDetails, { params: { lang } });
+    const result = await apiService.post<GameResultType>('game/record-score', scoreDetails, { 
+      params: { lang } 
+    });
     return result;
   } catch (error) {
      console.error("Oyun sonucu kaydedilirken hata oluştu:", error);

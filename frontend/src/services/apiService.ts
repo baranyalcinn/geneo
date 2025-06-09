@@ -90,37 +90,31 @@ const pendingRequests = new Map<string, Promise<any>>();
 // İstek kütüphanesi
 export const apiService = {
   // GET istekleri için metod
-  async get<T>(endpoint: string, params?: any, config?: AxiosRequestConfig): Promise<T> {
-    let queryString = '';
-    if (params) {
-      const searchParams = new URLSearchParams();
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          searchParams.append(key, value as string);
-        }
-      });
-      queryString = searchParams.toString();
-    }
+  async get<T>(endpoint: string, options?: { params?: any; config?: AxiosRequestConfig }): Promise<T> {
+    const { params, config } = options || {};
     
-    const url = `${endpoint}${queryString ? `?${queryString}` : ''}`;
-    console.log(`GET isteği hazırlanıyor: ${url}`);
+    // Axios'un kendi parametre işleme mantığını kullan
+    const requestConfig = {
+      ...config,
+      params
+    };
     
-    // Cache key'e dil bilgisini ekleyelim ki farklı diller için farklı cache tutalım
-    const cacheKey = `GET:${url}:${i18n.language}`;
+    // Cache için URL ve parametreleri birleştir
+    const cacheKey = `GET:${endpoint}:${JSON.stringify(params || {})}:${i18n.language}`;
     const cachedResponse = cache.get(cacheKey);
     
     if (cachedResponse && Date.now() - cachedResponse.timestamp < CACHE_DURATION) {
-      console.log(`Cache hit for ${url}`);
+      console.log(`Cache hit for ${endpoint}`);
       return Promise.resolve(cachedResponse.data as T);
     }
     
     if (pendingRequests.has(cacheKey)) {
-      console.log(`Pending request reused for ${url}`);
+      console.log(`Pending request reused for ${endpoint}`);
       return pendingRequests.get(cacheKey)! as Promise<T>;
     }
     
     const requestPromise = retryRequest(() => 
-      apiClient.get<T>(url, config).then((response: AxiosResponse<T>) => {
+      apiClient.get<T>(endpoint, requestConfig).then((response: AxiosResponse<T>) => {
         cache.set(cacheKey, { data: response.data, timestamp: Date.now() });
         pendingRequests.delete(cacheKey);
         return response.data;
@@ -135,7 +129,15 @@ export const apiService = {
   },
   
   // POST istekleri için metod
-  async post<T>(endpoint: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  async post<T>(endpoint: string, data?: any, options?: { params?: any; config?: AxiosRequestConfig }): Promise<T> {
+    const { params, config } = options || {};
+    
+    // Axios'un kendi parametre işleme mantığını kullan
+    const requestConfig = {
+      ...config,
+      params
+    };
+    
     // POST sonrası ilgili GET önbelleklerini temizle (basit yaklaşım)
     // Daha sofistike bir cache invalidation stratejisi düşünülebilir.
     const baseEndpoint = endpoint.split('/')[0];
@@ -148,11 +150,19 @@ export const apiService = {
           });
     }
     
-    return retryRequest(() => apiClient.post<T>(endpoint, data, config).then((response: AxiosResponse<T>) => response.data));
+    return retryRequest(() => apiClient.post<T>(endpoint, data, requestConfig).then((response: AxiosResponse<T>) => response.data));
   },
   
   // PUT istekleri için metod
-  async put<T>(endpoint: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  async put<T>(endpoint: string, data?: any, options?: { params?: any; config?: AxiosRequestConfig }): Promise<T> {
+    const { params, config } = options || {};
+    
+    // Axios'un kendi parametre işleme mantığını kullan
+    const requestConfig = {
+      ...config,
+      params
+    };
+    
     const baseEndpoint = endpoint.split('/')[0];
      if (baseEndpoint) {
         Array.from(cache.keys())
@@ -163,11 +173,19 @@ export const apiService = {
           });
     }
 
-    return retryRequest(() => apiClient.put<T>(endpoint, data, config).then((response: AxiosResponse<T>) => response.data));
+    return retryRequest(() => apiClient.put<T>(endpoint, data, requestConfig).then((response: AxiosResponse<T>) => response.data));
   },
   
   // DELETE istekleri için metod
-  async delete<T>(endpoint: string, config?: AxiosRequestConfig): Promise<T> {
+  async delete<T>(endpoint: string, options?: { params?: any; config?: AxiosRequestConfig }): Promise<T> {
+    const { params, config } = options || {};
+    
+    // Axios'un kendi parametre işleme mantığını kullan
+    const requestConfig = {
+      ...config,
+      params
+    };
+    
     const baseEndpoint = endpoint.split('/')[0];
     if (baseEndpoint) {
         Array.from(cache.keys())
@@ -178,7 +196,7 @@ export const apiService = {
           });
     }
     
-    return retryRequest(() => apiClient.delete<T>(endpoint, config).then((response: AxiosResponse<T>) => response.data));
+    return retryRequest(() => apiClient.delete<T>(endpoint, requestConfig).then((response: AxiosResponse<T>) => response.data));
   },
   
   // Önbelleği temizleme metodu

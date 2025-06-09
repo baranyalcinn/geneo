@@ -11,9 +11,11 @@ interface PaginatedPersonsResponse {
 export const personService = {
   getAllPersons: async (page = 0, size = 20, filters?: Record<string, any>): Promise<PaginatedPersonsResponse> => {
     return apiService.get<PaginatedPersonsResponse>('persons', {
-      page,
-      size,
-      ...filters
+      params: {
+        page,
+        size,
+        ...filters
+      }
     });
   },
 
