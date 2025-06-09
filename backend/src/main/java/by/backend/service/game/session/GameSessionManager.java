@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import by.backend.config.GameProperties;
 import by.backend.model.enums.Difficulty;
 
-import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.List;
@@ -77,7 +76,6 @@ public class GameSessionManager {
      */
     @Scheduled(fixedRate = 300000) // 5 dakika
     public void cleanupExpiredSessions() {
-        long currentTime = Instant.now().getEpochSecond();
         List<String> expiredSessions = new ArrayList<>();
         
         activeSessions.forEach((sessionId, session) -> {

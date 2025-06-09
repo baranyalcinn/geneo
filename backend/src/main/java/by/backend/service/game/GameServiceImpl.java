@@ -9,6 +9,8 @@ import by.backend.model.enums.RelationshipStatus;
 import by.backend.repository.HighScoreRepository;
 import by.backend.repository.PersonRepository;
 import by.backend.service.relationship.RelationshipService;
+import by.backend.service.cache.RelationshipCache;
+import by.backend.service.graph.FamilyGraphService;
 import by.backend.mapper.PersonMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +48,8 @@ public class GameServiceImpl implements GameService {
     private final GameProperties gameProperties;
     private final AnalysisService analysisService;
     private final GameAnalysisService gameAnalysisService;
+    private final RelationshipCache relationshipCache;
+    private final FamilyGraphService familyGraphService;
     private final Map<Difficulty, List<GameQuestionDTO>> preGeneratedQuestions;
     private final ScheduledExecutorService executorService;
     private final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors();
@@ -69,7 +73,9 @@ public class GameServiceImpl implements GameService {
                          MessageSource messageSource,
                          GameProperties gameProperties,
                          AnalysisService analysisService,
-                         GameAnalysisService gameAnalysisService) {
+                         GameAnalysisService gameAnalysisService,
+                         RelationshipCache relationshipCache,
+                         FamilyGraphService familyGraphService) {
         this.personRepository = personRepository;
         this.highScoreRepository = highScoreRepository;
         this.relationshipService = relationshipService;
@@ -78,6 +84,8 @@ public class GameServiceImpl implements GameService {
         this.gameProperties = gameProperties;
         this.analysisService = analysisService;
         this.gameAnalysisService = gameAnalysisService;
+        this.relationshipCache = relationshipCache;
+        this.familyGraphService = familyGraphService;
         this.preGeneratedQuestions = new EnumMap<>(Difficulty.class);
         for (Difficulty difficulty : Difficulty.values()) {
             preGeneratedQuestions.put(difficulty, Collections.synchronizedList(new ArrayList<>()));
@@ -184,21 +192,39 @@ public class GameServiceImpl implements GameService {
     @Transactional
     public InitialGameDataDTO startGame(String playerName, Difficulty difficulty, Locale locale) {
         log.info("Starting game for player '{}' with difficulty '{}'", playerName, difficulty);
-        GameQuestionDTO firstQuestion = generateQuestionInternal(difficulty, Collections.emptySet(), locale);
+
+        GameQuestionDTO firstQuestion = null;
+        Difficulty currentDifficulty = difficulty;
+        int attempts = 0;
+        while (firstQuestion == null && attempts < Difficulty.values().length) {
+            firstQuestion = generateQuestionInternal(currentDifficulty, Collections.emptySet(), locale);
+            if (firstQuestion == null) {
+                log.warn("startGame: {} zorluğunda soru üretilemedi, bir alt zorluk deneniyor.", currentDifficulty);
+                currentDifficulty = getPreviousDifficulty(currentDifficulty);
+                if (currentDifficulty == null) {
+                    log.error("startGame: Tüm zorluk seviyeleri denendi ancak soru üretilemedi.");
+                    break;
+                }
+            }
+            attempts++;
+        }
+
         if (firstQuestion == null) {
-            log.error("startGame: İlk soru üretilemedi. Oyuncu: {}, Zorluk: {}", playerName, difficulty);
+            log.error("startGame: İlk soru üretilemedi. Oyuncu: {}, İstenen Zorluk: {}", playerName, difficulty);
             throw new GameException(getMessage("game.error.start_failed_no_question", locale));
         }
 
+        log.info("Oyun {} zorluğunda başlatıldı (istenen: {})", firstQuestion.getDifficulty(), difficulty);
+
         String sessionId = UUID.randomUUID().toString();
         // GameProperties'den değerler okunuyor
-        long gameDurationInSeconds = gameProperties.getDurationInSeconds().get(difficulty);
+        long gameDurationInSeconds = gameProperties.getDurationInSeconds().get(firstQuestion.getDifficulty());
         int totalQuestions = gameProperties.getQuestionsPerGame();
 
         GameSession newSession = new GameSession(
                 sessionId,
                 playerName,
-                difficulty,
+                firstQuestion.getDifficulty(),
                 gameDurationInSeconds,
                 totalQuestions,
                 new ArrayList<>() // Sorular oyun sırasında tek tek üretildiği için başlangıç listesi boş.
@@ -219,10 +245,19 @@ public class GameServiceImpl implements GameService {
                 .sessionId(newSession.getSessionId())
                 .firstQuestion(questionToSend)
                 .playerName(playerName)
-                .difficulty(difficulty)
+                .difficulty(firstQuestion.getDifficulty())
                 .gameDurationInSeconds(gameDurationInSeconds)
                 .totalQuestions(totalQuestions)
                 .build();
+    }
+
+    private Difficulty getPreviousDifficulty(Difficulty difficulty) {
+        if (difficulty == null) return null;
+        int currentOrdinal = difficulty.ordinal();
+        if (currentOrdinal > 0) {
+            return Difficulty.values()[currentOrdinal - 1];
+        }
+        return null; // En düşük seviyede zaten
     }
 
     @Override
@@ -428,6 +463,7 @@ public class GameServiceImpl implements GameService {
     }
 
     private AnswerResponseDTO createGameOverResponse(GameSession session, String messageKey, Locale locale) {
+        log.info("Game over response for session: {}", session.getSessionId());
         AnalysisResultDTO analysis = analysisService.analyze(session.getPlayerAnswers(), locale);
 
         GameResultDTO finalResult = GameResultDTO.builder()
@@ -515,6 +551,8 @@ public class GameServiceImpl implements GameService {
         }
 
         Random random = new Random();
+        Set<String> attemptedPairs = new HashSet<>(); // Bu session'da denenen çiftleri takip et
+        
         for (int attempt = 0; attempt < MAX_ATTEMPTS_IN_GENERATE_INTERNAL; attempt++) {
             Person p1 = candidates.get(random.nextInt(candidates.size()));
             Person p2 = candidates.get(random.nextInt(candidates.size()));
@@ -524,12 +562,21 @@ public class GameServiceImpl implements GameService {
                 continue;
             }
 
-            String questionSignature = p1.getId() + "_" + p2.getId();
+            // Her iki yöndeki soruları da kontrol et (P1->P2 ve P2->P1)
+            String questionSignature1 = p1.getId() + "_" + p2.getId();
+            String questionSignature2 = p2.getId() + "_" + p1.getId();
+            String attemptSignature = Math.min(p1.getId(), p2.getId()) + "_" + Math.max(p1.getId(), p2.getId());
 
-            if (askedSignatures.contains(questionSignature)) {
+            if (askedSignatures.contains(questionSignature1) || askedSignatures.contains(questionSignature2)) {
                  log.debug("Bu kişi çifti ({}-{}) daha önce sorulmuş, tekrar denenecek.", p1.getId(), p2.getId());
                 continue;
             }
+            
+            if (attemptedPairs.contains(attemptSignature)) {
+                log.debug("Bu kişi çifti ({}-{}) bu oturumda denendi, tekrar denenecek.", p1.getId(), p2.getId());
+                continue;
+            }
+            attemptedPairs.add(attemptSignature);
 
             PersonSummaryDTO p1Summary = personMapper.toSummaryDTO(p1);
             PersonSummaryDTO p2Summary = personMapper.toSummaryDTO(p2);
@@ -559,6 +606,12 @@ public class GameServiceImpl implements GameService {
                 log.warn("Soru için yeterli seçenek üretilemedi (P1:{}, P2:{}, Doğru Cevap: {}, Seçenek Sayısı: {}).", p1.getId(), p2.getId(), question.getCorrectAnswer(), question.getOptions().size());
                 continue;
             }
+            
+            // Soru kalitesini kontrol et
+            if (!isQuestionQualityGood(question, descResult)) {
+                log.debug("Soru kalitesi yetersiz (P1:{}, P2:{}), tekrar denenecek.", p1.getId(), p2.getId());
+                continue;
+            }
 
             log.info("Geçerli soru üretildi: ID {}, P1:{}, P2:{}, Zorluk: {}, Cevap: {}", question.getId(), p1.getId(), p2.getId(), difficulty, question.getCorrectAnswer());
             return question;
@@ -567,26 +620,79 @@ public class GameServiceImpl implements GameService {
         return null;
     }
 
-    private List<String> generateOptions(Difficulty difficulty, String correctAnswerKey, List<String> acceptableCorrectAnswerKeys, Locale locale) {
+    private List<String> generateOptions(Difficulty difficulty, String correctAnswerKey, List<String> acceptableCorrectAnswerKeys, Locale locale, Person p1, Person p2) {
+        // Cinsiyete göre seçenek üretmek için p1 ve p2 eklendi.
         Set<String> optionKeys = new LinkedHashSet<>();
         if (correctAnswerKey != null) {
             optionKeys.add(correctAnswerKey);
         }
 
         Set<String> allPossibleKeys = new HashSet<>();
-        // Genel ve temel anahtarlar
-        allPossibleKeys.add("relationship.direct.parent.parent");
-        allPossibleKeys.add("relationship.reverse.child.child");
-        allPossibleKeys.add("relationship.direct.spouse.spouse");
-        allPossibleKeys.add("relationship.sibling.neutral");
-        allPossibleKeys.add("relationship.grandparent.neutral");
-        allPossibleKeys.add("relationship.grandchild.neutral");
-        allPossibleKeys.add("relationship.auntuncle.neutral");
-        allPossibleKeys.add("relationship.nephewniece.neutral");
-        allPossibleKeys.add("relationship.cousin");
-        allPossibleKeys.add("relationship.inlawparent.neutral");
-        allPossibleKeys.add("relationship.inlawchild.neutral");
-        allPossibleKeys.add("relationship.not_found");
+        
+        // Cinsiyetleri al
+        boolean p1IsMale = "MALE".equalsIgnoreCase(p1.getGender().name());
+        boolean p2IsMale = "MALE".equalsIgnoreCase(p2.getGender().name());
+
+        // ========== CİNSİYETE GÖRE FİLTRELENMİŞ KESİN İLİŞKİ TANIMLARI ==========
+
+        // p1 (sorulan kişi) erkek ise eklenebilecek erkek rolleri
+        if (p1IsMale) {
+            allPossibleKeys.add("relationship.parent.father");
+            allPossibleKeys.add("relationship.child.son");
+            allPossibleKeys.add("relationship.sibling.brother");
+            allPossibleKeys.add("relationship.grandparent.grandfather");
+            allPossibleKeys.add("relationship.grandchild.grandson");
+            allPossibleKeys.add("relationship.maternal_uncle");
+            allPossibleKeys.add("relationship.paternal_uncle");
+            allPossibleKeys.add("relationship.nephew");
+            allPossibleKeys.add("relationship.cousin.male");
+            allPossibleKeys.add("relationship.inlaw.father");
+            allPossibleKeys.add("relationship.inlaw.brother");
+            allPossibleKeys.add("relationship.sibling_spouse.male"); // Enişte
+        }
+        // p1 (sorulan kişi) kadın ise eklenebilecek kadın rolleri
+        else {
+            allPossibleKeys.add("relationship.parent.mother");
+            allPossibleKeys.add("relationship.child.daughter");
+            allPossibleKeys.add("relationship.sibling.sister");
+            allPossibleKeys.add("relationship.grandparent.grandmother");
+            allPossibleKeys.add("relationship.grandchild.granddaughter");
+            allPossibleKeys.add("relationship.maternal_aunt");
+            allPossibleKeys.add("relationship.paternal_aunt");
+            allPossibleKeys.add("relationship.niece");
+            allPossibleKeys.add("relationship.cousin.female");
+            allPossibleKeys.add("relationship.inlaw.mother");
+            allPossibleKeys.add("relationship.inlaw.sister_of_wife");
+            allPossibleKeys.add("relationship.inlaw.sister_of_husband");
+            allPossibleKeys.add("relationship.sibling_spouse.female"); // Yenge
+        }
+        
+        // Cinsiyetten bağımsız veya her iki cinsiyete de uygulanabilenler
+        allPossibleKeys.add("relationship.spouse");
+        
+        // p2'ye (referans alınan kişi) göre damat/gelin ekle
+        if(p2IsMale) {
+            allPossibleKeys.add("relationship.inlaw.daughter"); // Gelini
+        } else {
+            allPossibleKeys.add("relationship.inlaw.son"); // Damadı
+        }
+
+        // Eş kardeşinin eşi (Bacanak/Elti) - Sadece Hard seviyede
+        if (difficulty == Difficulty.HARD) {
+            if (p1IsMale) {
+                 allPossibleKeys.add("relationship.spouse_sibling_spouse.bacanak");
+            } else {
+                 allPossibleKeys.add("relationship.spouse_sibling_spouse.elti");
+            }
+        }
+
+        // Zorluk seviyesine göre ek seçenekler
+        if (difficulty == Difficulty.HARD) {
+            allPossibleKeys.add("relationship.distant_relative");
+        }
+        
+        // Her zaman "İlişki yok" seçeneği ekle
+        allPossibleKeys.add("game.distractor.no_relation");
 
         // Doğru cevapları ve kabul edilebilir alternatiflerini seçenek havuzundan çıkar
         optionKeys.forEach(allPossibleKeys::remove);
@@ -594,34 +700,111 @@ public class GameServiceImpl implements GameService {
             acceptableCorrectAnswerKeys.forEach(allPossibleKeys::remove);
         }
 
-        List<String> remainingKeys = new ArrayList<>(allPossibleKeys);
+        // Kategoriye uygun seçenekleri öncelendir
+        List<String> prioritizedKeys = new ArrayList<>();
+        List<String> remainingKeys = new ArrayList<>();
+        
+        for (String key : allPossibleKeys) {
+            String keyCategory = getRelationshipCategory(key);
+            if (keyCategory.equals(correctCategory) || isRelatedCategory(correctCategory, keyCategory)) {
+                prioritizedKeys.add(key);
+            } else {
+                remainingKeys.add(key);
+            }
+        }
+        
+        Collections.shuffle(prioritizedKeys);
         Collections.shuffle(remainingKeys);
+        
+        // Önce benzer kategorilerden, sonra diğerlerinden seç
+        List<String> allKeys = new ArrayList<>(prioritizedKeys);
+        allKeys.addAll(remainingKeys);
 
         int optionsCount = gameProperties.getOptionsCount(difficulty);
 
-        for (String key : remainingKeys) {
+        for (String key : allKeys) {
             if (optionKeys.size() >= optionsCount) break;
             optionKeys.add(key);
         }
 
-        // Anahtarları çevirilen metinlere dönüştür
+        // Anahtarları çevirilen metinlere dönüştür ve çeviri kalitesini kontrol et
         List<String> translatedOptions = new ArrayList<>();
         for (String key : optionKeys) {
             String translatedText = getMessage(key, locale);
-            translatedOptions.add(translatedText);
+            // Çevrilmemiş key'leri atlama
+            if (!translatedText.equals(key) && !translatedText.startsWith("relationship.")) {
+                translatedOptions.add(translatedText);
+            }
+        }
+        
+        // Minimum seçenek sayısını garanti et
+        while (translatedOptions.size() < 3) {
+            translatedOptions.add("İlişki yok");
         }
 
         Collections.shuffle(translatedOptions);
         return translatedOptions;
     }
+    
+    /**
+     * İki kategori arasında benzerlik olup olmadığını kontrol eder
+     */
+    private boolean isRelatedCategory(String category1, String category2) {
+        if (category1 == null || category2 == null) return false;
+        
+        // Benzer kategoriler
+        Set<String> familyCore = Set.of("direct", "siblings");
+        Set<String> familyExtended = Set.of("grandparent", "grandchild", "aunt_uncle", "nephew_niece");
+        Set<String> familyInlaw = Set.of("inlaw");
+        Set<String> familyCousin = Set.of("cousin");
+        
+        if (familyCore.contains(category1) && familyCore.contains(category2)) return true;
+        if (familyExtended.contains(category1) && familyExtended.contains(category2)) return true;
+        if (familyInlaw.contains(category1) && familyInlaw.contains(category2)) return true;
+        if (familyCousin.contains(category1) && familyCousin.contains(category2)) return true;
+        
+        return false;
+    }
 
     private boolean isUnwantedRelationshipKey(String messageKey) {
-        if (messageKey == null) return true; // Null key istenmeyen olarak kabul edilebilir
-        return messageKey.equals("relationship.indirect.relationship.distant") ||
-               messageKey.equals("relationship.indirect.relationship.undefined") ||
-               messageKey.equals("relationship.friend") || // Örnek: Arkadaş ilişkisi anahtarı
-               messageKey.equals("relationship.colleague") || // Örnek: İş arkadaşı anahtarı
-               messageKey.contains("acquaintance"); // Örnek: Tanıdık içeren anahtarlar
+        if (messageKey == null) return true;
+        
+        // İlişki bulunamayan veya belirsiz durumlar
+        if (messageKey.equals("relationship.not_found") ||
+            messageKey.equals("relationship.distant_relative") ||
+            messageKey.equals("relationship.error") ||
+            messageKey.equals("relationship.unknown") ||
+            messageKey.contains("indirect") ||
+            messageKey.contains("friend") ||
+            messageKey.contains("colleague") ||
+            messageKey.contains("acquaintance")) {
+            return true;
+        }
+        
+        // SADECE MUĞLAK/TEKNİK TERİMLER YASAK - TÜRK AİLE YAPISINA UYGUN TERİMLER İZİNLİ
+        if (messageKey.contains("inlaw.sibling") ||   // Genel "kayın kardeş" - muğlak
+            messageKey.contains("inlaw.child") ||     // Genel "kayın çocuk" - muğlak  
+            messageKey.contains("inlaw.parent")) {    // Genel "kayın ebeveyn" - muğlak
+            return true;
+        }
+        
+        // Spesifik ve kesin tanımlı Türk aile yapısı terimleri İZİNLİ:
+        // - relationship.inlaw.sister_of_wife (Baldızı)
+        // - relationship.inlaw.sister_of_husband (Görümcesi)  
+        // - relationship.spouse_sibling_spouse.bacanak (Bacanağı)
+        // - relationship.spouse_sibling_spouse.elti (Eltisi)
+        // - relationship.sibling_spouse.male (Eniştesi)
+        // - relationship.sibling_spouse.female (Yengesi)
+        
+        // GENEL/BELİRSİZ TERİMLER YASAK
+        if (messageKey.contains("aunt_uncle") ||   // Amca/Dayı/Hala/Teyze - belirsiz
+            messageKey.contains("nephew_niece") || // Yeğeni - cinsiyet belirsiz
+            messageKey.contains("grandparent") ||  // Büyükebeveyn - cinsiyet belirsiz
+            messageKey.contains("grandchild")) {   // Torun - cinsiyet belirsiz
+            return true;
+        }
+        
+        return false;
     }
 
     private boolean isAppropriateForDifficulty(RelationshipDescriptionResult relationshipResult, Difficulty gameDifficulty, Person p1, Person p2) {
@@ -706,15 +889,26 @@ public class GameServiceImpl implements GameService {
         switch (gameDifficulty) {
             case EASY:
                 // Kolay: Temel ilişkiler (1. derece akraba, karmaşıklık 1-2)
-                isAppropriate = relationshipComplexity <= 2;
+                // Doğrudan aile bağları: ebeveyn, çocuk, eş, kardeş, büyükanne/büyükbaba
+                isAppropriate = relationshipComplexity <= 2 && 
+                    (relationshipCategory.equals("direct") || 
+                     relationshipCategory.equals("siblings") || 
+                     relationshipCategory.equals("grandparent") || 
+                     relationshipCategory.equals("grandchild"));
                 break;
             case MEDIUM:
-                // Orta: Genişletilmiş ilişkiler (2. derece akraba, karmaşıklık 2-3)
-                isAppropriate = relationshipComplexity >= 2 && relationshipComplexity <= 3;
+                // Orta: Genişletilmiş ilişkiler (amca, dayı, hala, teyze, yeğen, kuzen)
+                isAppropriate = (relationshipComplexity >= 2 && relationshipComplexity <= 4) && 
+                    (relationshipCategory.equals("aunt_uncle") || 
+                     relationshipCategory.equals("nephew_niece") || 
+                     relationshipCategory.equals("cousin") ||
+                     relationshipCategory.equals("siblings") ||
+                     relationshipCategory.equals("grandparent") ||
+                     relationshipCategory.equals("grandchild"));
                 break;
             case HARD:
-                // Zor: Karmaşık ilişkiler (3+ derece akraba, karmaşıklık 3+)
-                isAppropriate = relationshipComplexity >= 3 && relationshipComplexity <= MAX_ALLOWED_PATH_FOR_GAME;
+                // Zor: Karmaşık ilişkiler (kayın ilişkileri, uzak akrabalar)
+                isAppropriate = relationshipComplexity >= 2 && relationshipComplexity <= MAX_ALLOWED_PATH_FOR_GAME;
                 break;
             default:
                 isAppropriate = false;
@@ -734,17 +928,36 @@ public class GameServiceImpl implements GameService {
         if (messageKey.startsWith("relationship.direct.") ||
             messageKey.equals("relationship.parent_child.parent") ||
             messageKey.equals("relationship.parent_child.child") ||
-            messageKey.equals("relationship.spouse.is_spouse_of")) {
+            messageKey.equals("relationship.spouse.is_spouse_of") ||
+            messageKey.equals("relationship.parent") ||
+            messageKey.equals("relationship.child") ||
+            messageKey.equals("relationship.spouse")) {
             return "direct";
         }
 
         if (messageKey.contains("sibling")) return "siblings";
         if (messageKey.contains("grandparent") || messageKey.contains("grandfather") || messageKey.contains("grandmother")) return "grandparent";
         if (messageKey.contains("grandchild")) return "grandchild";
-        if (messageKey.contains("aunt") || messageKey.contains("uncle")) return "aunt_uncle";
+        
+        // Anne ve baba tarafı akrabalar
+        if (messageKey.equals("relationship.maternal_uncle") || 
+            messageKey.equals("relationship.paternal_uncle") ||
+            messageKey.equals("relationship.maternal_aunt") ||
+            messageKey.equals("relationship.paternal_aunt") ||
+            messageKey.contains("aunt") || messageKey.contains("uncle")) {
+            return "aunt_uncle";
+        }
+        
         if (messageKey.contains("nephew") || messageKey.contains("niece")) return "nephew_niece";
         if (messageKey.contains("cousin")) return "cousin";
-        if (messageKey.contains("inlaw")) return "inlaw";
+        
+        // Kayın ilişkileri ve özel durumlar - Türk aile yapısına uygun  
+        if (messageKey.contains("inlaw") || 
+            messageKey.contains("sibling_spouse") ||           // Enişte/Yenge
+            messageKey.contains("spouse_sibling_spouse")) {    // Bacanak/Elti
+            return "inlaw";
+        }
+        
         if (messageKey.contains("step")) return "step";
         if (messageKey.contains("distant")) return "distant";
         if (messageKey.equals("relationship.not_found")) return "not_found";
@@ -1035,29 +1248,25 @@ public class GameServiceImpl implements GameService {
     }
 
     private GameQuestionDTO createQuestionDTO(Person p1, Person p2, RelationshipDescriptionResult descResult, Difficulty difficulty, Locale locale) {
-        String questionSignature = p1.getId() + "_" + p2.getId();
-
+        String questionText = getMessage("game.question.format", locale, p1.getFirstName(), p2.getFirstName());
         String correctAnswerKey = descResult.getMessageKey();
+        List<String> acceptableAnswerKeys = descResult.getAcceptableMessageKeys();
+
+        List<String> options = generateOptions(difficulty, correctAnswerKey, acceptableAnswerKeys, locale, p1, p2);
+
         String correctAnswerText = getMessage(correctAnswerKey, locale);
-        List<String> translatedOptions = generateOptions(difficulty, correctAnswerKey, descResult.getAcceptableMessageKeys(), locale);
-
-        // DTO'ya kişi isimlerini ekle
-        String person1FullName = p1.getFirstName() + " " + p1.getLastName();
-        String person2FullName = p2.getFirstName() + " " + p2.getLastName();
         
-        // Soru metnini oluştur
-        String questionText = getMessage("game.question.text", locale, person1FullName, person2FullName);
-
-        // Zorluk derecesine göre ilişki yolunu filtreleme
-        List<RelationshipStepDTO> filteredPath = filterPathByDifficulty(descResult.getPath(), difficulty);
+        // Path'i zorluk seviyesine göre sadeleştir
+        List<RelationshipStepDTO> relationshipPath = relationshipService.getRelationshipPath(p1, p2);
+        List<RelationshipStepDTO> filteredPath = filterPathByDifficulty(relationshipPath, difficulty);
 
         return GameQuestionDTO.builder()
-                .id(questionSignature)
-                .questionText(questionText) // Soru metni eklendi
-                .person1(person1FullName) // `person1` alanını kullanıyoruz
-                .person2(person2FullName) // `person2` alanını kullanıyoruz
-                .options(translatedOptions)
-                .correctAnswer(correctAnswerText) // Çevrilmiş doğru cevap
+                .id(descResult.getMessageKey())
+                .questionText(questionText)
+                .person1(p1.getFirstName() + " " + p1.getLastName())
+                .person2(p2.getFirstName() + " " + p2.getLastName())
+                .options(options)
+                .correctAnswer(correctAnswerText)
                 .difficulty(difficulty)
                 .timeLimit(gameProperties.getTimeLimit(difficulty))
                 .person1Info(personMapper.personToPersonInfo(p1))
@@ -1065,12 +1274,55 @@ public class GameServiceImpl implements GameService {
                 .relationshipPath(filteredPath)
                 .build();
     }
+    
+    /**
+     * Çevrilmemiş message key'ler için SADECE KEŞİN fallback çeviriler
+     * Muğlak terimler kullanılmaz!
+     */
+    private String getFallbackTranslation(String messageKey, Locale locale) {
+        if (messageKey == null) return "İlişki Tanımlanamadı";
+        
+        // SADECE KEŞİN KAYIN İLİŞKİLERİ
+        if (messageKey.contains("inlaw.son")) return "Damadı";
+        if (messageKey.contains("inlaw.daughter")) return "Gelini";
+        if (messageKey.contains("inlaw.brother")) return "Kayınbiraderi";
+        if (messageKey.contains("inlaw.sister")) return "Görümcesi";  // NET: sadece görümce
+        if (messageKey.contains("inlaw.father")) return "Kayınpederi";
+        if (messageKey.contains("inlaw.mother")) return "Kayınvalidesi";
+        
+        // KEŞİN BÜYÜKEBEVEYN/TORUN İLİŞKİLERİ
+        if (messageKey.contains("grandfather")) return "Dedesi";
+        if (messageKey.contains("grandmother")) return "Nenesi";
+        if (messageKey.contains("grandson")) return "Erkek Torunu";
+        if (messageKey.contains("granddaughter")) return "Kız Torunu";
+        
+        // NET AMCA/DAYΙ/HALA/TEYZE
+        if (messageKey.contains("paternal_uncle")) return "Amcası";
+        if (messageKey.contains("maternal_uncle")) return "Dayısı";
+        if (messageKey.contains("paternal_aunt")) return "Halası";
+        if (messageKey.contains("maternal_aunt")) return "Teyzesi";
+        
+        // KEŞİN TEMEL İLİŞKİLER
+        if (messageKey.contains("nephew")) return "Erkek Yeğeni";
+        if (messageKey.contains("niece")) return "Kız Yeğeni";
+        if (messageKey.contains("cousin.male")) return "Erkek Kuzeni";
+        if (messageKey.contains("cousin.female")) return "Kız Kuzeni";
+        if (messageKey.contains("sibling.brother")) return "Erkek Kardeşi";
+        if (messageKey.contains("sibling.sister")) return "Kız Kardeşi";
+        if (messageKey.contains("parent.father")) return "Babası";
+        if (messageKey.contains("parent.mother")) return "Annesi";
+        if (messageKey.contains("child.son")) return "Oğlu";
+        if (messageKey.contains("child.daughter")) return "Kızı";
+        if (messageKey.contains("spouse")) return "Eşi";
+        
+        // FALLBACK: Genel belirsiz terimler KULLANILMAZ
+        log.warn("Kesin tanım bulunamadı: {}", messageKey);
+        return "İlişki Belirsiz";
+    }
 
     /**
      * Zorluk derecesine göre ilişki yolunu filtreler
-     * EASY: Sadece başlangıç ve bitiş düğümlerini göster
-     * MEDIUM: Tüm düğümleri göster ama ilişki etiketlerini "?" ile gizle
-     * HARD: Tüm düğümler ve ilişki etiketlerini göster
+     * Artık "?" gösterimini kullanmıyoruz, tüm zorluk seviyelerinde gerçek ilişkileri gösteriyoruz
      */
     private List<RelationshipStepDTO> filterPathByDifficulty(List<RelationshipStepDTO> originalPath, Difficulty difficulty) {
         if (originalPath == null || originalPath.isEmpty()) {
@@ -1079,55 +1331,90 @@ public class GameServiceImpl implements GameService {
 
         switch (difficulty) {
             case EASY:
-                // Sadece ilk ve son düğümü göster, aralarında "?" ile bağla
-                if (originalPath.size() <= 1) {
+                // Kolay seviyede: Sadece doğrudan ilişkileri göster (en fazla 2 adım)
+                if (originalPath.size() <= 2) {
                     return originalPath;
+                } else {
+                    // Çok uzun yol varsa kısalt, ancak anlamlı bağlantıları koru
+                    return originalPath.subList(0, Math.min(originalPath.size(), 2));
                 }
-                RelationshipStepDTO firstStep = originalPath.get(0);
-                RelationshipStepDTO lastStep = originalPath.get(originalPath.size() - 1);
-                
-                // İlk adımı kopyala ve ilişkiyi gizle
-                RelationshipStepDTO hiddenFirstStep = new RelationshipStepDTO(
-                    firstStep.getPersonId(),
-                    firstStep.getPersonName(),
-                    firstStep.getPersonGender(),
-                    firstStep.getPersonBirthYear(),
-                    "?", // İlişkiyi gizle
-                    firstStep.isSourcePerson(),
-                    false, // Ara düğüm değil
-                    lastStep.getPersonId(),
-                    lastStep.getPersonName(),
-                    firstStep.getRelationshipTypeName(),
-                    firstStep.getRelationshipStartDate(),
-                    firstStep.getRelationshipEndDate()
-                );
-                
-                return Arrays.asList(hiddenFirstStep);
 
             case MEDIUM:
-                // Tüm düğümleri göster ama ilişki etiketlerini gizle
-                return originalPath.stream()
-                    .map(step -> new RelationshipStepDTO(
-                        step.getPersonId(),
-                        step.getPersonName(),
-                        step.getPersonGender(),
-                        step.getPersonBirthYear(),
-                        "?", // İlişkiyi gizle
-                        step.isSourcePerson(),
-                        step.isTargetPerson(),
-                        step.getNextPersonId(),
-                        step.getNextPersonName(),
-                        step.getRelationshipTypeName(),
-                        step.getRelationshipStartDate(),
-                        step.getRelationshipEndDate()
-                    ))
-                    .collect(Collectors.toList());
+                // Orta seviyede: Orta uzunluktaki yolları göster (en fazla 4 adım)
+                if (originalPath.size() <= 4) {
+                    return originalPath;
+                } else {
+                    return originalPath.subList(0, Math.min(originalPath.size(), 4));
+                }
 
             case HARD:
             default:
-                // Tüm düğümler ve ilişki etiketlerini göster
+                // Zor seviyede: Tüm düğümler ve ilişki etiketlerini göster (sınırsız)
                 return originalPath;
         }
+    }
+    
+    /**
+     * Soru kalitesini kontrol eder - SADECE KEŞİN İLİŞKİLER KABUL EDİLİR
+     */
+    private boolean isQuestionQualityGood(GameQuestionDTO question, RelationshipDescriptionResult descResult) {
+        // Soru metninin geçerli olup olmadığını kontrol et
+        if (question.getQuestionText() == null || question.getQuestionText().trim().isEmpty()) {
+            log.warn("Soru metni boş");
+            return false;
+        }
+        
+        // Doğru cevabın teknik terim içerip içermediğini kontrol et
+        String correctAnswer = question.getCorrectAnswer();
+        if (correctAnswer.startsWith("relationship.") || correctAnswer.contains("inlaw.")) {
+            log.warn("Doğru cevap çevrilmemiş teknik terim içeriyor: {}", correctAnswer);
+            return false;
+        }
+        
+        // MUĞLAK TERİMLERİN KULLANILIP KULLANILMADIĞINI KONTROL ET
+        String[] forbiddenTerms = {
+            "Baldızı", "Eltisi", "Bacanağı", "Kayını", 
+            "Büyükbabası", "Büyükannesi", // "Dedesi", "Nenesi" kullanılmalı
+            "Akrabası", "Belirsiz", "Uzak",
+            "relationship.unknown", "relationship.distant"
+        };
+        
+        for (String forbiddenTerm : forbiddenTerms) {
+            if (correctAnswer.contains(forbiddenTerm)) {
+                log.warn("Doğru cevap muğlak terim içeriyor: {} -> {}", forbiddenTerm, correctAnswer);
+                return false;
+            }
+        }
+        
+        // Seçeneklerin kalitesini kontrol et
+        for (String option : question.getOptions()) {
+            if (option.startsWith("relationship.") || option.contains("inlaw.")) {
+                log.warn("Seçenek çevrilmemiş teknik terim içeriyor: {}", option);
+                return false;
+            }
+            
+            // Muğlak terimler seçeneklerde de kabul edilmez
+            for (String forbiddenTerm : forbiddenTerms) {
+                if (option.contains(forbiddenTerm)) {
+                    log.warn("Seçenek muğlak terim içeriyor: {} -> {}", forbiddenTerm, option);
+                    return false;
+                }
+            }
+        }
+        
+        // Minimum seçenek sayısını kontrol et
+        if (question.getOptions().size() < 3) {
+            log.warn("Yetersiz seçenek sayısı: {}", question.getOptions().size());
+            return false;
+        }
+        
+        // İlişki yolunun mantıklı olup olmadığını kontrol et
+        if (question.getRelationshipPath() != null && question.getRelationshipPath().size() > 6) {
+            log.warn("İlişki yolu çok uzun: {} adım", question.getRelationshipPath().size());
+            return false;
+        }
+        
+        return true;
     }
 
     @Override

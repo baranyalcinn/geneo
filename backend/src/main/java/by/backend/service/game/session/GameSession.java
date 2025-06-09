@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NonNull;
 
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
 import java.util.Set;
@@ -46,9 +47,11 @@ public class GameSession {
         this.startTime = System.currentTimeMillis();
         this.gameDurationInSeconds = gameDurationInSeconds;
         this.totalQuestions = totalQuestions;
-        this.questions = new ConcurrentLinkedQueue<>(gameQuestions);
+        this.questions = new ConcurrentLinkedQueue<>(gameQuestions != null ? gameQuestions : new ArrayList<>());
         // Track signatures to avoid asking the same question again if the queue is refilled
-        gameQuestions.forEach(q -> this.askedQuestionSignatures.add(q.getId()));
+        if (gameQuestions != null) {
+            gameQuestions.forEach(q -> this.askedQuestionSignatures.add(q.getId()));
+        }
     }
 
     public boolean isTimeUp() {

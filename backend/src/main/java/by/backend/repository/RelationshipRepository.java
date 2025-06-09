@@ -53,4 +53,150 @@ public interface RelationshipRepository extends JpaRepository<Relationship, Long
 
     @Query("SELECT DISTINCT r FROM Relationship r LEFT JOIN FETCH r.person1 LEFT JOIN FETCH r.person2 WHERE r.person2 = :person AND r.isActive = true")
     List<Relationship> findByPerson2AndIsActiveTrue(@Param("person") Person person);
+    
+    // PathFinderService için eksik metodları ekle
+    @Query("SELECT DISTINCT r FROM Relationship r LEFT JOIN FETCH r.person1 LEFT JOIN FETCH r.person2 WHERE r.isActive = true")
+    List<Relationship> findAllByIsActiveTrue();
+    
+    @Query("SELECT DISTINCT r FROM Relationship r LEFT JOIN FETCH r.person1 LEFT JOIN FETCH r.person2 WHERE (r.person1.id = :personId OR r.person2.id = :personId) AND r.isActive = true")
+    List<Relationship> findAllActiveRelationshipsForPerson(@Param("personId") Long personId);
+    
+    // ===== OPTIMIZED BATCH QUERIES - Performance Enhancement =====
+    
+    /**
+     * Batch query for multiple persons - solves N+1 problem
+     * O(1) query instead of O(N) queries for N persons
+     */
+    @Query("SELECT DISTINCT r FROM Relationship r " +
+           "LEFT JOIN FETCH r.person1 " +
+           "LEFT JOIN FETCH r.person2 " +
+           "WHERE (r.person1.id IN :personIds OR r.person2.id IN :personIds) " +
+           "AND r.isActive = true")
+    List<Relationship> findAllByPersonIdsWithPersons(@Param("personIds") List<Long> personIds);
+    
+    /**
+     * Optimized query for specific relationship types with batch processing
+     */
+    @Query("SELECT DISTINCT r FROM Relationship r " +
+           "LEFT JOIN FETCH r.person1 " +
+           "LEFT JOIN FETCH r.person2 " +
+           "WHERE r.type IN :types AND r.isActive = true")
+    List<Relationship> findAllByTypesWithPersons(@Param("types") List<RelationshipType> types);
+    
+    /**
+     * Pre-computed distance queries for performance
+     */
+    @Query(value = """
+        WITH RECURSIVE relationship_paths AS (
+            -- Base case: direct relationships (distance 1)
+            SELECT r.person1_id, r.person2_id, r.type, 1 as distance, ARRAY[r.id] as path
+            FROM relationships r 
+            WHERE r.is_active = true 
+            AND (r.person1_id = :startPersonId OR r.person2_id = :startPersonId)
+            
+            UNION ALL
+            
+            -- Recursive case: extend paths
+            SELECT 
+                rp.person1_id, 
+                CASE 
+                    WHEN r.person1_id = (CASE WHEN rp.person1_id = :startPersonId THEN rp.person2_id ELSE rp.person1_id END) 
+                    THEN r.person2_id 
+                    ELSE r.person1_id 
+                END,
+                r.type,
+                rp.distance + 1,
+                rp.path || r.id
+            FROM relationship_paths rp
+            JOIN relationships r ON (
+                r.person1_id = (CASE WHEN rp.person1_id = :startPersonId THEN rp.person2_id ELSE rp.person1_id END) OR
+                r.person2_id = (CASE WHEN rp.person1_id = :startPersonId THEN rp.person2_id ELSE rp.person1_id END)
+            )
+            WHERE rp.distance < :maxDistance 
+            AND r.is_active = true
+            AND NOT (r.id = ANY(rp.path)) -- Prevent cycles
+        )
+        SELECT DISTINCT person2_id, distance, path
+        FROM relationship_paths 
+        WHERE person2_id = :endPersonId
+        ORDER BY distance
+        LIMIT 1
+        """, nativeQuery = true)
+    List<Object[]> findShortestPathOptimized(@Param("startPersonId") Long startPersonId, 
+                                           @Param("endPersonId") Long endPersonId,
+                                           @Param("maxDistance") Integer maxDistance);
+    
+    /**
+     * Cached ancestor lookup for family tree navigation
+     */
+    @Query(value = """
+        WITH RECURSIVE ancestors AS (
+            -- Base case: parents
+            SELECT 
+                r.person2_id as descendant_id, 
+                r.person1_id as ancestor_id, 
+                1 as generation_diff,
+                p.first_name || ' ' || p.last_name as ancestor_name
+            FROM relationships r
+            JOIN persons p ON p.id = r.person1_id
+            WHERE r.type = 'PARENT_CHILD' AND r.is_active = true 
+            AND r.person2_id = :personId
+            
+            UNION ALL
+            
+            -- Recursive case: grandparents and beyond
+            SELECT 
+                a.descendant_id,
+                r.person1_id,
+                a.generation_diff + 1,
+                p.first_name || ' ' || p.last_name
+            FROM ancestors a
+            JOIN relationships r ON a.ancestor_id = r.person2_id
+            JOIN persons p ON p.id = r.person1_id
+            WHERE r.type = 'PARENT_CHILD' AND r.is_active = true 
+            AND a.generation_diff < :maxGenerations
+        )
+        SELECT ancestor_id, generation_diff, ancestor_name
+        FROM ancestors
+        ORDER BY generation_diff, ancestor_id
+        """, nativeQuery = true)
+    List<Object[]> findAncestorsWithGenerations(@Param("personId") Long personId,
+                                               @Param("maxGenerations") Integer maxGenerations);
+    
+    /**
+     * Optimized descendant lookup for family tree navigation
+     */
+    @Query(value = """
+        WITH RECURSIVE descendants AS (
+            -- Base case: children
+            SELECT 
+                r.person1_id as ancestor_id, 
+                r.person2_id as descendant_id, 
+                1 as generation_diff,
+                p.first_name || ' ' || p.last_name as descendant_name
+            FROM relationships r
+            JOIN persons p ON p.id = r.person2_id
+            WHERE r.type = 'PARENT_CHILD' AND r.is_active = true 
+            AND r.person1_id = :personId
+            
+            UNION ALL
+            
+            -- Recursive case: grandchildren and beyond
+            SELECT 
+                d.ancestor_id,
+                r.person2_id,
+                d.generation_diff + 1,
+                p.first_name || ' ' || p.last_name
+            FROM descendants d
+            JOIN relationships r ON d.descendant_id = r.person1_id
+            JOIN persons p ON p.id = r.person2_id
+            WHERE r.type = 'PARENT_CHILD' AND r.is_active = true 
+            AND d.generation_diff < :maxGenerations
+        )
+        SELECT descendant_id, generation_diff, descendant_name
+        FROM descendants
+        ORDER BY generation_diff, descendant_id
+        """, nativeQuery = true)
+    List<Object[]> findDescendantsWithGenerations(@Param("personId") Long personId,
+                                                  @Param("maxGenerations") Integer maxGenerations);
 } 

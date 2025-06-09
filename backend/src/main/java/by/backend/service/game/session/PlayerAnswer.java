@@ -24,4 +24,9 @@ public class PlayerAnswer {
         this.correct = correct;
         this.responseTimeSeconds = 0.0;
     }
+    
+    // AdaptiveDifficultyService için getQuestionType() metodu ekle
+    public String getQuestionType() {
+        return this.relationshipCategory;
+    }
 } 

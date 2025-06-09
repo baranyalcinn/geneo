@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
-@Builder
+@Builder(access = lombok.AccessLevel.PUBLIC)
 @NoArgsConstructor
 @AllArgsConstructor
 public class GameAnalysisDTO {

@@ -1,4 +1,16 @@
 {
+  "common": {
+    "male": "Erkek",
+    "female": "Kadın",
+    "unknown": "Bilinmeyen"
+  },
+  "person": {
+    "firstName": "Ad",
+    "lastName": "Soyad",
+    "birthDate": "Doğum Tarihi",
+    "deathDate": "Ölüm Tarihi",
+    "gender": "Cinsiyet"
+  },
   "relationship.child": "Çocuğu",
   "relationship.parent": "Ebeveyni",
   "relationship.grandchild": "Torunu",
@@ -12,15 +24,16 @@
   "relationship.cousin": "Kuzeni",
   "relationship.aunt_uncle": "Teyzesi/Halası/Amcası/Dayısı",
   "relationship.nephew_niece": "Yeğeni",
-  "relationship.indirect.found": "Dolaylı Akraba",
   "relationship.no_relation": "Akrabalık ilişkisi yok",
+  "relationship.not_found": "İlişki bulunamadı",
+  "relationship.itself": "Kendisi",
+  "relationship.distant_relative": "Uzak Akraba",
   "game.question_template": "{{person1}}, {{person2}}'nin nesidir?",
   "game.question": "{{person1}}, {{person2}}'nin nesidir?",
   "game.score": "Skor",
   "game.streak": "Seri",
   "game.question_title": "Soru {{number}}",
   "game.check_answer": "Cevabı Kontrol Et",
-  "person": "Kişi",
   "gender.male": "Erkek",
   "gender.female": "Kadın",
   "birth_year": "Doğum Yılı",

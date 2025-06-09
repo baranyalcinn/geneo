@@ -21,10 +21,13 @@ spring:
     type: CAFFEINE # Önbellek sağlayıcısı olarak Caffeine'i kullan.
     cache-names:
       - relationshipPaths
-      # - ancestorsCache # Diğer potansiyel önbellek adlarınız
-      # - descendantsCache
+      - relationshipCache
+      - pathCache
+      - ancestorCache
+      - familyGraphCache
+      - gameQuestionCache
     caffeine:
-      spec: maximumSize=500,expireAfterAccess=300s # Caffeine için önbellek özellikleri.
+      spec: maximumSize=10000,expireAfterWrite=600s,recordStats # High-performance cache config
 server: # Sunucu geneli karakter kodlaması ayarları
   servlet:
     encoding:

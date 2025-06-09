@@ -5,4 +5,11 @@ export interface Relationship {
   type: string; // İlişki türü, örn: 'SPOUSE', 'PARENT_OF', 'CHILD_OF', 'SIBLING_OF'
   startDate?: string; // İlişkinin başlangıç tarihi (opsiyonel)
   endDate?: string;   // İlişkinin bitiş tarihi (opsiyonel)
+}
+
+// RelationshipType enum'u ekle
+export enum RelationshipType {
+  SPOUSE = 'SPOUSE',
+  PARENT_CHILD = 'PARENT_CHILD',
+  SIBLING = 'SIBLING'
 } 
