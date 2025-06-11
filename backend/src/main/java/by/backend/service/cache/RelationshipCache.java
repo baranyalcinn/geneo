@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentMap;
 public class RelationshipCache {
     
     // Main relationship result cache
-    private final Cache<String, RelationshipDescriptionResult> relationshipCache = 
+    private final Cache<String, RelationshipDescriptionResult> resultCache = 
         Caffeine.newBuilder()
             .maximumSize(50_000)
             .expireAfterWrite(Duration.ofMinutes(10))
@@ -60,7 +60,7 @@ public class RelationshipCache {
         String cacheKey = createRelationshipKey(person1Id, person2Id);
         
         // Try cache first
-        RelationshipDescriptionResult cached = relationshipCache.getIfPresent(cacheKey);
+        RelationshipDescriptionResult cached = resultCache.getIfPresent(cacheKey);
         if (cached != null) {
             log.debug("Cache HIT for relationship: {} -> {}", person1Id, person2Id);
             return cached;
@@ -82,7 +82,7 @@ public class RelationshipCache {
         CompletableFuture<RelationshipDescriptionResult> future = CompletableFuture.supplyAsync(() -> {
             try {
                 RelationshipDescriptionResult result = computer.compute(person1Id, person2Id);
-                relationshipCache.put(cacheKey, result);
+                resultCache.put(cacheKey, result);
                 log.debug("Cache MISS - computed and cached: {} -> {}", person1Id, person2Id);
                 return result;
             } finally {
@@ -128,7 +128,7 @@ public class RelationshipCache {
      */
     public void invalidatePerson(Long personId) {
         // Remove all cache entries involving this person
-        relationshipCache.asMap().entrySet().removeIf(entry -> 
+        resultCache.asMap().entrySet().removeIf(entry -> 
             entry.getKey().contains(personId.toString()));
         pathCache.asMap().entrySet().removeIf(entry -> 
             entry.getKey().contains(personId.toString()));
@@ -141,7 +141,7 @@ public class RelationshipCache {
      * Invalidate all caches (when major data changes occur)
      */
     public void invalidateAll() {
-        relationshipCache.invalidateAll();
+        resultCache.invalidateAll();
         pathCache.invalidateAll();
         ancestorCache.invalidateAll();
         inProgressComputations.clear();

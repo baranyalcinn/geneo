@@ -41,52 +41,68 @@ public class RelationshipPathFinderImpl implements RelationshipPathFinder {
 
         while (!queue.isEmpty()) {
             PathExpansionState currentState = queue.poll();
-            List<Relationship> currentRelations = currentState.relationsInPath();
-            Person currentLastPerson = currentState.currentEndPerson();
-            Set<Long> personsCurrentlyInThisPath = currentState.personsInThisPathIds();
-
-            if (currentLastPerson.getId().equals(endPerson.getId())) {
-                allPathsFound.add(new ArrayList<>(currentRelations));
-                if (allPathsFound.size() >= relationshipProperties.getMaxBfsPathsToCollect()) {
-                    log.debug("PathFinder: {} ile {} arasında {} farklı yol bulundu (limit {}), arama sonlandırıldı.",
-                            startPerson.getFirstName(), endPerson.getFirstName(), allPathsFound.size(), relationshipProperties.getMaxBfsPathsToCollect());
-                    break;
-                }
-                continue;
-            }
-
-            if (currentRelations.size() >= maxDepth) {
-                continue;
-            }
-
-            List<Relationship> relationshipsToExplore = findAllActiveRelationshipsForPathFinder(currentLastPerson);
-
-            relationshipsToExplore.sort((r1, r2) -> {
-                boolean r1IsDirect = r1.getType() == RelationshipType.PARENT_CHILD ||
-                                     r1.getType() == RelationshipType.SPOUSE ||
-                                     r1.getType() == RelationshipType.SIBLING;
-                boolean r2IsDirect = r2.getType() == RelationshipType.PARENT_CHILD ||
-                                     r2.getType() == RelationshipType.SPOUSE ||
-                                     r2.getType() == RelationshipType.SIBLING;
-                if (r1IsDirect && !r2IsDirect) return -1;
-                if (!r1IsDirect && r2IsDirect) return 1;
-                return 0;
-            });
-
-            for (Relationship relationship : relationshipsToExplore) {
-                Person neighbor = relationship.getPerson1().getId().equals(currentLastPerson.getId()) ?
-                    relationship.getPerson2() : relationship.getPerson1();
-
-                if (!personsCurrentlyInThisPath.contains(neighbor.getId())) {
-                    List<Relationship> newRelationsForPath = new ArrayList<>(currentRelations);
-                    newRelationsForPath.add(relationship);
-                    Set<Long> newPersonsInThisPath = new HashSet<>(personsCurrentlyInThisPath);
-                    newPersonsInThisPath.add(neighbor.getId());
-                    queue.add(new PathExpansionState(newRelationsForPath, neighbor, newPersonsInThisPath));
-                }
+            
+            if (processPathState(currentState, endPerson, maxDepth, allPathsFound, queue)) {
+                break; // Single break for termination condition
             }
         }
         return allPathsFound;
+    }
+    
+    private boolean processPathState(PathExpansionState currentState, Person endPerson, int maxDepth, 
+                                   List<List<Relationship>> allPathsFound, Queue<PathExpansionState> queue) {
+        List<Relationship> currentRelations = currentState.relationsInPath();
+        Person currentLastPerson = currentState.currentEndPerson();
+
+        if (currentLastPerson.getId().equals(endPerson.getId())) {
+            allPathsFound.add(new ArrayList<>(currentRelations));
+            if (allPathsFound.size() >= relationshipProperties.getMaxBfsPathsToCollect()) {
+                log.debug("PathFinder: {} ile {} arasında {} farklı yol bulundu (limit {}), arama sonlandırıldı.",
+                        endPerson.getFirstName(), endPerson.getFirstName(), allPathsFound.size(), relationshipProperties.getMaxBfsPathsToCollect());
+                return true; // Signal to terminate main loop
+            }
+            return false; // Continue processing
+        }
+
+        if (currentRelations.size() >= maxDepth) {
+            return false; // Skip this path
+        }
+
+        expandPathState(currentState, queue);
+        return false; // Continue processing
+    }
+    
+    private void expandPathState(PathExpansionState currentState, Queue<PathExpansionState> queue) {
+        Person currentLastPerson = currentState.currentEndPerson();
+        List<Relationship> currentRelations = currentState.relationsInPath();
+        Set<Long> personsCurrentlyInThisPath = currentState.personsInThisPathIds();
+        
+        List<Relationship> relationshipsToExplore = findAllActiveRelationshipsForPathFinder(currentLastPerson);
+
+        relationshipsToExplore.sort((r1, r2) -> {
+            boolean r1IsDirect = r1.getType() == RelationshipType.PARENT_CHILD ||
+                                 r1.getType() == RelationshipType.SPOUSE ||
+                                 r1.getType() == RelationshipType.SIBLING;
+            boolean r2IsDirect = r2.getType() == RelationshipType.PARENT_CHILD ||
+                                 r2.getType() == RelationshipType.SPOUSE ||
+                                 r2.getType() == RelationshipType.SIBLING;
+            if (r1IsDirect && !r2IsDirect) return -1;
+            if (!r1IsDirect && r2IsDirect) return 1;
+            return 0;
+        });
+
+        for (Relationship relationship : relationshipsToExplore) {
+            Person neighbor = relationship.getPerson1().getId().equals(currentLastPerson.getId()) ?
+                relationship.getPerson2() : relationship.getPerson1();
+
+            if (!personsCurrentlyInThisPath.contains(neighbor.getId())) {
+                List<Relationship> newRelationsForPath = new ArrayList<>(currentRelations);
+                newRelationsForPath.add(relationship);
+                Set<Long> newPersonsInThisPath = new HashSet<>(personsCurrentlyInThisPath);
+                newPersonsInThisPath.add(neighbor.getId());
+                queue.add(new PathExpansionState(newRelationsForPath, neighbor, newPersonsInThisPath));
+            }
+        }
     }
 
     @Override
@@ -184,7 +200,7 @@ public class RelationshipPathFinderImpl implements RelationshipPathFinder {
     private String getMessage(String code, Locale locale, Object... args) {
         try {
             return messageSource.getMessage(code, args, locale);
-        } catch (NoSuchMessageException e) {
+        } catch (NoSuchMessageException _) {
             log.warn("Message key not found in RelationshipPathFinder: {} for locale {}", code, locale);
             String fallback = code;
             if (args != null && args.length > 0) {

@@ -23,6 +23,19 @@ public class GameSessionManager {
     }
     
     /**
+     * Var olan bir session'ı yönetime ekle
+     * @param session Eklenecek oyun session'ı
+     */
+    public void addSession(GameSession session) {
+        if (session == null || session.getSessionId() == null) {
+            log.warn("Boş veya geçersiz bir session ekleme denemesi.");
+            return;
+        }
+        activeSessions.put(session.getSessionId(), session);
+        log.info("Yeni oyun session'ı eklendi: {} oyuncu için: {}", session.getSessionId(), session.getPlayerName());
+    }
+    
+    /**
      * Yeni oyun session'ı oluştur
      */
     public GameSession createSession(String sessionId, String playerName, Difficulty difficulty) {

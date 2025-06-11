@@ -8,6 +8,7 @@ import by.backend.model.entity.Relationship;
 import by.backend.model.enums.RelationshipType;
 
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 public interface RelationshipService {
@@ -24,4 +25,6 @@ public interface RelationshipService {
     List<PersonSummaryDTO> findCommonDescendants(Person person1, Person person2);
     List<PersonSummaryDTO> findRelativesByDegree(Person person, int degree);
     boolean isBloodRelated(Person person1, Person person2);
+    Set<Person> getAllAncestors(Person person);
+    Set<Person> getAllDescendants(Person person);
 } 

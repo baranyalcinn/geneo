@@ -2,13 +2,14 @@ import { apiService } from './apiService';
 import {
   Difficulty,
   StartGameRequest,
-  InitialGameData as InitialGameDataType,
+  InitialGameData,
   HighScores,
-  GameQuestion as GameQuestionType,
-  GameAnswer as GameAnswerType,
-  AnswerResponse as AnswerResponseType,
-  GameResult as GameResultType,
-  RecordScoreRequest
+  GameQuestion,
+  GameAnswer,
+  AnswerResponse,
+  GameResult,
+  RecordScoreRequest,
+  GameQuestionFeedbackDTO
 } from '../types/game';
 
 export interface PersonInfo {
@@ -28,57 +29,6 @@ export interface RelationshipStep {
   relationshipToNextPerson?: string;
   sourcePerson: boolean;
   targetPerson: boolean;
-}
-
-export interface GameQuestion {
-  id: string;
-  questionText?: string;
-  person1: string;
-  person2: string;
-  options: string[];
-  correctAnswer: string;
-  difficulty: Difficulty;
-  timeLimit: number;
-  person1Info?: PersonInfo;
-  person2Info?: PersonInfo;
-  relationshipPath?: RelationshipStep[];
-}
-
-export interface GameAnswer {
-  answer: string;
-  questionId: string;
-  difficulty: Difficulty;
-  playerName: string;
-  sessionId: string;
-  timeTakenInSeconds?: number;
-  askedQuestionSignaturesInThisGame?: string[];
-  currentScore?: number;
-  currentStreak?: number;
-}
-
-export interface AnswerResponse {
-  correctAnswer: boolean;
-  correctAnswerText?: string;
-  pointsEarned: number;
-  updatedScore: number;
-  updatedStreak: number;
-  nextQuestion?: GameQuestion;
-  gameOver: boolean;
-  finalResult?: GameResultType;
-  relationshipPath?: RelationshipStep[];
-  analysisResult?: AnalysisResult;
-}
-
-export interface AnalysisResult {
-  successRateByCategory: Record<string, number>;
-  summaryMessage: string;
-}
-
-export interface InitialGameData extends InitialGameDataType {
-  sessionId: string;
-  gameDurationInSeconds: number;
-  totalQuestions: number;
-  firstQuestion: GameQuestionType;
 }
 
 // Game service functions
@@ -103,7 +53,7 @@ export const startGame = async (playerName: string, difficulty: Difficulty, lang
  * @param sessionId The ID of the game session to end. (Note: Backend doesn't seem to use sessionId actively in provided code)
  * @returns A promise that resolves to the game result, conforming to the GameResult type from ../types/game.
  */
-export const endGame = async (sessionId: string): Promise<GameResultType> => {
+export const endGame = async (sessionId: string): Promise<GameResult> => {
   console.warn("endGame service function called, but backend implementation might be missing or different.");
   return Promise.reject(new Error("endGame endpoint functionality needs review with backend."));
 };
@@ -133,7 +83,7 @@ export const getHighScores = async (): Promise<HighScores> => {
             formattedScores[diffKey] = scoresFromApi[diffKey].map(score => ({
                 ...score,
                 date: score.date ? score.date.toString() : undefined
-            } as GameResultType));
+            } as GameResult));
         } else {
             formattedScores[diffKey] = [];
         }
@@ -161,9 +111,9 @@ export const getHighScores = async (): Promise<HighScores> => {
  * @param lang The selected language code (e.g., 'tr', 'en').
  * @returns A promise that resolves to a question conforming to the GameQuestionType type.
  */
-export const getQuestion = async (difficulty: Difficulty, lang: string): Promise<GameQuestionType> => {
+export const getQuestion = async (difficulty: Difficulty, lang: string): Promise<GameQuestion> => {
   try {
-    const questionData = await apiService.get<GameQuestionType>('game/question', { 
+    const questionData = await apiService.get<GameQuestion>('game/question', { 
       params: { difficulty, lang } 
     });
     
@@ -198,14 +148,29 @@ export const submitAnswer = async (answerDetails: GameAnswer, lang: string): Pro
  * @param lang The selected language code (e.g., 'tr', 'en').
  * @returns A promise that resolves to the recorded game result, of type GameResultType.
  */
-export const recordGameResult = async (scoreDetails: RecordScoreRequest, lang: string): Promise<GameResultType> => {
+export const recordGameResult = async (scoreDetails: RecordScoreRequest, lang: string): Promise<GameResult> => {
   try {
-    const result = await apiService.post<GameResultType>('game/record-score', scoreDetails, { 
+    const result = await apiService.post<GameResult>('game/record-score', scoreDetails, { 
       params: { lang } 
     });
     return result;
   } catch (error) {
      console.error("Oyun sonucu kaydedilirken hata oluştu:", error);
      throw error;
+  }
+};
+
+/**
+ * Sends feedback for a game question.
+ * @param feedbackData The feedback data to submit.
+ * @returns A promise that resolves when the feedback is successfully sent.
+ */
+export const sendFeedback = async (feedbackData: GameQuestionFeedbackDTO): Promise<void> => {
+  try {
+    await apiService.post('game/feedback', feedbackData);
+  } catch (error) {
+    console.error("Oyun geri bildirimi gönderilirken hata oluştu:", error);
+    // Hatanın yutulması, geri bildirim gönderimi kritik bir işlem olmadığı için
+    // oyun akışını kesmemek adına tercih edilebilir.
   }
 };

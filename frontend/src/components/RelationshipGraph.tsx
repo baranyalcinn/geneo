@@ -29,6 +29,7 @@ interface RelationshipGraphProps {
   path?: RelationshipStep[];
   height?: string;
   width?: string;
+  layoutDirection?: 'TB' | 'LR' | 'BT' | 'RL'; // Layout yönü seçeneği
 }
 
 // Bileşen dışında tipleri tanımla - CustomNode import edildiği için nodeTypes'ı güncelle
@@ -134,6 +135,7 @@ const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
   path,
   height = "600px",
   width = "100%",
+  layoutDirection,
 }) => {
   // React Flow için minimum boyutları garanti etmek
   const containerHeight = height === "100%" ? "100%" : (parseInt(height as string) < 300 ? "300px" : height);
@@ -157,7 +159,11 @@ const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
     [path, themeColorsForFlow],
   );
 
-  const layoutedNodes = useRelationshipGraphLayout({ nodes: initialNodes, edges: edges });
+  const layoutedNodes = useRelationshipGraphLayout({ 
+    nodes: initialNodes, 
+    edges: edges,
+    direction: layoutDirection 
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -178,7 +184,8 @@ const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
     return <GraphNodeErrorState width={containerWidth} height={containerHeight} />;
   }
   
-  if (layoutedNodes.length === 1 && layoutedNodes[0]?.data) {
+  // Sadece tek node varsa VE hiç edge yoksa SingleNodeView göster
+  if (layoutedNodes.length === 1 && edges.length === 0) {
     return <SingleNodeView node={layoutedNodes[0]} width={containerWidth} height={containerHeight} />;
   }
   

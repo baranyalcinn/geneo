@@ -36,6 +36,16 @@ export const familyTreeService = {
   },
 
   /**
+   * İki kişi arasındaki ilişkiyi ve ilişki haritasını getirir.
+   * @param person1Id İlk kişinin ID'si.
+   * @param person2Id İkinci kişinin ID'si.
+   * @returns İlişki bilgisi, kişiler ve ilişkiler.
+   */
+  getRelationshipBetween: async (person1Id: number, person2Id: number): Promise<any> => {
+    return apiService.get<any>(`family/relationship?person1Id=${person1Id}&person2Id=${person2Id}`);
+  },
+
+  /**
    * Bir aile ağacına üye ekler.
    * @param treeId Aile ağacının ID'si.
    * @param personId Eklenecek kişinin ID'si (FamilyMember tipinde id: string).

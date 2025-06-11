@@ -20,7 +20,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -38,7 +37,7 @@ public class FamilyTreeController {
         List<FamilyTree> trees = familyTreeService.getAllFamilyTrees();
         List<FamilyTreeDTO> dtos = trees.stream()
             .map(familyTreeMapper::toDTO)
-            .collect(Collectors.toUnmodifiableList());
+            .toList();
         
         log.debug("Bulunan aile ağaçları sayısı: {}", dtos.size());
         return ResponseEntity.ok(dtos);
@@ -90,7 +89,7 @@ public class FamilyTreeController {
         List<FamilyTree> trees = familyTreeService.findByPerson(personId);
         List<FamilyTreeDTO> dtos = trees.stream()
             .map(familyTreeMapper::toDTO)
-            .collect(Collectors.toUnmodifiableList());
+            .toList();
         return ResponseEntity.ok(dtos);
     }
 
@@ -99,7 +98,7 @@ public class FamilyTreeController {
         List<FamilyTree> trees = familyTreeService.findByLastName(lastName);
         List<FamilyTreeDTO> dtos = trees.stream()
             .map(familyTreeMapper::toDTO)
-            .collect(Collectors.toUnmodifiableList());
+            .toList();
         return ResponseEntity.ok(dtos);
     }
 

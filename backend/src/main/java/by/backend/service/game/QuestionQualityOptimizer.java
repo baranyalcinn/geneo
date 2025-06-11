@@ -2,13 +2,11 @@ package by.backend.service.game;
 
 import by.backend.model.dto.GameQuestionDTO;
 import by.backend.model.entity.Person;
-import by.backend.model.enums.Difficulty;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Soru kalitesi optimizasyonu ve akıllı soru filtreleme
@@ -36,7 +34,7 @@ public class QuestionQualityOptimizer {
                     if (!q1Recent && q2Recent) return -1;
                     return 0;
                 })
-                .collect(Collectors.toList());
+                .toList();
     }
     
     /**

@@ -106,7 +106,7 @@ public class RelationshipValidator {
     private String getMessage(String code, Locale locale, Object... args) {
         try {
             return messageSource.getMessage(code, args, locale);
-        } catch (NoSuchMessageException e) {
+        } catch (NoSuchMessageException _) {
             log.warn("Message key not found in RelationshipValidator: {} for locale {}", code, locale);
             String fallback = code;
             if (args != null && args.length > 0) {

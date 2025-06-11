@@ -12,16 +12,15 @@ import by.backend.mapper.PersonMapper;
 import by.backend.service.description.RelationshipDescriptionResolver;
 import by.backend.service.pathfinding.RelationshipPathFinder;
 import by.backend.service.validation.RelationshipValidator;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.MessageSource;
 import org.springframework.context.NoSuchMessageException;
 import org.springframework.context.i18n.LocaleContextHolder;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.annotation.Lazy;
 
 import java.time.LocalDate;
 import java.util.*;
@@ -29,7 +28,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class RelationshipServiceImpl implements RelationshipService {
 
@@ -41,6 +39,27 @@ public class RelationshipServiceImpl implements RelationshipService {
     private final RelationshipValidator relationshipValidator;
     private final RelationshipPathFinder relationshipPathFinder;
     private final RelationshipDescriptionResolver relationshipDescriptionResolver;
+    private final RelationshipService self;
+    
+    public RelationshipServiceImpl(RelationshipRepository relationshipRepository,
+                                 PersonRepository personRepository,
+                                 MessageSource messageSource,
+                                 PersonMapper personMapper,
+                                 RelationshipProperties relationshipProperties,
+                                 RelationshipValidator relationshipValidator,
+                                 RelationshipPathFinder relationshipPathFinder,
+                                 RelationshipDescriptionResolver relationshipDescriptionResolver,
+                                 @Lazy RelationshipService self) {
+        this.relationshipRepository = relationshipRepository;
+        this.personRepository = personRepository;
+        this.messageSource = messageSource;
+        this.personMapper = personMapper;
+        this.relationshipProperties = relationshipProperties;
+        this.relationshipValidator = relationshipValidator;
+        this.relationshipPathFinder = relationshipPathFinder;
+        this.relationshipDescriptionResolver = relationshipDescriptionResolver;
+        this.self = self;
+    }
     
     @Override
     @Transactional(readOnly = true)
@@ -56,7 +75,7 @@ public class RelationshipServiceImpl implements RelationshipService {
         Locale locale = LocaleContextHolder.getLocale();
         relationshipValidator.validateRelationship(person1, person2, type, locale);
         
-        if (hasActiveRelationship(person1, person2, type)) {
+        if (self.hasActiveRelationship(person1, person2, type)) {
             throw new IllegalStateException(getMessage("relationship.error.already_exists", locale));
         }
 
@@ -81,10 +100,9 @@ public class RelationshipServiceImpl implements RelationshipService {
 
     @Override
     @Transactional(readOnly = true)
-    @Async
     public CompletableFuture<List<PersonSummaryDTO>> findRelativesAsync(Person person, by.backend.model.enums.RelationshipType type) {
-        return CompletableFuture.completedFuture(
-            personMapper.toSummaryDTOList(findRelatives(person, type))
+        return CompletableFuture.supplyAsync(() -> 
+            personMapper.toSummaryDTOList(self.findRelatives(person, type))
         );
     }
 
@@ -94,7 +112,7 @@ public class RelationshipServiceImpl implements RelationshipService {
         List<Relationship> relationships = relationshipRepository.findByPerson1AndTypeAndIsActiveTrue(person, type);
         return relationships.stream()
                 .map(Relationship::getPerson2)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
@@ -160,15 +178,16 @@ public class RelationshipServiceImpl implements RelationshipService {
     @Override
     @Transactional(readOnly = true)
     public List<PersonSummaryDTO> findCommonAncestors(Person person1, Person person2) {
-        Set<Person> ancestors1 = getAllAncestors(person1);
-        Set<Person> ancestors2 = getAllAncestors(person2);
+        Set<Person> ancestors1 = self.getAllAncestors(person1);
+        Set<Person> ancestors2 = self.getAllAncestors(person2);
 
         ancestors1.retainAll(ancestors2);
         return personMapper.toSummaryDTOList(new ArrayList<>(ancestors1));
     }
 
+    @Override
     @Cacheable(value = "ancestors", key = "#person.id")
-    protected Set<Person> getAllAncestors(Person person) {
+    public Set<Person> getAllAncestors(Person person) {
         Set<Person> ancestors = new HashSet<>();
         Queue<Person> queue = new LinkedList<>();
         queue.add(person);
@@ -193,15 +212,16 @@ public class RelationshipServiceImpl implements RelationshipService {
     @Override
     @Transactional(readOnly = true)
     public List<PersonSummaryDTO> findCommonDescendants(Person person1, Person person2) {
-        Set<Person> descendants1 = getAllDescendants(person1);
-        Set<Person> descendants2 = getAllDescendants(person2);
+        Set<Person> descendants1 = self.getAllDescendants(person1);
+        Set<Person> descendants2 = self.getAllDescendants(person2);
 
         descendants1.retainAll(descendants2);
         return personMapper.toSummaryDTOList(new ArrayList<>(descendants1));
     }
 
+    @Override
     @Cacheable(value = "descendants", key = "#person.id")
-    protected Set<Person> getAllDescendants(Person person) {
+    public Set<Person> getAllDescendants(Person person) {
         Set<Person> descendants = new HashSet<>();
         Queue<Person> queue = new LinkedList<>();
         queue.add(person);
@@ -241,20 +261,25 @@ public class RelationshipServiceImpl implements RelationshipService {
 
             if (currentDistance >= degree) continue;
 
-            List<Relationship> relationships = findAllActiveRelationships(currentPerson);
-
-            for (Relationship rel : relationships) {
-                Person relatedPerson = rel.getPerson1().getId().equals(currentPerson.getId()) ? rel.getPerson2() : rel.getPerson1();
-                if (!visited.contains(relatedPerson.getId())) {
-                    visited.add(relatedPerson.getId());
-                    relatives.add(relatedPerson);
-                    if (currentDistance + 1 < degree) {
-                        queue.add(new PersonDistance(relatedPerson, currentDistance + 1));
-                    }
+            processRelationships(currentPerson, currentDistance, degree, relatives, queue, visited);
+        }
+        return personMapper.toSummaryDTOList(new ArrayList<>(relatives));
+    }
+    
+    private void processRelationships(Person currentPerson, int currentDistance, int degree, 
+                                    Set<Person> relatives, Queue<PersonDistance> queue, Set<Long> visited) {
+                    List<Relationship> relationships = self.findAllActiveRelationships(currentPerson);
+        
+        for (Relationship rel : relationships) {
+            Person relatedPerson = rel.getPerson1().getId().equals(currentPerson.getId()) ? rel.getPerson2() : rel.getPerson1();
+            if (!visited.contains(relatedPerson.getId())) {
+                visited.add(relatedPerson.getId());
+                relatives.add(relatedPerson);
+                if (currentDistance + 1 < degree) {
+                    queue.add(new PersonDistance(relatedPerson, currentDistance + 1));
                 }
             }
         }
-        return personMapper.toSummaryDTOList(new ArrayList<>(relatives));
     }
     
     private static class PersonDistance {
@@ -269,8 +294,8 @@ public class RelationshipServiceImpl implements RelationshipService {
     @Transactional(readOnly = true)
     public boolean isBloodRelated(Person person1, Person person2) {
         if (person1.getId().equals(person2.getId())) return true;
-        Set<Person> ancestors1 = getAllAncestors(person1);
-        Set<Person> ancestors2 = getAllAncestors(person2);
+        Set<Person> ancestors1 = self.getAllAncestors(person1);
+        Set<Person> ancestors2 = self.getAllAncestors(person2);
         if (ancestors1.contains(person2) || ancestors2.contains(person1)) return true;
         Set<Person> commonAncestors = new HashSet<>(ancestors1);
         commonAncestors.retainAll(ancestors2);
@@ -280,7 +305,7 @@ public class RelationshipServiceImpl implements RelationshipService {
     private String getMessage(String code, Locale locale, Object... args) {
         try {
             return messageSource.getMessage(code, args, locale);
-        } catch (NoSuchMessageException e) {
+        } catch (NoSuchMessageException _) {
             log.warn("Message key not found in RelationshipService: {} for locale {}", code, locale);
             String fallback = code;
             if (args != null && args.length > 0) {

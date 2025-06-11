@@ -2,7 +2,7 @@ export const GRAPH_NODE_WIDTH = 200; // Ortalama bir özel düğüm genişliği
 export const GRAPH_NODE_HEIGHT = 130; // Ortalama bir özel düğüm yüksekliği
 
 // Dagre tarafından kullanılacak temel ayarlar
-export const GRAPH_LAYOUT_RANKDIR = 'TB'; // Yerleşim yönü: TB (Top-to-Bottom), LR (Left-to-Right)
+export const GRAPH_LAYOUT_RANKDIR = 'LR'; // Yerleşim yönü: LR (Left-to-Right) - alan verimliliği için
 export const GRAPH_LAYOUT_ALIGN = undefined; // Düğüm hizalaması (undefined, UL, UR, DL, DR)
 export const GRAPH_LAYOUT_NODESEP = 60;    // Aynı seviyedeki düğümler arası boşluk
 export const GRAPH_LAYOUT_RANKSEP = 70;    // Farklı seviyeler (rank) arası boşluk

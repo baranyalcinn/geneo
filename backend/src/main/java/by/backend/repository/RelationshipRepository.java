@@ -199,4 +199,122 @@ public interface RelationshipRepository extends JpaRepository<Relationship, Long
         """, nativeQuery = true)
     List<Object[]> findDescendantsWithGenerations(@Param("personId") Long personId,
                                                   @Param("maxGenerations") Integer maxGenerations);
+
+    /**
+     * Optimized bidirectional query for direct relationship checking
+     * Performance: O(1) instead of O(2) queries
+     */
+    @Query("SELECT DISTINCT r FROM Relationship r " +
+           "LEFT JOIN FETCH r.person1 " +
+           "LEFT JOIN FETCH r.person2 " +
+           "WHERE ((r.person1.id = :person1Id AND r.person2.id = :person2Id) OR " +
+           "       (r.person1.id = :person2Id AND r.person2.id = :person1Id)) " +
+           "AND r.isActive = true")
+    List<Relationship> findDirectRelationshipsBidirectional(@Param("person1Id") Long person1Id, @Param("person2Id") Long person2Id);
+
+    /**
+     * Batch query for family network analysis - prevents N+1 problem
+     */
+    @Query("SELECT DISTINCT r FROM Relationship r " +
+           "LEFT JOIN FETCH r.person1 " +
+           "LEFT JOIN FETCH r.person2 " +
+           "WHERE (r.person1.id IN :familyMemberIds OR r.person2.id IN :familyMemberIds) " +
+           "AND r.type IN :relevantTypes " +
+           "AND r.isActive = true")
+    List<Relationship> findFamilyNetworkRelationships(@Param("familyMemberIds") List<Long> familyMemberIds, 
+                                                      @Param("relevantTypes") List<RelationshipType> relevantTypes);
+
+    /**
+     * Optimized query for complex in-law relationship chains
+     */
+    @Query("SELECT DISTINCT r FROM Relationship r " +
+           "LEFT JOIN FETCH r.person1 " +
+           "LEFT JOIN FETCH r.person2 " +
+           "WHERE (r.person1.id = :spouseId OR r.person2.id = :spouseId) " +
+           "AND r.type = 'SIBLING' " +
+           "AND r.isActive = true")
+    List<Relationship> findSpouseSiblings(@Param("spouseId") Long spouseId);
+
+    /**
+     * High-performance query for ancestry chains with depth limitation
+     */
+    @Query(value = "WITH RECURSIVE ancestry_chain AS (" +
+           "  SELECT r.person1_id, r.person2_id, 1 as depth " +
+           "  FROM relationships r " +
+           "  WHERE r.person2_id = :personId AND r.type = 'PARENT_CHILD' AND r.is_active = true " +
+           "  UNION ALL " +
+           "  SELECT r.person1_id, r.person2_id, ac.depth + 1 " +
+           "  FROM relationships r " +
+           "  JOIN ancestry_chain ac ON r.person2_id = ac.person1_id " +
+           "  WHERE r.type = 'PARENT_CHILD' AND r.is_active = true AND ac.depth < :maxDepth" +
+           ") " +
+           "SELECT DISTINCT r.* FROM relationships r " +
+           "JOIN ancestry_chain ac ON (r.person1_id = ac.person1_id OR r.person2_id = ac.person1_id) " +
+           "WHERE r.is_active = true",
+           nativeQuery = true)
+    List<Relationship> findAncestryChain(@Param("personId") Long personId, @Param("maxDepth") int maxDepth);
+
+    /**
+     * Optimized descendant query with depth control
+     */
+    @Query(value = "WITH RECURSIVE descendant_chain AS (" +
+           "  SELECT r.person1_id, r.person2_id, 1 as depth " +
+           "  FROM relationships r " +
+           "  WHERE r.person1_id = :personId AND r.type = 'PARENT_CHILD' AND r.is_active = true " +
+           "  UNION ALL " +
+           "  SELECT r.person1_id, r.person2_id, dc.depth + 1 " +
+           "  FROM relationships r " +
+           "  JOIN descendant_chain dc ON r.person1_id = dc.person2_id " +
+           "  WHERE r.type = 'PARENT_CHILD' AND r.is_active = true AND dc.depth < :maxDepth" +
+           ") " +
+           "SELECT DISTINCT r.* FROM relationships r " +
+           "JOIN descendant_chain dc ON (r.person1_id = dc.person2_id OR r.person2_id = dc.person2_id) " +
+           "WHERE r.is_active = true",
+           nativeQuery = true)
+    List<Relationship> findDescendantChain(@Param("personId") Long personId, @Param("maxDepth") int maxDepth);
+
+    /**
+     * Smart query for cousin relationship detection
+     */
+    @Query("SELECT DISTINCT r FROM Relationship r " +
+           "LEFT JOIN FETCH r.person1 " +
+           "LEFT JOIN FETCH r.person2 " +
+           "WHERE r.person1.id IN (" +
+           "  SELECT DISTINCT parent_rel.person1.id " +
+           "  FROM Relationship parent_rel " +
+           "  WHERE parent_rel.person2.id IN (" +
+           "    SELECT DISTINCT grandparent_rel.person1.id " +
+           "    FROM Relationship grandparent_rel " +
+           "    WHERE grandparent_rel.person2.id = :targetPersonId " +
+           "    AND grandparent_rel.type = 'PARENT_CHILD' " +
+           "    AND grandparent_rel.isActive = true" +
+           "  ) " +
+           "  AND parent_rel.type = 'PARENT_CHILD' " +
+           "  AND parent_rel.isActive = true" +
+           ") " +
+           "AND r.person2.id = :queryPersonId " +
+           "AND r.type = 'PARENT_CHILD' " +
+           "AND r.isActive = true")
+    List<Relationship> findPotentialCousinRelationships(@Param("queryPersonId") Long queryPersonId, 
+                                                        @Param("targetPersonId") Long targetPersonId);
+
+    /**
+     * Performance-optimized query for relationship counting and statistics
+     */
+    @Query("SELECT r.type, COUNT(r) FROM Relationship r " +
+           "WHERE (r.person1.id = :personId OR r.person2.id = :personId) " +
+           "AND r.isActive = true " +
+           "GROUP BY r.type")
+    List<Object[]> getRelationshipStatistics(@Param("personId") Long personId);
+
+    /**
+     * Batch existence check for multiple relationship pairs
+     */
+    @Query("SELECT CONCAT(r.person1.id, ':', r.person2.id, ':', r.type) " +
+           "FROM Relationship r " +
+           "WHERE ((r.person1.id IN :person1Ids AND r.person2.id IN :person2Ids) OR " +
+           "       (r.person1.id IN :person2Ids AND r.person2.id IN :person1Ids)) " +
+           "AND r.isActive = true")
+    List<String> batchCheckRelationshipExistence(@Param("person1Ids") List<Long> person1Ids, 
+                                                 @Param("person2Ids") List<Long> person2Ids);
 } 

@@ -26,7 +26,7 @@ export function useApiRequest<TData = unknown, TError extends Error = Error>(
   return {
     data: query.data,
     loading: query.isLoading,
-    error: query.error?.message || null,
+    error: query.error?.message ?? null,
     refetch: query.refetch
   };
 } 

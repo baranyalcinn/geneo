@@ -1,20 +1,18 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Container, Typography, Paper, Box, Divider, FormControl,   InputLabel, Select, MenuItem, SelectChangeEvent, Button,   Alert, TextField, InputAdornment,  ListItem, ListItemButton, List, ListItemText, alpha, Tabs, Tab,  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel,  Pagination } from '@mui/material';import Grid from '@mui/material/Grid';
 import { Person } from '../types/Person';
-// import { personService } from '../services/personService'; // Context'ten gelecek
+
 import ProvidedFamilyTreeReactFlow from '../components/FamilyTree/FamilyTreeReactFlow';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import SearchIcon from '@mui/icons-material/Search';
-// import PersonIcon from '@mui/icons-material/Person';
-// import PeopleIcon from '@mui/icons-material/People';
-// import FilterListIcon from '@mui/icons-material/FilterList';
+
 import { useLanguage } from '../context/LanguageContext';
 import { useTheme } from '@mui/material/styles';
 import { useThemeContext } from '../context/ThemeContext';
 // import { useApiRequest } from '../hooks/useApiRequest'; // Context'ten gelecek
 import LoadingIndicator from '../components/ui/LoadingIndicator';
-import ErrorMessage from '../components/ui/ErrorMessage';
+
 import EmptyState from '../components/ui/EmptyState';
 // import LanguageSelector from '../components/settings/LanguageSelector';
 import { useFamilyTree } from '../context/FamilyTreeContext'; // Yeni context hook'u

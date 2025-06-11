@@ -18,9 +18,6 @@ interface UseRelationshipGraphLayoutProps {
     direction?: 'TB' | 'LR'; // Opsiyonel olarak yön belirtmek için
 }
 
-const dagreGraph = new dagre.graphlib.Graph();
-dagreGraph.setDefaultEdgeLabel(() => ({}));
-
 export const useRelationshipGraphLayout = ({
     nodes,
     edges,
@@ -31,6 +28,12 @@ export const useRelationshipGraphLayout = ({
         if (!nodes || nodes.length === 0) {
             return [];
         }
+
+
+
+        // Her seferinde yeni bir dagre graph instance'ı oluştur
+        const dagreGraph = new dagre.graphlib.Graph();
+        dagreGraph.setDefaultEdgeLabel(() => ({}));
 
         dagreGraph.setGraph({
             rankdir: direction,
@@ -43,8 +46,8 @@ export const useRelationshipGraphLayout = ({
 
         nodes.forEach((node) => {
             // graphUtils'ta node.data içine width ve height ekledik, onları kullanalım
-            const nodeWidth = (node.data as any)?.width || GRAPH_NODE_WIDTH;
-            const nodeHeight = (node.data as any)?.height || GRAPH_NODE_HEIGHT;
+            const nodeWidth = (node.data as any)?.width ?? GRAPH_NODE_WIDTH;
+            const nodeHeight = (node.data as any)?.height ?? GRAPH_NODE_HEIGHT;
             dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
         });
 
@@ -54,7 +57,7 @@ export const useRelationshipGraphLayout = ({
 
         dagre.layout(dagreGraph);
 
-        return nodes.map((node: Node) => {
+        const result = nodes.map((node: Node) => {
             const nodeWithPosition = dagreGraph.node(node.id);
             if (nodeWithPosition) {
                 return {
@@ -62,13 +65,17 @@ export const useRelationshipGraphLayout = ({
                     // Dagre düğümün merkezini verir, React Flow sol üst köşeyi bekler.
                     // Bu yüzden düğüm genişliğinin/yüksekliğinin yarısını çıkarıyoruz.
                     position: {
-                        x: nodeWithPosition.x - ((node.data as any)?.width || GRAPH_NODE_WIDTH) / 2,
-                        y: nodeWithPosition.y - ((node.data as any)?.height || GRAPH_NODE_HEIGHT) / 2,
+                        x: nodeWithPosition.x - ((node.data as any)?.width ?? GRAPH_NODE_WIDTH) / 2,
+                        y: nodeWithPosition.y - ((node.data as any)?.height ?? GRAPH_NODE_HEIGHT) / 2,
                     },
                 };
             }
             return node; // Pozisyon bulunamazsa orijinal düğümü döndür
         });
+
+
+
+        return result;
 
     }, [nodes, edges, direction]);
 

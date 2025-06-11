@@ -1,6 +1,5 @@
 package by.backend.model.dto;
 
-// import by.backend.model.entity.Person; // Person importu kaldırıldı
 import by.backend.model.enums.RelationshipStatus;
 import by.backend.model.enums.RelationshipType;
 import lombok.AllArgsConstructor;
@@ -24,24 +23,46 @@ public class RelationshipDescriptionResult {
     private PersonSummaryDTO person2;
     private RelationshipType directTypeIfApplicable;
     private RelationshipPathDTO relationshipPath;
-}
-
-/* Java 16+ Record alternative:
-public record RelationshipDescriptionResult(
-    String localizedDescription,
-    String messageKey,
-    RelationshipStatus status,
-    PersonSummaryDTO person1, // PersonSummaryDTO olarak değiştirildi
-    PersonSummaryDTO person2, // PersonSummaryDTO olarak değiştirildi
-    RelationshipType directTypeIfApplicable
-) {
-    // İsteğe bağlı olarak ek kurucular veya yardımcı metotlar eklenebilir.
-    public static RelationshipDescriptionResult success(String localized, String key, PersonSummaryDTO p1, PersonSummaryDTO p2, RelationshipType type) {
-        return new RelationshipDescriptionResult(localized, key, RelationshipStatus.FOUND, p1, p2, type);
+    
+    @Builder.Default
+    private Double confidenceScore = 1.0;
+    @Builder.Default
+    private Integer complexityLevel = 1;
+    @Builder.Default
+    private Integer pathLength = 0;
+    private String relationshipCategory;
+    @Builder.Default
+    private Boolean isBloodRelated = false;
+    @Builder.Default
+    private Boolean isInLawRelated = false;
+    @Builder.Default
+    private Boolean isStepRelated = false;
+    private String maternalPaternal;
+    @Builder.Default
+    private Integer generationDifference = 0;
+    private String specialNotes;
+    @Builder.Default
+    private Long computationTimeMs = 0L;
+    
+    // Helper metodları aynı
+    public boolean isSuitableForHardQuestions() {
+        return complexityLevel >= 3 || 
+               (confidenceScore != null && confidenceScore < 0.9) ||
+               isInLawRelated ||
+               isStepRelated ||
+               (pathLength != null && pathLength >= 3) ||
+               (messageKey != null && (messageKey.contains("spouse_sibling_spouse") ||
+                messageKey.contains("distant") ||
+                messageKey.contains("complex")));
     }
-    public static RelationshipDescriptionResult self(String localized, String key, PersonSummaryDTO p1) {
-        return new RelationshipDescriptionResult(localized, key, RelationshipStatus.SELF_REFERENCE, p1, p1, null);
+    
+    public String getDifficultyRecommendation() {
+        if (complexityLevel <= 2 && (confidenceScore == null || confidenceScore >= 0.95)) {
+            return "EASY";
+        } else if (complexityLevel <= 3 && (confidenceScore == null || confidenceScore >= 0.8)) {
+            return "MEDIUM";
+        } else {
+            return "HARD";
+        }
     }
-    // etc. for other statuses
 }
-*/ 

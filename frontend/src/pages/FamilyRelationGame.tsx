@@ -29,23 +29,30 @@ import ErrorMessage from '../components/ui/ErrorMessage';
 import RelationshipGraph from '../components/RelationshipGraph';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
+import ThumbUpIcon from '@mui/icons-material/ThumbUp';
+import ThumbDownIcon from '@mui/icons-material/ThumbDown';
+import { useGameSession } from '../hooks/useGameSession';
+import { toast } from 'react-hot-toast';
+import { useGameStore } from '../store/gameStore';
 
 import { 
   Difficulty,
-  GameQuestion as GameQuestionType,
+  GameQuestion,
   GameAnswer,
   GameResult,
   PersonInfo,
-  HighScores as HighScoresType,
+  HighScores,
   AnswerResponse,
-  RelationshipStep
+  RelationshipStep,
+  GameQuestionFeedbackDTO,
+  InitialGameData
 } from '../types/game';
 import { 
   getQuestion, 
   submitAnswer, 
   getHighScores,
   recordGameResult,
-  startGame as startGameSession
+  sendFeedback
 } from '../services/gameService';
 
 // Styled components tanımlamaları
@@ -186,13 +193,6 @@ const PersonInfoDisplay = ({ personName, personInfo, isTarget = false }: PersonI
   );
 };
 
-// Tip tanımlaması düzeltmeleri
-type HighScores = {
-  playerName: string;
-  score: number;
-  difficulty?: string;
-}[];
-
 // GameAnswer tipini uyumlu hale getir
 type ExtendedGameAnswer = Partial<GameAnswer> & {
   playerName: string;
@@ -210,6 +210,20 @@ const FamilyRelationGame = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { t, i18n } = useTranslation();
+  const { 
+    startGame: startGameSessionApi, 
+    currentSession, 
+    gameStarted: isGameSessionActive 
+  } = useGameSession();
+  
+  const {
+    currentQuestion,
+    setCurrentQuestion,
+    isLoading,
+    setLoading,
+    error,
+    setError
+  } = useGameStore();
   
   const [gameStarted, setGameStarted] = useState(false);
   const [score, setScore] = useState(0);
@@ -217,9 +231,6 @@ const FamilyRelationGame = () => {
   const [selectedAnswer, setSelectedAnswer] = useState('');
   const [isCorrect, setIsCorrect] = useState(false);
   const [gameOver, setGameOver] = useState(false);
-  const [currentQuestion, setCurrentQuestion] = useState<GameQuestionType | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [currentStreak, setCurrentStreak] = useState(0);
@@ -228,7 +239,7 @@ const FamilyRelationGame = () => {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [lastAnswerResponse, setLastAnswerResponse] = useState<AnswerResponse | null>(null);
   const [askedQuestions, setAskedQuestions] = useState<string[]>([]);
-  const [highScores, setHighScores] = useState<HighScoresType | null>(null);
+  const [highScores, setHighScores] = useState<HighScores | null>(null);
   const [showScores, setShowScores] = useState(false);
   const [playerName, setPlayerName] = useState<string>(localStorage.getItem('playerName') || '');
   const [currentDifficulty, setCurrentDifficulty] = useState<Difficulty>(Difficulty.MEDIUM);
@@ -236,6 +247,7 @@ const FamilyRelationGame = () => {
   const [isPathVisible, setIsPathVisible] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [currentRelationshipPath, setCurrentRelationshipPath] = useState<RelationshipStep[] | undefined>();
+  const [feedbackSent, setFeedbackSent] = useState(false);
 
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const relationshipPathForGraph = useMemo(() => {
@@ -273,6 +285,7 @@ const FamilyRelationGame = () => {
         personName: person2Info.fullName,
         personGender: person2Info.gender,
         personBirthYear: person2Info.birthYear || undefined,
+        relationshipToNextPerson: undefined, // Son kişi için undefined
         sourcePerson: false,
         targetPerson: true,
       }
@@ -280,6 +293,13 @@ const FamilyRelationGame = () => {
 
     return basicPath;
   }, [currentQuestion, currentRelationshipPath, showResult, lastAnswerResponse, t]);
+
+  // Layout yönünü otomatik seç: 3+ kişi için LR, az kişi için TB
+  const optimalLayoutDirection = useMemo(() => {
+    const pathLength = relationshipPathForGraph?.length || 0;
+    return pathLength >= 3 ? 'LR' : 'TB';
+  }, [relationshipPathForGraph]);
+
   const person1InfoToDisplay = currentQuestion?.person1Info || null;
   const person2InfoToDisplay = currentQuestion?.person2Info || null;
   const person1 = currentQuestion?.person1Info?.fullName || '...';
@@ -353,30 +373,30 @@ const FamilyRelationGame = () => {
     }
   };
 
-  const handleNextQuestion = (nextQuestion?: GameQuestionType, result?: AnswerResponse) => {
+  const handleNextQuestion = (nextQuestion?: GameQuestion, result?: AnswerResponse) => {
     setShowResult(false);
     setSelectedAnswer('');
+    setIsCorrect(false);
     setLastAnswerResponse(null);
-    setCurrentRelationshipPath(undefined);
     setShowHint(false);
+    setFeedbackSent(false);
+    if (gameOver) {
+      console.info('Game is over, not fetching next question.');
+      return;
+    }
     
-    const questionToUse = nextQuestion || result?.nextQuestion || lastAnswerResponse?.nextQuestion;
-    
+    const questionToUse = nextQuestion || result?.nextQuestion;
     if (questionToUse) {
-      setCurrentQuestionSafely(questionToUse);
-      setAskedQuestions(prev => [...prev, questionToUse.id]);
-      setTotalQuestions(prev => prev + 1);
-      resetTimer();
-      console.log('Sıradaki soru set edildi:', questionToUse.id, 'Toplam soru:', totalQuestions + 1);
+        setCurrentQuestionSafely(questionToUse);
+        resetTimer();
     } else {
-      console.log('Sonraki soru bulunamadı, oyun bitiyor');
-      handleGameOver(result?.finalResult || lastAnswerResponse?.finalResult);
+        fetchNextQuestion();
     }
   };
   
   const fetchNextQuestion = async () => {
     if (gameOver) return;
-    setIsLoading(true);
+    setLoading(true);
     setError(null);
     setShowResult(false);
     setSelectedAnswer('');
@@ -398,7 +418,7 @@ const FamilyRelationGame = () => {
       else setError(String(err));
       setCurrentQuestionSafely(null);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
       resetTimer();
     }
   };
@@ -406,82 +426,66 @@ const FamilyRelationGame = () => {
   const startGame = async () => {
     if (!playerName.trim()) {
       setError(t('player_name.required'));
+      toast.error(t('player_name.required'));
       return;
     }
-    setIsLoading(true);
+    setLoading(true);
     setError(null);
-    setGameOver(false);
-    setGameStarted(true);
-    setScore(0);
-    setCorrectAnswers(0);
-    setTotalQuestions(0);
-    setCurrentStreak(0);
-    setMaxStreak(0);
-    setAskedQuestions([]);
-    
-    try {
-      localStorage.setItem('playerName', playerName);
-      
-      // Start the game session on backend
-      const initialGameData = await startGameSession(playerName, currentDifficulty, i18n.language);
-      
-      if (initialGameData && initialGameData.sessionId && initialGameData.firstQuestion) {
-        // Store session ID from backend
-        localStorage.setItem('gameSessionId', initialGameData.sessionId);
-        
-        setCurrentQuestionSafely(initialGameData.firstQuestion);
-        setAskedQuestions([initialGameData.firstQuestion.id.toString()]);
-        setTotalQuestions(1);
-        resetTimer();
-      } else {
-        throw new Error(t('error.question_load'));
-      }
-    } catch (err: any) {
-      console.error("Oyun başlatılırken hata:", err);
-      const errorMessage = err?.message || t('error.game_start');
-      setError(errorMessage);
-      setGameStarted(false);
-    } finally {
-      setIsLoading(false);
-    }
+    await startGameSessionApi(playerName, currentDifficulty, i18n.language);
+    setLoading(false);
   };
 
+  useEffect(() => {
+    setGameStarted(isGameSessionActive);
+  }, [isGameSessionActive]);
+
   const checkAnswer = async (answer: string) => {
-    if (!currentQuestion) return;
-
-    setIsLoading(true);
-    setError(null);
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    const sessionId = localStorage.getItem('gameSessionId') || `session-${Date.now()}`;
-    if (!localStorage.getItem('gameSessionId')) {
-      localStorage.setItem('gameSessionId', sessionId);
+    if (!currentQuestion) {
+      setError(t('errors.no_current_question'));
+      console.error("checkAnswer, mevcut bir soru olmadan çağrıldı.");
+      setLoading(false);
+      return;
     }
 
-    const answerPayload = {
-      sessionId: sessionId,
-      questionId: currentQuestion.id.toString(),
-      answer: answer || "",
-      timeTakenInSeconds: Math.max(0, (currentQuestion.timeLimit || 30) - timeRemaining),
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    
+    setLoading(true);
+    setSelectedAnswer(answer);
+
+    const answerDetails: GameAnswer = {
+      sessionId: localStorage.getItem('gameSessionId') || '',
+      questionId: currentQuestion.id,
+      answer: answer,
       difficulty: currentDifficulty,
-      askedQuestionSignaturesInThisGame: askedQuestions.map(q => q.toString()),
+      playerName: playerName,
+      timeTakenInSeconds: currentQuestion?.timeLimit ? (currentQuestion.timeLimit - timeRemaining) : 0,
       currentScore: score,
       currentStreak: currentStreak,
-      playerName: playerName || "Anonymous",
       gameQuestionCount: totalQuestions,
-      correctAnswersCount: correctAnswers
+      correctAnswersCount: correctAnswers,
     };
-
+    
     try {
-      const result = await submitAnswer(answerPayload, i18n.language);
-      setLastAnswerResponse(result as any);
-      setScore(result.updatedScore);
-      setCurrentStreak(result.updatedStreak);
+      const result = await submitAnswer(answerDetails, i18n.language);
+      setLastAnswerResponse(result);
       setIsCorrect(result.correctAnswer);
-      if(result.correctAnswer) {
+      setScore(result.updatedScore);
+      setTotalQuestions(prev => prev + 1);
+      
+      if (result.correctAnswer) {
         setCorrectAnswers(prev => prev + 1);
-        setMaxStreak(prev => Math.max(prev, result.updatedStreak));
+        const newStreak = result.updatedStreak;
+        setCurrentStreak(newStreak);
+        if (newStreak > maxStreak) {
+          setMaxStreak(newStreak);
+        }
+      } else {
+        setCurrentStreak(0);
       }
+      
       if(result.relationshipPath) {
         setCurrentRelationshipPath(result.relationshipPath);
       }
@@ -489,27 +493,35 @@ const FamilyRelationGame = () => {
       setShowResult(true);
 
       if (result.gameOver) {
-        setTimeout(() => handleGameOver(result.finalResult), 2000);
-      } else if (result.nextQuestion) {
-        setTimeout(() => handleNextQuestion(result.nextQuestion as GameQuestionType, result as AnswerResponse), 2000);
-      } else {
-        // Eğer nextQuestion yok ama gameOver de değilse, oyunu bitir
-        console.log('NextQuestion yok ve gameOver da false, oyunu bitiriyorum');
-        setTimeout(() => handleGameOver(result.finalResult), 2000);
+        setGameOver(true);
+        handleGameOver(result.finalResult);
       }
-      
+
     } catch (err: any) {
-      console.error("Cevap kontrol edilirken hata:", err);
-      setError(err.message || t('error.answer_submit'));
+      setError(err.message || t('errors.answer_submission_failed'));
     } finally {
-        setIsLoading(false);
+      setLoading(false);
     }
+  };
+
+  const handleFeedback = async (feedback: 'good' | 'bad') => {
+    if (!currentQuestion || !lastAnswerResponse) return;
+
+    const feedbackData: GameQuestionFeedbackDTO = {
+      questionId: currentQuestion.id,
+      relationshipType: currentQuestion.relationshipType,
+      isCorrect: lastAnswerResponse.correctAnswer,
+      feedback: feedback
+    };
+
+    setFeedbackSent(true);
+    await sendFeedback(feedbackData);
   };
 
   const restartGame = () => {
     setGameStarted(false);
-    setScore(0);
     setGameOver(false);
+    setScore(0);
     setShowResult(false);
     setSelectedAnswer('');
     setShowScores(false);
@@ -523,6 +535,7 @@ const FamilyRelationGame = () => {
     setIsPathVisible(false);
     setLastAnswerResponse(null);
     setCurrentRelationshipPath(undefined);
+    setFeedbackSent(false);
     
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -656,7 +669,7 @@ const FamilyRelationGame = () => {
                 </FormControl>
             </Box>
 
-            <AnimatedButton
+            <Button
               variant="contained"
               color="primary"
               size="large"
@@ -664,8 +677,8 @@ const FamilyRelationGame = () => {
               onClick={startGame}
               disabled={isLoading || !playerName.trim()}
             >
-              {isLoading ? <CircularProgress size={24} color="inherit" /> : t('start_game')}
-            </AnimatedButton>
+              {t('start_game')}
+            </Button>
             
             <Button
               variant="text"
@@ -787,9 +800,9 @@ const FamilyRelationGame = () => {
     }
   }, [gameStarted]);
 
-  const setCurrentQuestionSafely = (questionData: GameQuestionType | null) => {
+  const setCurrentQuestionSafely = (questionData: GameQuestion | null) => {
     if (questionData) {
-      const safeQuestion: GameQuestionType = {
+      const safeQuestion: GameQuestion = {
         ...questionData,
         id: questionData.id || `question-${Date.now()}`,
         options: questionData.options || [],
@@ -1009,6 +1022,57 @@ const FamilyRelationGame = () => {
                   </IconButton>
                 </Tooltip>
               </Box>
+
+              {showResult && lastAnswerResponse && (
+                <Box sx={{ mt: 2, textAlign: 'center' }}>
+                  <Alert 
+                    severity={isCorrect ? "success" : "error"}
+                    iconMapping={{
+                      success: <CheckCircleIcon fontSize="inherit" />,
+                      error: <CancelIcon fontSize="inherit" />,
+                    }}
+                    sx={{ justifyContent: 'center' }}
+                  >
+                    <Typography variant="h6">
+                      {isCorrect ? t('game.correct_answer') : t('game.wrong_answer')}
+                    </Typography>
+                    {!isCorrect && <Typography>{t('game.correct_is', { answer: lastAnswerResponse.correctAnswerText })}</Typography>}
+                    <Typography>{t('game.points_earned', { points: lastAnswerResponse.pointsEarned })}</Typography>
+                  </Alert>
+                  
+                  {!feedbackSent ? (
+                      <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2" color="text.secondary">{t('game.feedback_prompt')}</Typography>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Tooltip title={t('game.feedback_good') || ''}>
+                            <IconButton onClick={() => handleFeedback('good')} color="success">
+                              <ThumbUpIcon />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title={t('game.feedback_bad') || ''}>
+                            <IconButton onClick={() => handleFeedback('bad')} color="error">
+                              <ThumbDownIcon />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </Box>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                        {t('game.feedback_thanks')}
+                      </Typography>
+                  )}
+
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    onClick={() => handleNextQuestion(lastAnswerResponse.nextQuestion, lastAnswerResponse)}
+                    sx={{ mt: 2 }}
+                    disabled={gameOver}
+                  >
+                    {gameOver ? t('game.view_results') : t('game.next_question')}
+                  </Button>
+                </Box>
+              )}
             </GameCard>
             {renderHintSection()}
           </Box>
@@ -1047,6 +1111,7 @@ const FamilyRelationGame = () => {
                   path={relationshipPathForGraph}
                   height="100%"
                   width="100%"
+                  layoutDirection={optimalLayoutDirection}
                 />
               </Box>
             </GameCard>

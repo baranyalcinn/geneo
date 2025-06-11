@@ -36,19 +36,19 @@ public class PathFinderService {
      * Time Complexity: O(b^(d/2)) instead of O(b^d) - exponential improvement!
      */
     public Optional<List<Relationship>> findShortestPathBidirectional(Person start, Person end, int maxDepth) {
-        
         if (start.getId().equals(end.getId())) {
             return Optional.of(Collections.emptyList());
         }
         
         warmupGraphCache();
+        BidirectionalSearchState searchState = initializeBidirectionalSearch(start, end);
         
-        // Priority queues for smarter expansion (shorter paths first)
-        PriorityQueue<PathNode> forwardQueue = new PriorityQueue<>(
-            Comparator.comparingInt(node -> node.depth));
-        PriorityQueue<PathNode> backwardQueue = new PriorityQueue<>(
-            Comparator.comparingInt(node -> node.depth));
-            
+        return performBidirectionalSearch(searchState, maxDepth);
+    }
+    
+    private BidirectionalSearchState initializeBidirectionalSearch(Person start, Person end) {
+        PriorityQueue<PathNode> forwardQueue = new PriorityQueue<>(Comparator.comparingInt(node -> node.depth));
+        PriorityQueue<PathNode> backwardQueue = new PriorityQueue<>(Comparator.comparingInt(node -> node.depth));
         Map<Long, PathNode> forwardVisited = new HashMap<>();
         Map<Long, PathNode> backwardVisited = new HashMap<>();
         
@@ -60,47 +60,74 @@ public class PathFinderService {
         forwardVisited.put(start.getId(), startNode);
         backwardVisited.put(end.getId(), endNode);
         
+        return new BidirectionalSearchState(forwardQueue, backwardQueue, forwardVisited, backwardVisited);
+    }
+    
+    private Optional<List<Relationship>> performBidirectionalSearch(BidirectionalSearchState state, int maxDepth) {
         int iterationCount = 0;
-        final int MAX_ITERATIONS = 1000; // Prevent infinite loops
+        final int MAX_ITERATIONS = 1000;
         
-        while (!forwardQueue.isEmpty() && !backwardQueue.isEmpty() && iterationCount < MAX_ITERATIONS) {
+        while (canContinueSearch(state, iterationCount, MAX_ITERATIONS)) {
             iterationCount++;
             
-            // Check for intersection after each expansion
-            for (Long personId : forwardVisited.keySet()) {
-                if (backwardVisited.containsKey(personId)) {
-                    PathNode forwardNode = forwardVisited.get(personId);
-                    PathNode backwardNode = backwardVisited.get(personId);
-                    List<Relationship> path = reconstructBidirectionalPath(forwardNode, backwardNode);
-                    log.debug("Bidirectional path found in {} iterations, length: {}", iterationCount, path.size());
-                    return Optional.of(path);
-                }
+            Optional<List<Relationship>> intersection = checkForIntersection(state, iterationCount);
+            if (intersection.isPresent()) {
+                return intersection;
             }
             
-            // Expand smaller frontier first for balanced search
-            boolean expandForward = forwardQueue.size() <= backwardQueue.size();
+            expandNextFrontier(state, maxDepth);
             
-            if (expandForward && !forwardQueue.isEmpty()) {
-                PathNode current = forwardQueue.poll();
-                if (current.depth < maxDepth / 2) {
-                    expandNodeOptimized(current, forwardQueue, forwardVisited, true, maxDepth / 2);
-                }
-            } else if (!backwardQueue.isEmpty()) {
-                PathNode current = backwardQueue.poll();
-                if (current.depth < maxDepth / 2) {
-                    expandNodeOptimized(current, backwardQueue, backwardVisited, false, maxDepth / 2);
-                }
-            }
-            
-            // Early termination if queues get too large (memory protection)
-            if (forwardQueue.size() > 5000 || backwardQueue.size() > 5000) {
-                log.warn("Bidirectional search terminated due to large frontier size");
+            if (shouldTerminateEarly(state)) {
                 break;
             }
         }
         
         log.debug("Bidirectional search completed without finding path. Iterations: {}", iterationCount);
         return Optional.empty();
+    }
+    
+    private boolean canContinueSearch(BidirectionalSearchState state, int iterationCount, int maxIterations) {
+        return !state.forwardQueue.isEmpty() && 
+               !state.backwardQueue.isEmpty() && 
+               iterationCount < maxIterations;
+    }
+    
+    private Optional<List<Relationship>> checkForIntersection(BidirectionalSearchState state, int iterationCount) {
+        for (Long personId : state.forwardVisited.keySet()) {
+            if (state.backwardVisited.containsKey(personId)) {
+                PathNode forwardNode = state.forwardVisited.get(personId);
+                PathNode backwardNode = state.backwardVisited.get(personId);
+                List<Relationship> path = reconstructBidirectionalPath(forwardNode, backwardNode);
+                log.debug("Bidirectional path found in {} iterations, length: {}", iterationCount, path.size());
+                return Optional.of(path);
+            }
+        }
+        return Optional.empty();
+    }
+    
+    private void expandNextFrontier(BidirectionalSearchState state, int maxDepth) {
+        boolean expandForward = state.forwardQueue.size() <= state.backwardQueue.size();
+        
+        if (expandForward && !state.forwardQueue.isEmpty()) {
+            expandFrontier(state.forwardQueue, state.forwardVisited, maxDepth / 2);
+        } else if (!state.backwardQueue.isEmpty()) {
+            expandFrontier(state.backwardQueue, state.backwardVisited, maxDepth / 2);
+        }
+    }
+    
+    private void expandFrontier(PriorityQueue<PathNode> queue, Map<Long, PathNode> visited, int maxDepth) {
+        PathNode current = queue.poll();
+        if (current.depth < maxDepth) {
+            expandNodeOptimized(current, queue, visited, maxDepth);
+        }
+    }
+    
+    private boolean shouldTerminateEarly(BidirectionalSearchState state) {
+        if (state.forwardQueue.size() > 5000 || state.backwardQueue.size() > 5000) {
+            log.warn("Bidirectional search terminated due to large frontier size");
+            return true;
+        }
+        return false;
     }
     
     /**
@@ -287,7 +314,7 @@ public class PathFinderService {
      * Optimized node expansion with pruning and heuristics
      */
     private void expandNodeOptimized(PathNode current, PriorityQueue<PathNode> queue, 
-                                   Map<Long, PathNode> visited, boolean forward, int maxDepth) {
+                                   Map<Long, PathNode> visited, int maxDepth) {
         List<Relationship> relationships = getRelationships(current.person);
         
         // Priority based expansion - prefer blood relations
@@ -582,4 +609,19 @@ public class PathFinderService {
     }
     
     private record PersonNode(Person person, Relationship relationship) {}
+    
+    private static class BidirectionalSearchState {
+        PriorityQueue<PathNode> forwardQueue;
+        PriorityQueue<PathNode> backwardQueue;
+        Map<Long, PathNode> forwardVisited;
+        Map<Long, PathNode> backwardVisited;
+        
+        BidirectionalSearchState(PriorityQueue<PathNode> forwardQueue, PriorityQueue<PathNode> backwardQueue,
+                               Map<Long, PathNode> forwardVisited, Map<Long, PathNode> backwardVisited) {
+            this.forwardQueue = forwardQueue;
+            this.backwardQueue = backwardQueue;
+            this.forwardVisited = forwardVisited;
+            this.backwardVisited = backwardVisited;
+        }
+    }
 } 

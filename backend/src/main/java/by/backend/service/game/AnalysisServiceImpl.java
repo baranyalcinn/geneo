@@ -64,7 +64,7 @@ public class AnalysisServiceImpl implements AnalysisService {
     private String getMessage(String code, Locale locale) {
         try {
             return messageSource.getMessage(code, null, locale);
-        } catch (Exception e) {
+        } catch (Exception _) {
             // Fallback for missing keys
             return code;
         }

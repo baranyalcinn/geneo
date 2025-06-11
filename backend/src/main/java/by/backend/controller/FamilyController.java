@@ -18,7 +18,7 @@ public class FamilyController {
     }
 
     @GetMapping("/relationship")
-    public ResponseEntity<?> getRelationship(
+    public ResponseEntity<Object> getRelationship(
             @RequestParam Long person1Id,
             @RequestParam Long person2Id) {
         try {
@@ -26,7 +26,7 @@ public class FamilyController {
             Map<String, Object> relationshipData = familyService.findRelationshipBetween(Long.valueOf(person1Id), Long.valueOf(person2Id));
             return ResponseEntity.ok(relationshipData);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("İlişki bilgisi alınamadı: " + e.getMessage());
+            return ResponseEntity.<Object>badRequest().body("İlişki bilgisi alınamadı: " + e.getMessage());
         }
     }
 } 

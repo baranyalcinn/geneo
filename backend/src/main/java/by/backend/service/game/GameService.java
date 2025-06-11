@@ -7,6 +7,7 @@ import by.backend.model.dto.RecordScoreRequestDTO;
 import by.backend.model.dto.GameResultDTO;
 import by.backend.model.dto.GameQuestionDTO;
 import by.backend.model.dto.GameAnalysisDTO;
+import by.backend.model.dto.GameQuestionFeedbackDTO;
 import by.backend.model.enums.Difficulty;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,7 @@ import java.util.Locale;
 public interface GameService {
     InitialGameDataDTO startGame(String playerName, Difficulty difficulty, Locale locale);
     AnswerResponseDTO answerQuestion(GameAnswerDTO answerDetails, Locale locale);
+    void saveFeedback(GameQuestionFeedbackDTO feedbackDTO);
     GameResultDTO recordGameResult(RecordScoreRequestDTO scoreDetails);
     Map<Difficulty, List<GameResultDTO>> getHighScores();
     GameQuestionDTO generateQuestion(Difficulty difficulty, Locale locale);
@@ -22,4 +24,7 @@ public interface GameService {
     // Yeni analiz metotları
     GameAnalysisDTO getGameAnalysis(String sessionId);
     GameAnalysisDTO endGame(String sessionId);
+    
+    // Debug metodu
+    Map<String, Object> getPersonsDebugInfo();
 }

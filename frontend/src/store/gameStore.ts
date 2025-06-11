@@ -157,7 +157,12 @@ export const useGameStore = create<GameStore>()(
         updateSession: (updates: Partial<GameSession>) => {
           const currentSession = get().currentSession;
           if (currentSession) {
-            set({ currentSession: { ...currentSession, ...updates } });
+            const updatedSession = { ...currentSession, ...updates };
+            // SessionId güncellenirse localStorage'a da kaydet
+            if (updates.sessionId) {
+              localStorage.setItem('gameSessionId', updates.sessionId);
+            }
+            set({ currentSession: updatedSession });
           }
         },
         

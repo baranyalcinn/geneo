@@ -1,12 +1,12 @@
 package by.backend.model.dto;
 
 import by.backend.model.enums.Difficulty;
-import lombok.Data;
-import lombok.Builder;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
 import lombok.NoArgsConstructor;
+
 import java.util.List;
-import java.util.Map;
 
 @Data
 @Builder(toBuilder = true)
@@ -25,12 +25,4 @@ public class GameQuestionDTO {
     private int timeLimit;
     
     private List<RelationshipStepDTO> relationshipPath;
-
-    public void setCorrectAnswer(String correctAnswer) {
-        this.correctAnswer = correctAnswer;
-    }
-
-    public void setRelationshipPath(List<RelationshipStepDTO> relationshipPath) {
-        this.relationshipPath = relationshipPath;
-    }
 } 

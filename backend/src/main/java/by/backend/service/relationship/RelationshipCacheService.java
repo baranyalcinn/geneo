@@ -110,8 +110,8 @@ public class RelationshipCacheService {
         String key = createCacheKey(person1Id, person2Id);
         distanceCache.put(key, distance);
         
-        // Tersini de cache'le (simetrik ilişki)
-        String reverseKey = createCacheKey(person2Id, person1Id);
+        // Tersini de cache'le (simetrik ilişki) - metod zaten içsel olarak sıralama yapıyor
+        String reverseKey = createCacheKey(person1Id, person2Id);
         distanceCache.put(reverseKey, distance);
     }
     
@@ -252,7 +252,14 @@ public class RelationshipCacheService {
                 .filter(step -> step.getPersonBirthYear() != null)
                 .mapToDouble(step -> {
                     int age = LocalDateTime.now().getYear() - step.getPersonBirthYear();
-                    return age > 80 ? 0.3 : (age < 20 ? 0.2 : 0.1); // Yaşlı/genç bonus
+                    // Yaşlı/genç bonus hesaplama
+                    if (age > 80) {
+                        return 0.3;
+                    } else if (age < 20) {
+                        return 0.2;
+                    } else {
+                        return 0.1;
+                    }
                 })
                 .sum();
     }
@@ -265,7 +272,7 @@ public class RelationshipCacheService {
         // Cache implementasyonuna göre boyut tahmini
         try {
             return cache.getNativeCache().toString().split(",").length;
-        } catch (Exception e) {
+        } catch (Exception _) {
             return -1; // Bilinmeyen
         }
     }

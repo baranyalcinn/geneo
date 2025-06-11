@@ -1,23 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useGameStore } from '../store/gameStore';
-import { Difficulty } from '../types/game';
+import * as gameService from '../services/gameService';
+import { Difficulty, GameAnalysis } from '../types/game';
 import toast from 'react-hot-toast';
-
-interface GameAnalysis {
-  sessionId: string;
-  playerName: string;
-  difficulty: string;
-  totalQuestions: number;
-  questionsAnswered: number;
-  correctAnswers: number;
-  finalScore: number;
-  maxStreak: number;
-  gameStartTime: number;
-  gameDuration: number;
-  accuracyPercentage: number;
-  averageResponseTime: number;
-  recommendations: string[];
-}
 
 export const useGameSession = () => {
   const [timeLeft, setTimeLeft] = useState(180);
@@ -43,28 +28,51 @@ export const useGameSession = () => {
     gameOver,
     setLoading,
     error,
+    setCurrentQuestion,
+    setError,
+    startGame: startLocalGame,
   } = useGameStore();
 
-  const startGame = useCallback((playerName: string, difficulty: Difficulty) => {
+  const startGame = useCallback(async (playerName: string, difficulty: Difficulty, lang: string) => {
+    setLoading(true);
+    setError(null);
     try {
+      const initialData = await gameService.startGame(playerName, difficulty, lang);
+      
+      createSession(playerName, difficulty);
+      
+      startLocalGame();
       setIsGameActive(true);
-      setTimeLeft(180);
-      setQuestionCount(0);
+      
+      setCurrentQuestion(initialData.firstQuestion);
+      
+      updateSession({
+        sessionId: initialData.sessionId,
+        totalQuestions: initialData.totalQuestions,
+        timeRemaining: initialData.gameDurationInSeconds,
+      });
+
+      setTimeLeft(initialData.gameDurationInSeconds);
+      setQuestionCount(1);
       setShowAnalysis(false);
       setGameAnalysis(null);
       
-      createSession(playerName, difficulty);
       startGameTimer();
       
       toast.success(
-        `🎮 Oyun başladı! ${playerName}, ${difficulty} seviyesinde 10 soru, 3 dakika!`,
+        `🎮 Oyun başladı! ${playerName}, ${difficulty} seviyesinde!`,
         { duration: 3000 }
       );
-    } catch (error) {
-      console.error('Oyun başlatılırken hata:', error);
-      toast.error('Oyun başlatılırken bir hata oluştu!');
+    } catch (err: any) {
+      console.error('Oyun başlatılırken hata:', err);
+      const errorMessage = err.response?.data?.message ?? 'Oyun başlatılırken bir hata oluştu.';
+      setError(errorMessage);
+      toast.error(errorMessage);
+      setIsGameActive(false);
+    } finally {
+      setLoading(false);
     }
-  }, [createSession]);
+  }, [createSession, setCurrentQuestion, updateSession, startLocalGame, setLoading, setError]);
 
   const startGameTimer = useCallback(() => {
     if (gameTimerRef.current) {
@@ -184,9 +192,14 @@ export const useGameSession = () => {
       return;
     }
     
-    const difficulty = currentSession?.difficulty || Difficulty.MEDIUM;
-    const timeLimit = difficulty === Difficulty.EASY ? 20 : 
-                     difficulty === Difficulty.MEDIUM ? 18 : 15;
+    const difficulty = currentSession?.difficulty ?? Difficulty.MEDIUM;
+    
+    let timeLimit = 15; // HARD difficulty default
+    if (difficulty === Difficulty.EASY) {
+      timeLimit = 20;
+    } else if (difficulty === Difficulty.MEDIUM) {
+      timeLimit = 18;
+    }
     
     startQuestionTimer(timeLimit);
   }, [questionCount, totalQuestions, currentSession, startQuestionTimer]);

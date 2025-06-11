@@ -20,6 +20,7 @@ interface CustomNodeData {
     deathYear?: number;
     isSource?: boolean;
     isTarget?: boolean;
+    hideHandles?: boolean;
 }
 
 const CustomNode: React.FC<NodeProps<any>> = ({ data }) => {
@@ -72,19 +73,21 @@ const CustomNode: React.FC<NodeProps<any>> = ({ data }) => {
                 },
             }}
         >
-            <Handle
-                type="target"
-                position={Position.Left}
-                style={{
-                    background: theme.palette.primary.main,
-                    width: 10,
-                    height: 10,
-                    border: `2px solid ${theme.palette.background.paper}`,
-                    borderRadius: "50%",
-                    boxShadow: `0 0 4px ${alpha(theme.palette.common.black, 0.3)}`,
-                }}
-                isConnectable={true}
-            />
+            {!data?.hideHandles && (
+                <Handle
+                    type="target"
+                    position={Position.Left}
+                    style={{
+                        background: theme.palette.primary.main,
+                        width: 10,
+                        height: 10,
+                        border: `2px solid ${theme.palette.background.paper}`,
+                        borderRadius: "50%",
+                        boxShadow: `0 0 4px ${alpha(theme.palette.common.black, 0.3)}`,
+                    }}
+                    isConnectable={true}
+                />
+            )}
 
             <Box
                 sx={{
@@ -157,19 +160,21 @@ const CustomNode: React.FC<NodeProps<any>> = ({ data }) => {
                 </Box>
             </Box>
 
-            <Handle
-                type="source"
-                position={Position.Right}
-                style={{
-                    background: theme.palette.primary.main,
-                    width: 10,
-                    height: 10,
-                    border: `2px solid ${theme.palette.background.paper}`,
-                    borderRadius: "50%",
-                    boxShadow: `0 0 4px ${alpha(theme.palette.common.black, 0.3)}`,
-                }}
-                isConnectable={true}
-            />
+            {!data?.hideHandles && (
+                <Handle
+                    type="source"
+                    position={Position.Right}
+                    style={{
+                        background: theme.palette.primary.main,
+                        width: 10,
+                        height: 10,
+                        border: `2px solid ${theme.palette.background.paper}`,
+                        borderRadius: "50%",
+                        boxShadow: `0 0 4px ${alpha(theme.palette.common.black, 0.3)}`,
+                    }}
+                    isConnectable={true}
+                />
+            )}
         </Paper>
     );
 };

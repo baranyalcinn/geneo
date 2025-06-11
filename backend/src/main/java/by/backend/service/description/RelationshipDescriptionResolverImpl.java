@@ -4,6 +4,7 @@ import by.backend.config.RelationshipProperties;
 import by.backend.mapper.PersonMapper;
 import by.backend.model.dto.PersonSummaryDTO;
 import by.backend.model.dto.RelationshipDescriptionResult;
+import by.backend.model.dto.RelationshipStepDTO;
 import by.backend.model.entity.Person;
 import by.backend.model.entity.Relationship;
 import by.backend.model.enums.RelationshipStatus;
@@ -19,7 +20,6 @@ import org.springframework.context.NoSuchMessageException;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -34,492 +34,290 @@ public class RelationshipDescriptionResolverImpl implements RelationshipDescript
     private final RelationshipCache relationshipCache;
     private final FamilyGraphService familyGraphService;
 
-    private static final String GENDER_MALE = "ERKEK";
-    private static final String GENDER_FEMALE = "KADIN";
+    private static final String GENDER_MALE = "MALE";
+    private static final String GENDER_FEMALE = "FEMALE";
+    private static final String DISTANT_RELATIVE_KEY = "relationship.distant_relative";
+    private static final String PARENT_LITERAL = "parent";
+    private static final String CHILD_LITERAL = "child";
+    private static final String SIBLING_LITERAL = "sibling";
+    private static final String RELATIONSHIP_PREFIX = "relationship.";
+    private static final String RELATIONSHIP_ITSELF = "relationship.itself";
 
     @Override
     public RelationshipDescriptionResult resolveDescription(Person person1, Person person2, Locale locale) {
-        // Early exit for same person
         if (person1.getId().equals(person2.getId())) {
-            PersonSummaryDTO person1Summary = personMapper.toSummaryDTO(person1);
-            return RelationshipDescriptionResult.builder()
-                .localizedDescription(getMessage("relationship.itself", locale))
-                .messageKey("relationship.itself")
-                .acceptableMessageKeys(List.of("relationship.itself"))
-                .status(RelationshipStatus.FOUND)
-                .person1(person1Summary)
-                .person2(person1Summary)
-                .build();
+            return createSelfRelationshipResult(person1, locale);
         }
-
-        // Use cache for O(1) lookup after first computation
-        return relationshipCache.findRelationship(person1.getId(), person2.getId(), 
+        return relationshipCache.findRelationship(person1.getId(), person2.getId(),
             (p1Id, p2Id) -> computeRelationshipInternal(person1, person2, locale));
     }
-    
-    /**
-     * Internal computation method - only called on cache miss
-     */
+
+    private RelationshipDescriptionResult createSelfRelationshipResult(Person person, Locale locale) {
+        PersonSummaryDTO personSummary = personMapper.toSummaryDTO(person);
+        return RelationshipDescriptionResult.builder()
+            .localizedDescription(getMessage(RELATIONSHIP_ITSELF, locale))
+            .messageKey(RELATIONSHIP_ITSELF)
+            .acceptableMessageKeys(List.of(RELATIONSHIP_ITSELF))
+            .status(RelationshipStatus.FOUND)
+            .person1(personSummary)
+            .person2(personSummary)
+            .confidenceScore(1.0)
+            .complexityLevel(0)
+            .pathLength(0)
+            .build();
+    }
+
     private RelationshipDescriptionResult computeRelationshipInternal(Person person1, Person person2, Locale locale) {
         PersonSummaryDTO person1Summary = personMapper.toSummaryDTO(person1);
         PersonSummaryDTO person2Summary = personMapper.toSummaryDTO(person2);
 
-        // Quick graph-based checks first
-        if (!familyGraphService.areSameFamily(person1.getId(), person2.getId())) {
-            // Not in same family cluster - early exit
-            return RelationshipDescriptionResult.builder()
+        if (!familyGraphService.areConnected(person1.getId(), person2.getId())) {
+            return createNotFoundResult(person1Summary, person2Summary, locale);
+        }
+
+        // 1. Doğrudan ilişkiyi kontrol et (en hızlı)
+        Optional<RelationshipDescriptionResult> directResult = findDirectRelationshipOptimized(person1, person2, locale);
+        if (directResult.isPresent()) {
+            return directResult.get();
+        }
+
+        // 2. Dolaylı ilişki yolunu bul
+        return findIndirectRelationship(person1, person2, locale);
+    }
+
+    private RelationshipDescriptionResult findIndirectRelationship(Person person1, Person person2, Locale locale) {
+        int maxDepth = relationshipProperties.getDefaultPathDisplayMaxDepth();
+        List<List<Relationship>> allPaths = relationshipPathFinder.findPaths(person1, person2, maxDepth);
+
+        if (allPaths.isEmpty()) {
+            return createNotFoundResult(personMapper.toSummaryDTO(person1), personMapper.toSummaryDTO(person2), locale);
+        }
+
+        // En kısa yolu seç
+        List<Relationship> shortestPath = allPaths.stream()
+                .min(Comparator.comparingInt(List::size))
+                .orElse(Collections.emptyList());
+
+        if (shortestPath.isEmpty()) {
+            return createNotFoundResult(personMapper.toSummaryDTO(person1), personMapper.toSummaryDTO(person2), locale);
+        }
+
+        return resolvePathToDescription(shortestPath, person1, person2, locale);
+    }
+    
+    private RelationshipDescriptionResult resolvePathToDescription(List<Relationship> path, Person startPerson, Person endPerson, Locale locale) {
+        List<RelationshipStepDTO> pathDTO = relationshipPathFinder.convertPathToDTO(path, startPerson, endPerson, locale);
+        String messageKey = determineMessageKeyFromPath(path, startPerson, endPerson);
+        String localizedDescription = getMessage(messageKey, locale, endPerson.getFirstName(), startPerson.getFirstName());
+        
+        // Cinsiyete özel anahtarları da kabul edilebilir olarak ekle
+        List<String> acceptableKeys = new ArrayList<>();
+        acceptableKeys.add(messageKey);
+        // Örnek: "relationship.grandparent" ise "relationship.grandmother" ve "relationship.grandfather" ekle
+        if (messageKey.endsWith(PARENT_LITERAL)) {
+            acceptableKeys.add(messageKey.replace(PARENT_LITERAL, "mother"));
+            acceptableKeys.add(messageKey.replace(PARENT_LITERAL, "father"));
+        }
+        if(messageKey.endsWith(CHILD_LITERAL)) {
+            acceptableKeys.add(messageKey.replace(CHILD_LITERAL, "son"));
+            acceptableKeys.add(messageKey.replace(CHILD_LITERAL, "daughter"));
+        }
+         if(messageKey.endsWith(SIBLING_LITERAL)) {
+            acceptableKeys.add(messageKey.replace(SIBLING_LITERAL, "brother"));
+            acceptableKeys.add(messageKey.replace(SIBLING_LITERAL, "sister"));
+        }
+
+        return RelationshipDescriptionResult.builder()
+                .localizedDescription(localizedDescription)
+                .messageKey(messageKey)
+                .acceptableMessageKeys(acceptableKeys)
+                .status(RelationshipStatus.FOUND)
+                .person1(personMapper.toSummaryDTO(startPerson))
+                .person2(personMapper.toSummaryDTO(endPerson))
+                .path(pathDTO)
+                .pathLength(path.size())
+                .confidenceScore(calculateConfidence(path.size()))
+                .complexityLevel(calculateComplexity(path.size()))
+                .build();
+    }
+    
+    private String determineMessageKeyFromPath(List<Relationship> path, Person startPerson, Person endPerson) {
+        if (path.isEmpty()) return "relationship.not_found";
+        if (path.size() == 1) return handleDirectRelationship(path.get(0), startPerson);
+        if (path.size() == 2) return handleTwoStepRelationship(path, startPerson, endPerson);
+        
+        log.warn("Path logic not implemented for path size {}. Falling back to distant relative.", path.size());
+        return DISTANT_RELATIVE_KEY;
+    }
+
+    private String handleDirectRelationship(Relationship rel, Person startPerson) {
+        boolean isForward = rel.getPerson1().getId().equals(startPerson.getId());
+        String direction = isForward ? "direct" : "reverse";
+        return RELATIONSHIP_PREFIX + direction + "." + rel.getType().name().toLowerCase(Locale.ROOT);
+    }
+
+    private String handleTwoStepRelationship(List<Relationship> path, Person startPerson, Person endPerson) {
+        Relationship firstStep = path.get(0);
+        Relationship lastStep = path.get(1);
+        
+        if (firstStep.getType() == RelationshipType.PARENT_CHILD && lastStep.getType() == RelationshipType.PARENT_CHILD) {
+            return handleGrandRelationship(firstStep, lastStep, startPerson, endPerson);
+        }
+        
+        if (firstStep.getType() == RelationshipType.PARENT_CHILD && lastStep.getType() == RelationshipType.SIBLING) {
+            return handleUncleAuntRelationship(firstStep, startPerson, endPerson);
+        }
+        
+        return DISTANT_RELATIVE_KEY;
+    }
+
+    private String handleGrandRelationship(Relationship firstStep, Relationship lastStep, Person startPerson, Person endPerson) {
+        long p1Id = startPerson.getId();
+        
+        // P1 -> Parent -> Grandparent (P2)
+        if (firstStep.getPerson2().getId().equals(p1Id) && lastStep.getPerson2().getId().equals(firstStep.getPerson1().getId())) {
+            return getGrandparentKey(endPerson.getGender().name());
+        }
+        
+        // P1 -> Child -> Grandchild (P2)
+        if (firstStep.getPerson1().getId().equals(p1Id) && lastStep.getPerson1().getId().equals(firstStep.getPerson2().getId())) {
+            return getGrandchildKey(endPerson.getGender().name());
+        }
+        
+        return DISTANT_RELATIVE_KEY;
+    }
+
+    private String handleUncleAuntRelationship(Relationship firstStep, Person startPerson, Person endPerson) {
+        if (firstStep.getPerson2().getId().equals(startPerson.getId())) {
+            return getUncleAuntKey(endPerson.getGender().name());
+        }
+        return DISTANT_RELATIVE_KEY;
+    }
+
+    private String getGrandparentKey(String gender) {
+        if (GENDER_MALE.equalsIgnoreCase(gender)) return "relationship.grandfather";
+        if (GENDER_FEMALE.equalsIgnoreCase(gender)) return "relationship.grandmother";
+        return "relationship.grandparent";
+    }
+
+    private String getGrandchildKey(String gender) {
+        if (GENDER_MALE.equalsIgnoreCase(gender)) return "relationship.grandson";
+        if (GENDER_FEMALE.equalsIgnoreCase(gender)) return "relationship.granddaughter";
+        return "relationship.grandchild";
+    }
+
+    private String getUncleAuntKey(String gender) {
+        if (GENDER_MALE.equalsIgnoreCase(gender)) return "relationship.uncle";
+        if (GENDER_FEMALE.equalsIgnoreCase(gender)) return "relationship.aunt";
+        return DISTANT_RELATIVE_KEY;
+    }
+
+
+    private Optional<RelationshipDescriptionResult> findDirectRelationshipOptimized(Person person1, Person person2, Locale locale) {
+        List<Relationship> allDirectRelationships = relationshipRepository.findDirectRelationshipsBidirectional(
+                person1.getId(), person2.getId());
+
+        if (allDirectRelationships.isEmpty()) {
+            return Optional.empty();
+        }
+
+        // Genellikle tek bir aktif ilişki olmalı, ilkini alıyoruz.
+        Relationship relationship = allDirectRelationships.get(0);
+
+        List<RelationshipStepDTO> pathDTO = relationshipPathFinder.convertPathToDTO(List.of(relationship), person1, person2, locale);
+
+        boolean isForward = relationship.getPerson1().getId().equals(person1.getId());
+        String messageKey, localizedDescription;
+
+        if (isForward) {
+            messageKey = getForwardRelationshipKey(relationship.getType(), person2.getGender().name());
+            localizedDescription = relationshipPathFinder.formatDirectRelationship(person1, person2, relationship.getType(), locale);
+        } else {
+            messageKey = getReverseRelationshipKey(relationship.getType(), person2.getGender().name());
+            localizedDescription = relationshipPathFinder.formatReverseRelationship(person1, person2, relationship.getType(), locale);
+        }
+        
+        List<String> acceptableKeys = new ArrayList<>();
+        acceptableKeys.add(messageKey);
+        
+        // Add gender-neutral fallback
+        if (messageKey.contains("father") || messageKey.contains("mother")) acceptableKeys.add(RELATIONSHIP_PREFIX + PARENT_LITERAL);
+        if (messageKey.contains("son") || messageKey.contains("daughter")) acceptableKeys.add(RELATIONSHIP_PREFIX + CHILD_LITERAL);
+        if (messageKey.contains("brother") || messageKey.contains("sister")) acceptableKeys.add(RELATIONSHIP_PREFIX + SIBLING_LITERAL);
+
+
+        return Optional.of(RelationshipDescriptionResult.builder()
+                .localizedDescription(localizedDescription)
+                .messageKey(messageKey)
+                .acceptableMessageKeys(List.copyOf(new HashSet<>(acceptableKeys)))
+                .status(RelationshipStatus.FOUND)
+                .person1(personMapper.toSummaryDTO(person1))
+                .person2(personMapper.toSummaryDTO(person2))
+                .directTypeIfApplicable(relationship.getType())
+                .path(pathDTO)
+                .pathLength(1)
+                .confidenceScore(1.0)
+                .complexityLevel(1)
+                .build());
+    }
+
+    private String getForwardRelationshipKey(RelationshipType type, String gender) {
+        switch (type) {
+            case PARENT_CHILD:
+                if (GENDER_MALE.equalsIgnoreCase(gender)) return "relationship.son";
+                if (GENDER_FEMALE.equalsIgnoreCase(gender)) return "relationship.daughter";
+                return RELATIONSHIP_PREFIX + CHILD_LITERAL;
+            case SIBLING:
+                 if (GENDER_MALE.equalsIgnoreCase(gender)) return "relationship.brother";
+                if (GENDER_FEMALE.equalsIgnoreCase(gender)) return "relationship.sister";
+                return RELATIONSHIP_PREFIX + SIBLING_LITERAL;
+            case SPOUSE:
+                return "relationship.spouse";
+            default:
+                return RELATIONSHIP_PREFIX + "direct." + type.name().toLowerCase(Locale.ROOT);
+        }
+    }
+    
+    private String getReverseRelationshipKey(RelationshipType type, String gender) {
+        if (type == RelationshipType.PARENT_CHILD) {
+            if (GENDER_MALE.equalsIgnoreCase(gender)) return "relationship.father";
+            if (GENDER_FEMALE.equalsIgnoreCase(gender)) return "relationship.mother";
+            return RELATIONSHIP_PREFIX + PARENT_LITERAL;
+        }
+        // Sibling and spouse are symmetric
+        return getForwardRelationshipKey(type, gender);
+    }
+    
+    private RelationshipDescriptionResult createNotFoundResult(PersonSummaryDTO p1, PersonSummaryDTO p2, Locale locale) {
+         return RelationshipDescriptionResult.builder()
                 .localizedDescription(getMessage("relationship.not_found", locale))
                 .messageKey("relationship.not_found")
-                .acceptableMessageKeys(List.of("relationship.not_found"))
                 .status(RelationshipStatus.NOT_FOUND)
-                .person1(person1Summary)
-                .person2(person2Summary)
+                .person1(p1)
+                .person2(p2)
+                .confidenceScore(0.0)
+                .complexityLevel(5) // Max complexity for not found
                 .build();
-        }
-
-        // Check graph-based direct connection first - O(1) lookup
-        if (familyGraphService.areConnected(person1.getId(), person2.getId())) {
-            // 1. İlk olarak doğrudan ilişki (P1->P2) arama
-            List<Relationship> directRelationshipsP1P2 = relationshipRepository.findByPerson1AndPerson2AndIsActiveTrue(person1, person2);
-            if (!directRelationshipsP1P2.isEmpty()) {
-                Relationship relationship = directRelationshipsP1P2.get(0);
-                String description = relationshipPathFinder.formatDirectRelationship(person1, person2, relationship.getType(), locale);
-                String key = "relationship.direct." + relationship.getType().name().toLowerCase();
-                return RelationshipDescriptionResult.builder()
-                    .localizedDescription(description)
-                    .messageKey(key)
-                    .acceptableMessageKeys(List.of(key))
-                    .status(RelationshipStatus.FOUND)
-                    .person1(person1Summary)
-                    .person2(person2Summary)
-                    .directTypeIfApplicable(relationship.getType())
-                    .build();
-            }
-
-            // 2. Ters ilişki (P2->P1) arama
-            List<Relationship> directRelationshipsP2P1 = relationshipRepository.findByPerson1AndPerson2AndIsActiveTrue(person2, person1);
-            if (!directRelationshipsP2P1.isEmpty()) {
-                Relationship relationship = directRelationshipsP2P1.get(0);
-                String description = relationshipPathFinder.formatReverseRelationship(person1, person2, relationship.getType(), locale);
-                String key = "relationship.reverse." + relationship.getType().name().toLowerCase();
-                return RelationshipDescriptionResult.builder()
-                    .localizedDescription(description)
-                    .messageKey(key)
-                    .acceptableMessageKeys(List.of(key))
-                    .status(RelationshipStatus.FOUND)
-                    .person1(person1Summary)
-                    .person2(person2Summary)
-                    .directTypeIfApplicable(relationship.getType())
-                    .build();
-            }
-        }
-
-        // 3. Özel akrabalık ilişkilerini ara (amca, dayı, hala, teyze, vb.)
-        Optional<RelationshipDescriptionResult> specialRelationshipOpt = findSpecialRelationship(person1, person2, locale);
-        if (specialRelationshipOpt.isPresent()) {
-            return specialRelationshipOpt.get();
-        }
-
-        // 4. Kan bağı var mı kontrol et
-        boolean isBloodRelated = isBloodRelated(person1, person2);
-        if (isBloodRelated) {
-            return RelationshipDescriptionResult.builder()
-                .localizedDescription(getMessage("relationship.distant_relative", locale))
-                .messageKey("relationship.distant_relative")
-                .acceptableMessageKeys(List.of("relationship.distant_relative"))
-                .status(RelationshipStatus.FOUND)
-                .person1(person1Summary)
-                .person2(person2Summary)
-                .build();
-        }
-
-        // 5. İlişki bulunamadı
-        return RelationshipDescriptionResult.builder()
-            .localizedDescription(getMessage("relationship.not_found", locale))
-            .messageKey("relationship.not_found")
-            .acceptableMessageKeys(List.of("relationship.not_found"))
-            .status(RelationshipStatus.NOT_FOUND)
-            .person1(person1Summary)
-            .person2(person2Summary)
-            .build();
-    }
-
-    private Optional<RelationshipDescriptionResult> findSpecialRelationship(Person person1, Person person2, Locale locale) {
-        List<Person> person1Parents = getParentsForResolver(person1);
-        List<Person> person1Children = getChildrenForResolver(person1);
-        Person person1Spouse = getSpouseForResolver(person1);
-
-        return tryResolveGrandparentRelationship(person1, person2, person1Parents, locale)
-                .or(() -> tryResolveGrandchildRelationship(person1, person2, person1Children, locale))
-                .or(() -> tryResolveAuntUncleRelationship(person1, person2, person1Parents, locale))
-                .or(() -> {
-                    List<Person> person1Siblings = getSiblingsForResolver(person1);
-                    return tryResolveNephewNieceRelationship(person1, person2, person1Siblings, locale);
-                })
-                .or(() -> tryResolveCousinRelationship(person1, person2, person1Parents, locale))
-                .or(() -> {
-                    if (person1Spouse != null) {
-                        return tryResolveInLawParentRelationship(person1, person2, person1Spouse, locale)
-                                .or(() -> tryResolveInLawSiblingRelationship(person1, person2, person1Spouse, locale));
-                    }
-                    return Optional.empty();
-                })
-                .or(() -> tryResolveInLawChildSpouseRelationship(person1, person2, person1Children, locale))
-                .or(() -> tryResolveBackanakEltiRelationship(person1, person2, person1Spouse, locale));
-    }
-
-    // --- Special relationship helper methods (tryResolve...) --- 
-    // Bu metotlar RelationshipServiceImpl'den kopyalanacak ve personMapper.toSummaryDTO() kullanacaklar
-    private Optional<RelationshipDescriptionResult> tryResolveGrandparentRelationship(Person person1, Person person2, List<Person> person1Parents, Locale locale) {
-        for (Person parent : person1Parents) {
-            List<Person> grandparents = getParentsForResolver(parent); // Use local resolver version
-            for (Person grandparent : grandparents) {
-                if (grandparent.getId().equals(person2.getId())) {
-                    String key = "relationship.grandparent";
-                    if (person2.getGender() != null) {
-                        String person2GenderName = person2.getGender().name().toUpperCase();
-                        if (GENDER_MALE.equals(person2GenderName)) key = "relationship.grandfather";
-                        else if (GENDER_FEMALE.equals(person2GenderName)) key = "relationship.grandmother";
-                    }
-                    return Optional.of(RelationshipDescriptionResult.builder()
-                            .localizedDescription(getMessage(key, locale))
-                            .messageKey(key).acceptableMessageKeys(List.of(key, "relationship.grandparent")).status(RelationshipStatus.FOUND)
-                            .person1(personMapper.toSummaryDTO(person1)).person2(personMapper.toSummaryDTO(person2)).build());
-                }
-            }
-        }
-        return Optional.empty();
-    }
-
-    private Optional<RelationshipDescriptionResult> tryResolveGrandchildRelationship(Person person1, Person person2, List<Person> person1Children, Locale locale) {
-        for (Person child : person1Children) {
-            List<Person> grandchildren = getChildrenForResolver(child);
-            for (Person grandchild : grandchildren) {
-                if (grandchild.getId().equals(person2.getId())) {
-                    return Optional.of(RelationshipDescriptionResult.builder()
-                            .localizedDescription(getMessage("relationship.grandchild", locale))
-                            .messageKey("relationship.grandchild").acceptableMessageKeys(List.of("relationship.grandchild")).status(RelationshipStatus.FOUND)
-                            .person1(personMapper.toSummaryDTO(person1)).person2(personMapper.toSummaryDTO(person2)).build());
-                }
-            }
-        }
-        return Optional.empty();
-    }
-
-    private Optional<RelationshipDescriptionResult> tryResolveAuntUncleRelationship(Person person1, Person person2, List<Person> person1Parents, Locale locale) {
-        for (Person parent : person1Parents) {
-            List<Person> parentSiblings = getSiblingsForResolver(parent);
-            for (Person parentSibling : parentSiblings) {
-                if (parentSibling.getId().equals(person2.getId())) {
-                    String key;
-                    boolean isMaternal = (parent.getGender() != null && GENDER_FEMALE.equals(parent.getGender().name().toUpperCase()));
-                    
-                    if (person2.getGender() != null) {
-                        String person2GenderName = person2.getGender().name().toUpperCase();
-                        if (GENDER_MALE.equals(person2GenderName)) {
-                            key = isMaternal ? "relationship.maternal_uncle" : "relationship.paternal_uncle";
-                        } else if (GENDER_FEMALE.equals(person2GenderName)) {
-                            key = isMaternal ? "relationship.maternal_aunt" : "relationship.paternal_aunt";
-                        } else {
-                            key = "relationship.aunt_uncle";
-                        }
-                    } else {
-                        key = "relationship.aunt_uncle";
-                    }
-                    
-                    return Optional.of(RelationshipDescriptionResult.builder()
-                            .localizedDescription(getMessage(key, locale))
-                            .messageKey(key)
-                            .acceptableMessageKeys(List.of(key, "relationship.aunt_uncle"))
-                            .status(RelationshipStatus.FOUND)
-                            .person1(personMapper.toSummaryDTO(person1))
-                            .person2(personMapper.toSummaryDTO(person2))
-                            .build());
-                }
-            }
-        }
-        return Optional.empty();
-    }
-
-     private Optional<RelationshipDescriptionResult> tryResolveNephewNieceRelationship(Person person1, Person person2, List<Person> person1Siblings, Locale locale) {
-        for (Person sibling : person1Siblings) {
-            List<Person> nephewsNieces = getChildrenForResolver(sibling);
-            for (Person nephewNiece : nephewsNieces) {
-                if (nephewNiece.getId().equals(person2.getId())) {
-                    String key = "relationship.nephew_niece";
-                     if (person2.getGender() != null) {
-                        String person2GenderName = person2.getGender().name().toUpperCase();
-                        if (GENDER_MALE.equals(person2GenderName)) key = "relationship.nephew";
-                        else if (GENDER_FEMALE.equals(person2GenderName)) key = "relationship.niece";
-                    }
-                    return Optional.of(RelationshipDescriptionResult.builder()
-                            .localizedDescription(getMessage(key, locale))
-                            .messageKey(key).acceptableMessageKeys(List.of(key, "relationship.nephew_niece")).status(RelationshipStatus.FOUND)
-                            .person1(personMapper.toSummaryDTO(person1)).person2(personMapper.toSummaryDTO(person2)).build());
-                }
-            }
-        }
-        return Optional.empty();
-    }
-
-    private Optional<RelationshipDescriptionResult> tryResolveCousinRelationship(Person person1, Person person2, List<Person> person1Parents, Locale locale) {
-        for (Person parent : person1Parents) {
-            List<Person> parentSiblings = getSiblingsForResolver(parent);
-            for (Person parentSibling : parentSiblings) {
-                List<Person> cousins = getChildrenForResolver(parentSibling);
-                for (Person cousin : cousins) {
-                    if (cousin.getId().equals(person2.getId())) {
-                         return Optional.of(RelationshipDescriptionResult.builder()
-                                .localizedDescription(getMessage("relationship.cousin", locale))
-                                .messageKey("relationship.cousin").acceptableMessageKeys(List.of("relationship.cousin")).status(RelationshipStatus.FOUND)
-                                .person1(personMapper.toSummaryDTO(person1)).person2(personMapper.toSummaryDTO(person2)).build());
-                    }
-                }
-            }
-        }
-        return Optional.empty();
-    }
-
-    private Optional<RelationshipDescriptionResult> tryResolveInLawParentRelationship(Person person1, Person person2, Person person1Spouse, Locale locale) {
-        List<Person> spouseParents = getParentsForResolver(person1Spouse);
-        for (Person spouseParent : spouseParents) {
-            if (spouseParent.getId().equals(person2.getId())) {
-                String key = "relationship.inlaw.parent";
-                if (person2.getGender() != null) {
-                    String person2GenderName = person2.getGender().name().toUpperCase();
-                    if (GENDER_MALE.equals(person2GenderName)) key = "relationship.inlaw.father";
-                    else if (GENDER_FEMALE.equals(person2GenderName)) key = "relationship.inlaw.mother";
-                }
-                return Optional.of(RelationshipDescriptionResult.builder()
-                        .localizedDescription(getMessage(key, locale))
-                        .messageKey(key).acceptableMessageKeys(List.of(key, "relationship.inlaw.parent")).status(RelationshipStatus.FOUND)
-                        .person1(personMapper.toSummaryDTO(person1)).person2(personMapper.toSummaryDTO(person2)).build());
-            }
-        }
-        return Optional.empty();
-    }
-
-    /**
-     * Eşin kardeşleri ile ilişkiyi çözümler (Türk aile yapısına uygun)
-     * Örnek: Baran'ın eşi Gaye, Gaye'nin kardeşi Meltem -> Baran için Meltem "baldızı"
-     */
-    private Optional<RelationshipDescriptionResult> tryResolveInLawSiblingRelationship(Person person1, Person person2, Person person1Spouse, Locale locale) {
-        List<Person> spouseSiblings = getSiblingsForResolver(person1Spouse);
-        for (Person spouseSibling : spouseSiblings) {
-            if (spouseSibling.getId().equals(person2.getId())) {
-                String key = determineSpouseSiblingRelationship(person1, person2, person1Spouse);
-                
-                return Optional.of(RelationshipDescriptionResult.builder()
-                        .localizedDescription(getMessage(key, locale))
-                        .messageKey(key)
-                        .acceptableMessageKeys(List.of(key))
-                        .status(RelationshipStatus.FOUND)
-                        .person1(personMapper.toSummaryDTO(person1))
-                        .person2(personMapper.toSummaryDTO(person2))
-                        .build());
-            }
-        }
-        
-        // Ters yönü de kontrol et: Person2'nin kardeşi Person1 ise
-        return tryResolveSiblingSpouseRelationship(person1, person2, locale);
     }
     
-    /**
-     * Eşin kardeşi için doğru terimi belirler
-     */
-    private String determineSpouseSiblingRelationship(Person person1, Person person2, Person person1Spouse) {
-        if (person1.getGender() == null || person2.getGender() == null || person1Spouse.getGender() == null) {
-            return "relationship.inlaw.brother"; // Fallback
-        }
-        
-        String person1Gender = person1.getGender().name().toUpperCase();
-        String person2Gender = person2.getGender().name().toUpperCase();
-        String spouseGender = person1Spouse.getGender().name().toUpperCase();
-        
-        // Person2 erkekse -> Kayınbirader
-        if (GENDER_MALE.equals(person2Gender)) {
-            return "relationship.inlaw.brother";
-        }
-        
-        // Person2 kadınsa -> Baldız veya Görümce
-        if (GENDER_FEMALE.equals(person2Gender)) {
-            if (GENDER_MALE.equals(person1Gender) && GENDER_FEMALE.equals(spouseGender)) {
-                // Erkek (Person1) - Kadın (Eş) -> Eşin kız kardeşi = Baldız
-                return "relationship.inlaw.sister_of_wife";
-            } else if (GENDER_FEMALE.equals(person1Gender) && GENDER_MALE.equals(spouseGender)) {
-                // Kadın (Person1) - Erkek (Eş) -> Eşin kız kardeşi = Görümce
-                return "relationship.inlaw.sister_of_husband";
-            }
-        }
-        
-        return "relationship.inlaw.brother"; // Fallback
-    }
-    
-    /**
-     * Kardeşin eşi ilişkisini çözümler (Enişte/Yenge)
-     * Örnek: Meltem'in kardeşi Gaye, Gaye'nin eşi Baran -> Meltem için Baran "enişte"
-     */
-    private Optional<RelationshipDescriptionResult> tryResolveSiblingSpouseRelationship(Person person1, Person person2, Locale locale) {
-        List<Person> person1Siblings = getSiblingsForResolver(person1);
-        for (Person sibling : person1Siblings) {
-            Person siblingSpouse = getSpouseForResolver(sibling);
-            if (siblingSpouse != null && siblingSpouse.getId().equals(person2.getId())) {
-                String key = determineSiblingSpouseRelationship(person1, person2, sibling);
-                
-                return Optional.of(RelationshipDescriptionResult.builder()
-                        .localizedDescription(getMessage(key, locale))
-                        .messageKey(key)
-                        .acceptableMessageKeys(List.of(key))
-                        .status(RelationshipStatus.FOUND)
-                        .person1(personMapper.toSummaryDTO(person1))
-                        .person2(personMapper.toSummaryDTO(person2))
-                        .build());
-            }
-        }
-        return Optional.empty();
-    }
-    
-    /**
-     * Kardeşin eşi için doğru terimi belirler
-     */
-    private String determineSiblingSpouseRelationship(Person person1, Person person2, Person sibling) {
-        if (person2.getGender() == null) {
-            return "relationship.sibling_spouse.male"; // Fallback
-        }
-        
-        String person2Gender = person2.getGender().name().toUpperCase();
-        
-        if (GENDER_MALE.equals(person2Gender)) {
-            return "relationship.sibling_spouse.male"; // Enişte
-        } else if (GENDER_FEMALE.equals(person2Gender)) {
-            return "relationship.sibling_spouse.female"; // Yenge  
-        }
-        
-        return "relationship.sibling_spouse.male"; // Fallback
-    }
-    
-    private Optional<RelationshipDescriptionResult> tryResolveInLawChildSpouseRelationship(Person person1, Person person2, List<Person> person1Children, Locale locale) {
-        for (Person child : person1Children) {
-            Person childSpouse = getSpouseForResolver(child);
-            if (childSpouse != null && childSpouse.getId().equals(person2.getId())) {
-                String key = "relationship.inlaw.child";
-                if (person2.getGender() != null) {
-                    String person2GenderName = person2.getGender().name().toUpperCase();
-                    if (GENDER_MALE.equals(person2GenderName)) key = "relationship.inlaw.son";
-                    else if (GENDER_FEMALE.equals(person2GenderName)) key = "relationship.inlaw.daughter";
-                }
-                return Optional.of(RelationshipDescriptionResult.builder()
-                        .localizedDescription(getMessage(key, locale))
-                        .messageKey(key).acceptableMessageKeys(List.of(key, "relationship.inlaw.child")).status(RelationshipStatus.FOUND)
-                        .person1(personMapper.toSummaryDTO(person1)).person2(personMapper.toSummaryDTO(person2)).build());
-            }
-        }
-        return Optional.empty();
+    private double calculateConfidence(int pathLength) {
+        return Math.max(0.1, 1.0 - (pathLength - 1) * 0.2);
     }
 
-    private Optional<RelationshipDescriptionResult> tryResolveBackanakEltiRelationship(Person person1, Person person2, Person person1Spouse, Locale locale) {
-        if (person1Spouse == null) return Optional.empty();
-        
-        // Bacanak/Elti: Person1'in eşinin kardeşinin eşi
-        List<Person> spouseSiblings = getSiblingsForResolver(person1Spouse);
-        for (Person spouseSibling : spouseSiblings) {
-            Person spouseSiblingSpouse = getSpouseForResolver(spouseSibling);
-            if (spouseSiblingSpouse != null && spouseSiblingSpouse.getId().equals(person2.getId())) {
-                String key;
-                if (person2.getGender() != null && person1.getGender() != null) {
-                    String person2GenderName = person2.getGender().name().toUpperCase();
-                    String person1GenderName = person1.getGender().name().toUpperCase();
-                    
-                    if (GENDER_MALE.equals(person1GenderName) && GENDER_MALE.equals(person2GenderName)) {
-                        key = "relationship.spouse_sibling_spouse.bacanak"; // Bacanak (erkek-erkek)
-                    } else if (GENDER_FEMALE.equals(person1GenderName) && GENDER_FEMALE.equals(person2GenderName)) {
-                        key = "relationship.spouse_sibling_spouse.elti"; // Elti (kadın-kadın)
-                    } else {
-                        key = "relationship.spouse_sibling_spouse.bacanak"; // Karışık cinsiyet fallback
-                    }
-                } else {
-                    key = "relationship.spouse_sibling_spouse";
-                }
-                
-                return Optional.of(RelationshipDescriptionResult.builder()
-                        .localizedDescription(getMessage(key, locale))
-                        .messageKey(key)
-                        .acceptableMessageKeys(List.of(key))
-                        .status(RelationshipStatus.FOUND)
-                        .person1(personMapper.toSummaryDTO(person1))
-                        .person2(personMapper.toSummaryDTO(person2))
-                        .build());
-            }
-        }
-        return Optional.empty();
-    }
-
-    // --- Helper methods for fetching relatives (local to resolver, no caching here by default) ---
-    private List<Person> getParentsForResolver(Person person) {
-        return relationshipRepository.findByPerson2AndTypeAndIsActiveTrue(person, RelationshipType.PARENT_CHILD)
-                .stream().map(Relationship::getPerson1).collect(Collectors.toList());
-    }
-
-    private List<Person> getChildrenForResolver(Person person) {
-        return relationshipRepository.findByPerson1AndTypeAndIsActiveTrue(person, RelationshipType.PARENT_CHILD)
-                .stream().map(Relationship::getPerson2).collect(Collectors.toList());
-    }
-
-    private List<Person> getSiblingsForResolver(Person person) {
-        // Siblings are found if they share at least one parent.
-        // This is a more complex logic if SIBLING type is not directly stored.
-        // Assuming SIBLING type is stored or can be derived. For now, using direct SIBLING type query.
-        // If SIBLING type is not directly stored, this needs to find common parents then children of those parents (excluding self).
-        return relationshipRepository.findActiveRelationships(person, RelationshipType.SIBLING)
-                .stream()
-                .map(rel -> rel.getPerson1().getId().equals(person.getId()) ? rel.getPerson2() : rel.getPerson1())
-                .collect(Collectors.toList());
-    }
-
-    private Person getSpouseForResolver(Person person) {
-        return relationshipRepository.findActiveRelationships(person, RelationshipType.SPOUSE)
-                .stream()
-                .map(rel -> rel.getPerson1().getId().equals(person.getId()) ? rel.getPerson2() : rel.getPerson1())
-                .findFirst().orElse(null);
-    }
-
-    private Set<Person> getAncestorsForResolver(Person person) {
-        Set<Person> ancestors = new HashSet<>();
-        Queue<Person> queue = new LinkedList<>();
-        queue.add(person);
-        Set<Long> visited = new HashSet<>();
-        visited.add(person.getId());
-        while (!queue.isEmpty()) {
-            Person current = queue.poll();
-            List<Person> parentRelationships = getParentsForResolver(current); // uses local getParents
-            for (Person parent : parentRelationships) { // Changed from Relationship rel to Person parent
-                if (!visited.contains(parent.getId())) {
-                    ancestors.add(parent);
-                    queue.add(parent);
-                    visited.add(parent.getId());
-                }
-            }
-        }
-        return ancestors;
-    }
-
-    private boolean isBloodRelated(Person person1, Person person2) {
-        if (person1.getId().equals(person2.getId())) return true;
-        Set<Person> ancestors1 = getAncestorsForResolver(person1);
-        Set<Person> ancestors2 = getAncestorsForResolver(person2);
-        if (ancestors1.contains(person2) || ancestors2.contains(person1)) return true;
-        Set<Person> commonAncestors = new HashSet<>(ancestors1);
-        commonAncestors.retainAll(ancestors2);
-        return !commonAncestors.isEmpty();
+    private int calculateComplexity(int pathLength) {
+        if (pathLength <= 1) return 1;
+        if (pathLength <= 2) return 2;
+        if (pathLength <= 3) return 3;
+        if (pathLength <= 4) return 4;
+        return 5;
     }
 
     private String getMessage(String code, Locale locale, Object... args) {
         try {
-            // Artık basit format kullanıyoruz - parametreler görmezden geliniyor  
-            return messageSource.getMessage(code, null, locale);
-        } catch (NoSuchMessageException e) {
-            log.warn("Message key not found in RelationshipDescriptionResolver: {} for locale {}", code, locale);
-            return "[[DESC_MSG_NOT_FOUND: " + code + "]]";
+            return messageSource.getMessage(code, args, locale);
+        } catch (NoSuchMessageException _) {
+            log.warn("Message not found for code '{}' in locale '{}', returning code as fallback", code, locale);
+            return code;
         }
     }
-} 
+}

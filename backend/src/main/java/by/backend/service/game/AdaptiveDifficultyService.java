@@ -1,7 +1,6 @@
 package by.backend.service.game;
 
 import by.backend.model.dto.GameQuestionDTO;
-import by.backend.model.entity.Person;
 import by.backend.model.enums.Difficulty;
 import by.backend.service.game.session.GameSession;
 import by.backend.service.game.session.PlayerAnswer;

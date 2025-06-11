@@ -17,7 +17,10 @@ const SingleNodeView: React.FC<SingleNodeViewProps> = ({
   // CustomNode'a geçilecek NodeProps benzeri bir obje oluşturalım
   const nodePropsForCustomNode: any = {
     id: node.id || 'single-node',
-    data: node.data || node,
+    data: { 
+      ...(node.data || node), 
+      hideHandles: true  // Handle'ları gizle
+    },
     type: 'custom',
     selected: false,
     isConnectable: false,

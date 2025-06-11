@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -71,7 +70,7 @@ public class PersonServiceImpl implements PersonService {
     public List<PersonDTO> getAllPersons() {
         return personRepository.findAll().stream()
             .map(personMapper::toDTO)
-            .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
@@ -79,7 +78,7 @@ public class PersonServiceImpl implements PersonService {
     public List<PersonDTO> findByLastName(String lastName) {
         return personRepository.findByLastName(lastName).stream()
             .map(personMapper::toDTO)
-            .collect(Collectors.toList());
+            .toList();
     }
 
     @Override

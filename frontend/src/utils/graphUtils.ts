@@ -67,6 +67,7 @@ export const transformDataToFlow = (
 
     path.forEach((step, index) => {
         const nodeId = step.personId.toString();
+        
         nodes.push({
             id: nodeId,
             type: 'custom', // Özel düğüm tipi

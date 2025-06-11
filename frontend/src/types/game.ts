@@ -30,9 +30,10 @@ export interface RelationshipStep {
 
 export interface GameQuestion {
   id: string;
-  questionText: string;
+  questionText?: string;
   options: string[];
   difficulty: Difficulty;
+  relationshipType: string;
   person1Info?: PersonInfo;
   person2Info?: PersonInfo;
   timeLimit?: number;
@@ -40,10 +41,20 @@ export interface GameQuestion {
   correctAnswer?: string;
 }
 
+export interface GameQuestionFeedbackDTO {
+  questionId: string;
+  relationshipType: string;
+  isCorrect: boolean;
+  feedback: 'good' | 'bad';
+}
+
 export interface InitialGameData {
   firstQuestion: GameQuestion;
   playerName: string;
   difficulty: Difficulty;
+  sessionId: string;
+  gameDurationInSeconds: number;
+  totalQuestions: number;
 }
 
 export interface GameSession {
@@ -63,15 +74,15 @@ export interface GameSession {
 export interface GameAnswer {
   questionId: string;
   answer: string;
-  timeTakenInSeconds: number;
-  difficulty: Difficulty;
-  playerName: string;
-  askedQuestionSignaturesInThisGame: string[];
-  currentScore: number;
-  currentStreak: number;
-  gameQuestionCount: number;
-  correctAnswersCount: number;
-  sessionId?: string;
+  sessionId: string;
+  timeTakenInSeconds?: number;
+  difficulty?: Difficulty;
+  playerName?: string;
+  askedQuestionSignaturesInThisGame?: string[];
+  currentScore?: number;
+  currentStreak?: number;
+  gameQuestionCount?: number;
+  correctAnswersCount?: number;
 }
 
 export interface AnswerResponse {
@@ -113,4 +124,20 @@ export interface RecordScoreRequest {
   correctAnswers: number;
   totalQuestions: number;
   maxStreak: number;
+}
+
+export interface GameAnalysis {
+  sessionId: string;
+  playerName: string;
+  difficulty: string;
+  totalQuestions: number;
+  questionsAnswered: number;
+  correctAnswers: number;
+  finalScore: number;
+  maxStreak: number;
+  gameStartTime: number;
+  gameDuration: number;
+  accuracyPercentage: number;
+  averageResponseTime: number;
+  recommendations: string[];
 } 

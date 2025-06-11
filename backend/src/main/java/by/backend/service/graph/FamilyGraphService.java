@@ -191,42 +191,52 @@ public class FamilyGraphService {
     }
     
     private void calculateGenerations() {
-        // Find root persons (no parents)
         Set<Long> rootPersons = findRootPersons();
-        
-        // BFS to assign generation levels
         Queue<PersonGeneration> queue = new LinkedList<>();
         Set<Long> visited = new HashSet<>();
         
-        // Start with generation 0 for roots
+        initializeRootGenerations(rootPersons, queue, visited);
+        processGenerationQueue(queue, visited);
+        
+        log.debug("Calculated generations for {} persons", personGenerations.size());
+    }
+    
+    private void initializeRootGenerations(Set<Long> rootPersons, Queue<PersonGeneration> queue, Set<Long> visited) {
         for (Long rootId : rootPersons) {
             queue.offer(new PersonGeneration(rootId, 0));
             personGenerations.put(rootId, 0);
             visited.add(rootId);
         }
-        
+    }
+    
+    private void processGenerationQueue(Queue<PersonGeneration> queue, Set<Long> visited) {
         while (!queue.isEmpty()) {
             PersonGeneration current = queue.poll();
-            
-            // Process children (next generation)
-            Set<PersonEdge> neighbors = getNeighbors(current.personId());
-            for (PersonEdge edge : neighbors) {
-                if (edge.relationship().getType() == RelationshipType.PARENT_CHILD) {
-                    // Check direction - if current is parent, neighbor is child
-                    if (edge.relationship().getPerson1().getId().equals(current.personId())) {
-                        Long childId = edge.person().getId();
-                        if (!visited.contains(childId)) {
-                            int childGeneration = current.generation() + 1;
-                            personGenerations.put(childId, childGeneration);
-                            queue.offer(new PersonGeneration(childId, childGeneration));
-                            visited.add(childId);
-                        }
-                    }
-                }
+            processChildrenOfPerson(current, visited, queue);
+        }
+    }
+    
+    private void processChildrenOfPerson(PersonGeneration current, Set<Long> visited, Queue<PersonGeneration> queue) {
+        Set<PersonEdge> neighbors = getNeighbors(current.personId());
+        
+        for (PersonEdge edge : neighbors) {
+            if (isParentChildRelationship(edge, current.personId())) {
+                addChildToGeneration(edge.person().getId(), current.generation() + 1, visited, queue);
             }
         }
-        
-        log.debug("Calculated generations for {} persons", personGenerations.size());
+    }
+    
+    private boolean isParentChildRelationship(PersonEdge edge, Long currentPersonId) {
+        return edge.relationship().getType() == RelationshipType.PARENT_CHILD 
+               && edge.relationship().getPerson1().getId().equals(currentPersonId);
+    }
+    
+    private void addChildToGeneration(Long childId, int generation, Set<Long> visited, Queue<PersonGeneration> queue) {
+        if (!visited.contains(childId)) {
+            personGenerations.put(childId, generation);
+            queue.offer(new PersonGeneration(childId, generation));
+            visited.add(childId);
+        }
     }
     
     private Set<Long> findRootPersons() {
@@ -257,37 +267,47 @@ public class FamilyGraphService {
         
         for (Long personId : adjacencyList.keySet()) {
             if (!visited.contains(personId)) {
-                Set<Long> cluster = new HashSet<>();
-                
-                // BFS to find connected component
-                Queue<Long> queue = new LinkedList<>();
-                queue.offer(personId);
-                visited.add(personId);
-                
-                while (!queue.isEmpty()) {
-                    Long current = queue.poll();
-                    cluster.add(current);
-                    
-                    Set<PersonEdge> neighbors = getNeighbors(current);
-                    for (PersonEdge edge : neighbors) {
-                        Long neighborId = edge.person().getId();
-                        if (!visited.contains(neighborId)) {
-                            visited.add(neighborId);
-                            queue.offer(neighborId);
-                        }
-                    }
-                }
-                
-                // Assign cluster to all members
-                for (Long memberId : cluster) {
-                    familyClusters.put(memberId, cluster);
-                }
-                
+                Set<Long> cluster = findConnectedComponent(personId, visited);
+                assignClusterToMembers(cluster);
                 clusterId++;
             }
         }
         
         log.debug("Identified {} family clusters", clusterId);
+    }
+    
+    private Set<Long> findConnectedComponent(Long startPersonId, Set<Long> visited) {
+        Set<Long> cluster = new HashSet<>();
+        Queue<Long> queue = new LinkedList<>();
+        
+        queue.offer(startPersonId);
+        visited.add(startPersonId);
+        
+        while (!queue.isEmpty()) {
+            Long current = queue.poll();
+            cluster.add(current);
+            processNeighborsForClustering(current, visited, queue);
+        }
+        
+        return cluster;
+    }
+    
+    private void processNeighborsForClustering(Long current, Set<Long> visited, Queue<Long> queue) {
+        Set<PersonEdge> neighbors = getNeighbors(current);
+        
+        for (PersonEdge edge : neighbors) {
+            Long neighborId = edge.person().getId();
+            if (!visited.contains(neighborId)) {
+                visited.add(neighborId);
+                queue.offer(neighborId);
+            }
+        }
+    }
+    
+    private void assignClusterToMembers(Set<Long> cluster) {
+        for (Long memberId : cluster) {
+            familyClusters.put(memberId, cluster);
+        }
     }
     
     private void precomputeCommonPaths() {

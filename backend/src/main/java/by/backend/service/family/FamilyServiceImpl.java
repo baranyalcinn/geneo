@@ -11,7 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -28,95 +27,127 @@ public class FamilyServiceImpl implements FamilyService {
             .orElseThrow(() -> new RuntimeException("Kişi bulunamadı: ID " + person2Id));
 
         Map<String, Object> result = new HashMap<>();
-        List<Map<String, Object>> relationshipsResultList = new ArrayList<>(); // Renamed to avoid conflict
-        List<Map<String, Object>> peopleResultList = new ArrayList<>(); // Renamed to avoid conflict
-
-        // Ortak atayı bul
         Person commonAncestor = findCommonAncestor(person1, person2);
-        if (commonAncestor != null) {
-            Map<String, Object> ancestorMap = new HashMap<>();
-            ancestorMap.put("id", commonAncestor.getId());
-            ancestorMap.put("firstName", commonAncestor.getFirstName());
-            ancestorMap.put("lastName", commonAncestor.getLastName());
-            ancestorMap.put("gender", commonAncestor.getGender() != null ? commonAncestor.getGender().name() : "BİLİNMEYEN");
-            result.put("commonAncestor", ancestorMap);
-        }
+        
+        addCommonAncestorToResult(result, commonAncestor);
+        Set<Person> relatedPeople = buildRelatedPeopleSet(person1, person2, commonAncestor);
+        
+        List<Map<String, Object>> peopleResultList = buildPeopleResultList(relatedPeople);
+        List<Map<String, Object>> relationshipsResultList = buildRelationshipsResultList(relatedPeople);
+        
+        result.put("people", peopleResultList.stream().distinct().toList());
+        result.put("relationships", relationshipsResultList.stream().distinct().toList());
+        
+        return result;
+    }
 
-        // İlişkili kişileri ekle
+    private void addCommonAncestorToResult(Map<String, Object> result, Person commonAncestor) {
+        if (commonAncestor == null) return;
+        
+        Map<String, Object> ancestorMap = createPersonMap(commonAncestor);
+        result.put("commonAncestor", ancestorMap);
+    }
+
+    private Set<Person> buildRelatedPeopleSet(Person person1, Person person2, Person commonAncestor) {
         Set<Person> relatedPeople = new HashSet<>();
         relatedPeople.add(person1);
         relatedPeople.add(person2);
+        
         if (commonAncestor != null) {
             relatedPeople.add(commonAncestor);
-        }
-
-        // Ara kişileri bul ve ekle
-        if (commonAncestor != null) { // Only find paths if common ancestor exists
             List<Person> pathToPerson1 = findPathToAncestor(person1, commonAncestor);
             List<Person> pathToPerson2 = findPathToAncestor(person2, commonAncestor);
             relatedPeople.addAll(pathToPerson1);
             relatedPeople.addAll(pathToPerson2);
         }
+        
+        return relatedPeople;
+    }
 
-        // Kişileri listeye ekle
+    private List<Map<String, Object>> buildPeopleResultList(Set<Person> relatedPeople) {
+        List<Map<String, Object>> peopleResultList = new ArrayList<>();
+        
         for (Person person : relatedPeople) {
-            Map<String, Object> personMap = new HashMap<>();
-            personMap.put("id", person.getId());
-            personMap.put("firstName", person.getFirstName());
-            personMap.put("lastName", person.getLastName());
-            personMap.put("gender", person.getGender() != null ? person.getGender().name() : "BİLİNMEYEN");
-
-            // Ebeveynleri bul
-            List<Person> parents = relationshipRepository
-                .findByPerson2AndTypeAndIsActiveTrue(person, RelationshipType.PARENT_CHILD)
-                .stream()
-                .map(Relationship::getPerson1)
-                .collect(Collectors.toList());
-
-            parents.forEach(parent -> {
-                if (parent.getGender() != null) { // Null check for gender
-                    if (parent.getGender().name().equals("ERKEK")) {
-                        personMap.put("fatherId", parent.getId());
-                    } else {
-                        personMap.put("motherId", parent.getId());
-                    }
-                }
-            });
-
-            // Eşi bul
-            relationshipRepository
-                .findActiveRelationship(person, person, RelationshipType.SPOUSE) // findActiveRelationship metodu RelationshipRepository'de tanımlı mı?
-                .ifPresent(rel -> {
-                    Person spouse = rel.getPerson1().getId().equals(person.getId()) ? 
-                        rel.getPerson2() : rel.getPerson1();
-                    personMap.put("spouseId", spouse.getId());
-                });
-
+            Map<String, Object> personMap = createPersonMap(person);
+            addParentInfo(personMap, person);
+            addSpouseInfo(personMap, person);
             peopleResultList.add(personMap);
+        }
+        
+        return peopleResultList;
+    }
 
-            // İlişkileri ekle (sadece bu kişiyle ilgili olanları ve diğer relatedPeople içindekilerle olanları)
+    private Map<String, Object> createPersonMap(Person person) {
+        Map<String, Object> personMap = new HashMap<>();
+        personMap.put("id", person.getId());
+        personMap.put("firstName", person.getFirstName());
+        personMap.put("lastName", person.getLastName());
+        personMap.put("gender", person.getGender() != null ? person.getGender().name() : "BİLİNMEYEN");
+        return personMap;
+    }
+
+    private void addParentInfo(Map<String, Object> personMap, Person person) {
+        List<Person> parents = relationshipRepository
+            .findByPerson2AndTypeAndIsActiveTrue(person, RelationshipType.PARENT_CHILD)
+            .stream()
+            .map(Relationship::getPerson1)
+            .toList();
+
+        parents.forEach(parent -> {
+            if (parent.getGender() != null) {
+                if (parent.getGender().name().equals("ERKEK")) {
+                    personMap.put("fatherId", parent.getId());
+                } else {
+                    personMap.put("motherId", parent.getId());
+                }
+            }
+        });
+    }
+
+    private void addSpouseInfo(Map<String, Object> personMap, Person person) {
+        relationshipRepository
+            .findActiveRelationship(person, person, RelationshipType.SPOUSE)
+            .ifPresent(rel -> {
+                Person spouse = rel.getPerson1().getId().equals(person.getId()) ? 
+                    rel.getPerson2() : rel.getPerson1();
+                personMap.put("spouseId", spouse.getId());
+            });
+    }
+
+    private List<Map<String, Object>> buildRelationshipsResultList(Set<Person> relatedPeople) {
+        List<Map<String, Object>> relationshipsResultList = new ArrayList<>();
+        
+        for (Person person : relatedPeople) {
             List<Relationship> personRelationships = relationshipRepository
                 .findByPerson1OrPerson2AndIsActiveTrue(person, person);
             
-            for (Relationship rel : personRelationships) {
-                 // Ensure both parties of the relationship are in our relatedPeople set to avoid too much data
-                if (relatedPeople.contains(rel.getPerson1()) && relatedPeople.contains(rel.getPerson2())) {
-                    Map<String, Object> relationshipMap = new HashMap<>();
-                    relationshipMap.put("person1Id", rel.getPerson1().getId());
-                    relationshipMap.put("person2Id", rel.getPerson2().getId());
-                    relationshipMap.put("type", rel.getType());
-                    relationshipMap.put("startDate", rel.getStartDate());
-                    if (rel.getEndDate() != null) {
-                        relationshipMap.put("endDate", rel.getEndDate());
-                    }
-                    relationshipsResultList.add(relationshipMap);
-                }
+            addValidRelationships(relationshipsResultList, personRelationships, relatedPeople);
+        }
+        
+        return relationshipsResultList;
+    }
+
+    private void addValidRelationships(List<Map<String, Object>> relationshipsResultList, 
+                                     List<Relationship> personRelationships, 
+                                     Set<Person> relatedPeople) {
+        for (Relationship rel : personRelationships) {
+            if (relatedPeople.contains(rel.getPerson1()) && relatedPeople.contains(rel.getPerson2())) {
+                Map<String, Object> relationshipMap = createRelationshipMap(rel);
+                relationshipsResultList.add(relationshipMap);
             }
         }
+    }
 
-        result.put("people", peopleResultList.stream().distinct().collect(Collectors.toList())); // Remove duplicates just in case
-        result.put("relationships", relationshipsResultList.stream().distinct().collect(Collectors.toList())); // Remove duplicates
-        return result;
+    private Map<String, Object> createRelationshipMap(Relationship rel) {
+        Map<String, Object> relationshipMap = new HashMap<>();
+        relationshipMap.put("person1Id", rel.getPerson1().getId());
+        relationshipMap.put("person2Id", rel.getPerson2().getId());
+        relationshipMap.put("type", rel.getType());
+        relationshipMap.put("startDate", rel.getStartDate());
+        if (rel.getEndDate() != null) {
+            relationshipMap.put("endDate", rel.getEndDate());
+        }
+        return relationshipMap;
     }
 
     private Person findCommonAncestor(Person person1, Person person2) {
@@ -158,104 +189,65 @@ public class FamilyServiceImpl implements FamilyService {
     }
 
     private List<Person> findPathToAncestor(Person person, Person ancestor) {
-        if (ancestor == null || person.equals(ancestor)) return Collections.emptyList();
-
-        List<Person> path = new ArrayList<>();
-        Queue<List<Person>> queue = new LinkedList<>();
-        Set<Person> visitedInPathSearch = new HashSet<>();
-
-        List<Person> initialPath = new ArrayList<>();
-        initialPath.add(person);
-        queue.offer(initialPath);
-        visitedInPathSearch.add(person);
-
-        while (!queue.isEmpty()) {
-            List<Person> currentPath = queue.poll();
-            Person lastPersonInPath = currentPath.get(currentPath.size() - 1);
-
-            if (lastPersonInPath.equals(ancestor)) {
-                path.addAll(currentPath);
-                path.remove(path.size()-1); // Remove ancestor itself from path to person
-                Collections.reverse(path); // Path from ancestor to person (excluding ancestor)
-                return path.subList(0, path.size() > 0 ? path.size()-1:0); // Return path from person to ancestor (excluding person and ancestor)
-                                                                       // Let's re-think what this path should represent. 
-                                                                       // If it's nodes between person and ancestor, this logic needs care.
-                                                                       // For now, it returns nodes from person up to (but not including) ancestor.
-            }
-            
-            // Find parents of the last person in the path
-            relationshipRepository
-                .findByPerson2AndTypeAndIsActiveTrue(lastPersonInPath, RelationshipType.PARENT_CHILD)
-                .stream()
-                .map(Relationship::getPerson1) // These are the parents
-                .filter(parent -> !visitedInPathSearch.contains(parent))
-                .forEach(parent -> {
-                    visitedInPathSearch.add(parent);
-                    List<Person> newPath = new ArrayList<>(currentPath);
-                    newPath.add(parent);
-                    queue.offer(newPath);
-                });
+        if (ancestor == null || person.equals(ancestor)) {
+            return Collections.emptyList();
         }
-        // If used for visualization, path should be from person to ancestor. Current logic seems to build it that way then reverses.
-        // For relatedPeople set, order doesn't matter. Current logic adds person to ancestor, which is fine.
-        // The method is `findPathToAncestor`, so it should be person -> parent -> ... -> ancestor. 
-        // The current path construction adds person, then their parents, etc. So the list is in order from person upwards.
-        // If lastPersonInPath is ancestor, currentPath is [person, p1, p2, ..., ancestor]. We need [p1, p2, ...]
-        // If `path.remove(path.size()-1)` removes ancestor, and `path.remove(0)` removes person, then reverse. This is confusing.
-
-        // Simpler BFS path logic returning [person, parent_of_person, ..., grandparent_of_ancestor, ancestor]
-        // Then caller can decide what to do with it. Let's stick to finding *a* path.
-        // The current logic for `relatedPeople.addAll(pathToPerson1);` is fine if it adds intermediate nodes.
-
-        // Returning the currentPath (excluding the starting person, up to ancestor) if found in loop
-        // The BFS will find shortest path in terms of generations. The current BFS returns the path from person UP TO ancestor.
-        // Let's refine the return: a list of people on the path from `person` to `ancestor`, excluding `person` and `ancestor` themselves.
-        // If Person P, path A, B, C, Ancestor A. Path should be A, B, C. 
-        // The BFS queue stores paths starting with `person`. If a path reaches `ancestor`, like [person, node1, node2, ancestor], 
-        // we should return [node1, node2].
-        // The original path.add(current) was for a DFS like approach. BFS is better for shortest path.
-
-        // Re-simplifying findPathToAncestor to return just the intermediate nodes.
-        // This BFS finds one path. We need to reconstruct it. 
-        // A common way is to store parent pointers during BFS from ancestor down to person, or person up to ancestor.
-        Map<Person, Person> parentMap = new HashMap<>(); // Child -> Parent map for path reconstruction
-        Queue<Person> bfsQueue = new LinkedList<>();
-        Set<Person> visitedForBfs = new HashSet<>();
-
-        bfsQueue.offer(person);
-        visitedForBfs.add(person);
-
-        Person foundAncestorInBfs = null;
-
-        while(!bfsQueue.isEmpty()){
-            Person current = bfsQueue.poll();
-            if(current.equals(ancestor)){
-                foundAncestorInBfs = current;
+        
+        Map<Person, Person> parentMap = buildParentMapThroughBFS(person, ancestor);
+        return reconstructPath(person, ancestor, parentMap);
+    }
+    
+    private Map<Person, Person> buildParentMapThroughBFS(Person startPerson, Person targetAncestor) {
+        Map<Person, Person> parentMap = new HashMap<>();
+        Queue<Person> queue = new LinkedList<>();
+        Set<Person> visited = new HashSet<>();
+        
+        queue.offer(startPerson);
+        visited.add(startPerson);
+        
+        while (!queue.isEmpty()) {
+            Person current = queue.poll();
+            
+            if (current.equals(targetAncestor)) {
                 break;
             }
-            List<Person> parents = relationshipRepository
-                .findByPerson2AndTypeAndIsActiveTrue(current, RelationshipType.PARENT_CHILD)
-                .stream().map(Relationship::getPerson1).collect(Collectors.toList());
-            for(Person p : parents){
-                if(!visitedForBfs.contains(p)){
-                    visitedForBfs.add(p);
-                    parentMap.put(current, p); // current's parent is p
-                    bfsQueue.offer(p);
-                }
+            
+            processParentsForBFS(current, parentMap, queue, visited);
+        }
+        
+        return parentMap;
+    }
+    
+    private void processParentsForBFS(Person current, Map<Person, Person> parentMap, 
+                                     Queue<Person> queue, Set<Person> visited) {
+        List<Person> parents = relationshipRepository
+            .findByPerson2AndTypeAndIsActiveTrue(current, RelationshipType.PARENT_CHILD)
+            .stream()
+            .map(Relationship::getPerson1)
+            .toList();
+            
+        for (Person parent : parents) {
+            if (!visited.contains(parent)) {
+                visited.add(parent);
+                parentMap.put(current, parent);
+                queue.offer(parent);
             }
         }
-
+    }
+    
+    private List<Person> reconstructPath(Person startPerson, Person ancestor, Map<Person, Person> parentMap) {
         List<Person> resultPath = new ArrayList<>();
-        if(foundAncestorInBfs != null){
-            Person curr = person;
-            while(parentMap.containsKey(curr)){
-                 Person parentOfCurr = parentMap.get(curr);
-                 if(parentOfCurr.equals(ancestor)) break; // Stop before adding ancestor
-                 resultPath.add(parentOfCurr);
-                 curr = parentOfCurr;
-            }            
+        Person current = startPerson;
+        
+        while (parentMap.containsKey(current)) {
+            Person parentOfCurrent = parentMap.get(current);
+            if (parentOfCurrent.equals(ancestor)) {
+                break;
+            }
+            resultPath.add(parentOfCurrent);
+            current = parentOfCurrent;
         }
-        // resultPath is now from parent_of_person up to child_of_ancestor. This is what we want for intermediate nodes.
-        return resultPath; 
+        
+        return resultPath;
     }
 } 
