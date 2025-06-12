@@ -87,22 +87,14 @@ public class RelationshipDescriptionResolverImpl implements RelationshipDescript
 
     private RelationshipDescriptionResult findIndirectRelationship(Person person1, Person person2, Locale locale) {
         int maxDepth = relationshipProperties.getDefaultPathDisplayMaxDepth();
-        List<List<Relationship>> allPaths = relationshipPathFinder.findPaths(person1, person2, maxDepth);
+        // Sadece person1 -> person2 yönündeki yolu ara
+        List<Relationship> directedPath = relationshipPathFinder.findDirectedPath(person1, person2, maxDepth);
 
-        if (allPaths.isEmpty()) {
+        if (directedPath.isEmpty()) {
             return createNotFoundResult(personMapper.toSummaryDTO(person1), personMapper.toSummaryDTO(person2), locale);
         }
 
-        // En kısa yolu seç
-        List<Relationship> shortestPath = allPaths.stream()
-                .min(Comparator.comparingInt(List::size))
-                .orElse(Collections.emptyList());
-
-        if (shortestPath.isEmpty()) {
-            return createNotFoundResult(personMapper.toSummaryDTO(person1), personMapper.toSummaryDTO(person2), locale);
-        }
-
-        return resolvePathToDescription(shortestPath, person1, person2, locale);
+        return resolvePathToDescription(directedPath, person1, person2, locale);
     }
     
     private RelationshipDescriptionResult resolvePathToDescription(List<Relationship> path, Person startPerson, Person endPerson, Locale locale) {

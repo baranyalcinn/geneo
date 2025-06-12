@@ -72,11 +72,10 @@ public class RelationshipServiceImpl implements RelationshipService {
     @Transactional
     @CacheEvict(value = {"relationships", "activeRelationships", "relationshipStatus", "relationshipPaths"}, allEntries = true)
     public Relationship createRelationship(Person person1, Person person2, by.backend.model.enums.RelationshipType type) {
-        Locale locale = LocaleContextHolder.getLocale();
-        relationshipValidator.validateRelationship(person1, person2, type, locale);
+        relationshipValidator.validateRelationship(person1, person2, type);
         
         if (self.hasActiveRelationship(person1, person2, type)) {
-            throw new IllegalStateException(getMessage("relationship.error.already_exists", locale));
+            throw new IllegalStateException(getMessage("relationship.error.already_exists", LocaleContextHolder.getLocale()));
         }
 
         Relationship relationship = Relationship.builder()

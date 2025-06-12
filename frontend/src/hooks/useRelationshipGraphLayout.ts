@@ -15,13 +15,13 @@ import {
 interface UseRelationshipGraphLayoutProps {
     nodes: Node[];
     edges: Edge[];
-    direction?: 'TB' | 'LR'; // Opsiyonel olarak yön belirtmek için
+    direction?: 'TB' | 'LR' | 'BT' | 'RL'; // Tüm yön seçeneklerini destekliyoruz
 }
 
 export const useRelationshipGraphLayout = ({
     nodes,
     edges,
-    direction = GRAPH_LAYOUT_RANKDIR as 'TB' | 'LR' // Varsayılan yön config'den
+    direction = GRAPH_LAYOUT_RANKDIR as 'TB' | 'LR' | 'BT' | 'RL' // Varsayılan yön config'den
 }: UseRelationshipGraphLayoutProps): Node[] => {
 
     const layoutedNodes = useMemo(() => {

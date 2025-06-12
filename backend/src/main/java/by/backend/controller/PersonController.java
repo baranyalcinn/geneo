@@ -11,6 +11,9 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.validation.Valid;
 import java.util.List;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+
 @RestController
 @RequestMapping("/api/persons")
 @RequiredArgsConstructor
@@ -27,9 +30,10 @@ public class PersonController {
         return ResponseEntity.ok(createdPersonDTO);
     }
 
-    @PutMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @PutMapping("/{id}")
+    @Operation(summary = "Update an existing person", description = "Updates the details of a person by their ID.")
     public ResponseEntity<PersonDTO> updatePerson(
-            @PathVariable Long id,
+            @Parameter(description = "ID of the person to update") @PathVariable Long id,
             @Valid @RequestBody PersonDTO personDTO) {
         log.info("Kişi güncelleme isteği alındı. ID: {}, Veri: {}", id, personDTO);
         PersonDTO updatedPersonDTO = personService.updatePerson(id, personDTO);

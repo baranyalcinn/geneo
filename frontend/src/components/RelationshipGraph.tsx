@@ -9,6 +9,8 @@ import {
   Edge,
   useReactFlow,
   BackgroundVariant,
+  useNodesState,
+  useEdgesState,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css"; // React Flow stilleri
 import {
@@ -40,7 +42,9 @@ export const edgeTypes = {};
 const FlowComponent: React.FC<{
   nodes: Node[];
   edges: Edge[];
-}> = ({ nodes, edges }) => {
+  onNodesChange: (changes: any) => void;
+  onEdgesChange: (changes: any) => void;
+}> = ({ nodes, edges, onNodesChange, onEdgesChange }) => {
   const theme = useTheme();
   const { fitView } = useReactFlow();
 
@@ -58,6 +62,8 @@ const FlowComponent: React.FC<{
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.25, duration: 450 }}
@@ -154,23 +160,32 @@ const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
     [themeMode],
   );
 
-  const { nodes: initialNodes, edges } = useMemo(
+  const { nodes: initialNodes, edges: initialEdges } = useMemo(
     () => transformDataToFlow(path, themeColorsForFlow),
     [path, themeColorsForFlow],
   );
 
-  const layoutedNodes = useRelationshipGraphLayout({ 
-    nodes: initialNodes, 
-    edges: edges,
-    direction: layoutDirection 
+  const layoutedNodes = useRelationshipGraphLayout({
+    nodes: initialNodes,
+    edges: initialEdges,
+    direction: layoutDirection,
   });
 
+  const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 80);
+    setNodes(layoutedNodes);
+  }, [layoutedNodes, setNodes]);
+
+  useEffect(() => {
+    setEdges(initialEdges);
+  }, [initialEdges, setEdges]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 50);
     return () => clearTimeout(timer);
-  }, []);
+  }, [path]);
 
   if (isLoading) {
     return <GraphLoadingIndicator width={containerWidth} height={containerHeight} />;
@@ -182,11 +197,6 @@ const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
 
   if (initialNodes.length === 0 && path && path.length > 0) {
     return <GraphNodeErrorState width={containerWidth} height={containerHeight} />;
-  }
-  
-  // Sadece tek node varsa VE hiç edge yoksa SingleNodeView göster
-  if (layoutedNodes.length === 1 && edges.length === 0) {
-    return <SingleNodeView node={layoutedNodes[0]} width={containerWidth} height={containerHeight} />;
   }
   
   return (
@@ -247,7 +257,12 @@ const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
       }}
     >
       <ReactFlowProvider>
-        <FlowComponent nodes={layoutedNodes} edges={edges} />
+        <FlowComponent 
+          nodes={nodes} 
+          edges={edges} 
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+        />
       </ReactFlowProvider>
     </Box>
   );

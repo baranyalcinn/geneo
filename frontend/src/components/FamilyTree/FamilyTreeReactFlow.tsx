@@ -1,104 +1,62 @@
-import React, { useMemo, useCallback, useEffect, useState, ComponentType } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ReactFlow,
-  Controls,
   Background,
+  Controls,
   useNodesState,
   useEdgesState,
   addEdge,
-  ReactFlowProvider,
-  NodeTypes,
-  BackgroundVariant,
-  NodeProps,
   Node,
   Edge,
   Connection,
-  useReactFlow,
-  Viewport,
 } from '@xyflow/react';
-import { Box, Paper, Typography } from '@mui/material';
-import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import { Box } from '@mui/material';
+import '@xyflow/react/dist/style.css';
 
+import { PersonNode } from './PersonNode';
 import { useFamilyTree } from '../../context/FamilyTreeContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useThemeContext } from '../../context/ThemeContext';
-import { transformToFlowData } from '../../utils/familyTreeUtils';
-import { getLayoutedElements } from '../../utils/layoutUtils';
-import PersonNode from './PersonNode';
-import LoadingIndicator from '../ui/LoadingIndicator';
-import ErrorMessage from '../ui/ErrorMessage';
-import EmptyState from '../ui/EmptyState';
-import { Person, PersonNodeData } from '../../types/Person';
+import { PersonNodeData } from '../../types/Person';
 
-import '@xyflow/react/dist/style.css';
-import dagre from 'dagre';
-
-const nodeTypes: NodeTypes = {
-  personNode: PersonNode as any,
+// Custom node types
+const nodeTypes = {
+  person: PersonNode,
 };
 
-const nodeWidth = 130;
-const nodeHeight = 150;
+interface FamilyTreeReactFlowProps {
+  onPersonClick?: (personId: string) => void;
+}
 
-const FamilyTreeReactFlow: React.FC = () => {
+export const FamilyTreeReactFlow: React.FC<FamilyTreeReactFlowProps> = ({
+  onPersonClick
+}) => {
   const { t } = useLanguage();
   const { mode } = useThemeContext();
-  const { treeData, loading, error, selectedPerson } = useFamilyTree();
+  const { allPersons } = useFamilyTree();
 
-  const [layoutedNodes, setLayoutedNodes] = useState<Node[]>([]);
-  const [layoutedEdges, setLayoutedEdges] = useState<Edge[]>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   useEffect(() => {
-    if (treeData) {
-      const { nodes: initialNodes, edges: initialEdges } = transformToFlowData(treeData);
+    if (allPersons && allPersons.length > 0) {
+      // Simple layout for now - convert persons to nodes
+      const newNodes: Node[] = allPersons.map((person, index) => ({
+        id: person.id.toString(),
+        type: 'person',
+        position: { x: (index % 3) * 200, y: Math.floor(index / 3) * 200 },
+        data: { person } as PersonNodeData,
+      }));
       
-      const { nodes: positionedNodes, edges: positionedEdges } = getLayoutedElements(
-        initialNodes,
-        initialEdges,
-        {
-          direction: 'TB',
-          nodeWidth: nodeWidth,
-          nodeHeight: nodeHeight,
-          spacing: 70,
-        }
-      );
-      
-      setLayoutedNodes(positionedNodes);
-      setLayoutedEdges(positionedEdges);
-    } else {
-      setLayoutedNodes([]);
-      setLayoutedEdges([]);
+      setNodes(newNodes);
+      setEdges([]);
     }
-  }, [treeData]);
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
-
-  useEffect(() => {
-    setNodes(layoutedNodes);
-    setEdges(layoutedEdges);
-  }, [layoutedNodes, layoutedEdges, setNodes, setEdges]);
+  }, [allPersons, setNodes, setEdges]);
 
   const onConnect = useCallback(
-    (params: any) => setEdges((eds) => addEdge(params, eds)),
+    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
   );
-
-  if (loading && !treeData && selectedPerson) {
-    return <LoadingIndicator />;
-  }
-  if (error && !treeData) {
-    return <ErrorMessage message={error} />;
-  }
-  if (!loading && !error && !treeData && selectedPerson) {
-    return <EmptyState message={t('selectPersonToShowTree')} />;
-  }
-  if (loading || layoutedNodes.length === 0 && selectedPerson) {
-    return <LoadingIndicator />;
-  }
-  if (selectedPerson && layoutedNodes.length === 0 && !loading && !error) {
-    return <ErrorMessage message={t('errorGeneratingTreeLayout')} />;
-  }
 
   return (
     <Box sx={{ 
@@ -122,16 +80,10 @@ const FamilyTreeReactFlow: React.FC = () => {
         fitView
       >
         <Controls />
-        <Background variant={BackgroundVariant['Dots']} gap={12} size={1} />
+        <Background gap={12} size={1} />
       </ReactFlow>
     </Box>
   );
 };
 
-const ProvidedFamilyTreeReactFlow: React.FC = () => (
-  <ReactFlowProvider>
-    <FamilyTreeReactFlow />
-  </ReactFlowProvider>
-);
-
-export default ProvidedFamilyTreeReactFlow; 
+export default FamilyTreeReactFlow; 

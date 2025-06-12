@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSource;
 import org.springframework.context.NoSuchMessageException;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -24,40 +25,40 @@ public class RelationshipValidator {
     private final MessageSource messageSource;
     private final RelationshipProperties relationshipProperties;
 
-    public void validateRelationship(Person person1, Person person2, RelationshipType type, Locale locale) {
+    public void validateRelationship(Person person1, Person person2, RelationshipType type) {
         if (person1.getId().equals(person2.getId())) {
-            throw new IllegalArgumentException(getMessage("validation.error.self_relationship", locale, person1.getFirstName()));
+            throw new IllegalArgumentException(getMessage("validation.error.self_relationship", person1.getFirstName()));
         }
 
         if (type == RelationshipType.SPOUSE) {
-            validateSpouseSpecificRules(person1, person2, locale);
+            validateSpouseSpecificRules(person1, person2);
         }
 
         if (type == RelationshipType.PARENT_CHILD) {
-            validateParentChildSpecificRules(person1, person2, locale);
+            validateParentChildSpecificRules(person1, person2);
         }
     }
 
-    private void validateSpouseSpecificRules(Person person1, Person person2, Locale locale) {
+    private void validateSpouseSpecificRules(Person person1, Person person2) {
         // Cinsiyet uyumluluğu (aynı cinsiyetten evlilik kontrolü)
         if (person1.getGender() != null && person2.getGender() != null && person1.getGender().equals(person2.getGender())) {
-            throw new IllegalArgumentException(getMessage("validation.error.spouse.same_gender", locale));
+            throw new IllegalArgumentException(getMessage("validation.error.spouse.same_gender"));
         }
 
         // Mevcut aktif eş kontrolü
         if (relationshipRepository.existsByPersonAndTypeAndIsActiveTrue(person1.getId(), RelationshipType.SPOUSE)) {
-            throw new IllegalStateException(getMessage("validation.error.spouse.multiple_active", locale, person1.getFirstName()));
+            throw new IllegalStateException(getMessage("validation.error.spouse.multiple_active", person1.getFirstName()));
         }
         if (relationshipRepository.existsByPersonAndTypeAndIsActiveTrue(person2.getId(), RelationshipType.SPOUSE)) {
-            throw new IllegalStateException(getMessage("validation.error.spouse.multiple_active", locale, person2.getFirstName()));
+            throw new IllegalStateException(getMessage("validation.error.spouse.multiple_active", person2.getFirstName()));
         }
     }
 
-    private void validateParentChildSpecificRules(Person person1, Person person2, Locale locale) {
+    private void validateParentChildSpecificRules(Person person1, Person person2) {
         // Ebeveynin çocuktan yaşlı olma durumu ve minimum ebeveyn yaşı
         if (person1.getBirthDate() != null && person2.getBirthDate() != null) {
             if (person1.getBirthDate().isAfter(person2.getBirthDate())) {
-                throw new IllegalArgumentException(getMessage("validation.error.parent_child.parent_younger", locale));
+                throw new IllegalArgumentException(getMessage("validation.error.parent_child.parent_younger"));
             }
 
             LocalDate childsBirthDate = person2.getBirthDate();
@@ -72,7 +73,7 @@ public class RelationshipValidator {
         // Döngüsel ilişki kontrolü (çocuğun, ebeveynin atalarından biri olmaması)
         Set<Person> ancestorsOfParent = getAncestorsForValidation(person1);
         if (ancestorsOfParent.contains(person2)) {
-            throw new IllegalArgumentException(getMessage("validation.error.parent_child.cyclic.ancestor_is_child", locale, person2.getFirstName(), person1.getFirstName()));
+            throw new IllegalArgumentException(getMessage("validation.error.parent_child.cyclic.ancestor_is_child", person2.getFirstName(), person1.getFirstName()));
         }
     }
 
@@ -103,7 +104,8 @@ public class RelationshipValidator {
         return ancestors;
     }
 
-    private String getMessage(String code, Locale locale, Object... args) {
+    private String getMessage(String code, Object... args) {
+        Locale locale = LocaleContextHolder.getLocale();
         try {
             return messageSource.getMessage(code, args, locale);
         } catch (NoSuchMessageException _) {

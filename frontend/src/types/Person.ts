@@ -36,6 +36,6 @@ export interface Person {
 }
 
 // react-flow için özel düğüm verisi tipi
-export interface PersonNodeData {
+export interface PersonNodeData extends Record<string, unknown> {
   person: Person;
 } 

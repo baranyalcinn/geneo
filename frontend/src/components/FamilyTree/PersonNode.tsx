@@ -1,54 +1,51 @@
 import React from 'react';
 import { Handle, Position, NodeProps, Node } from '@xyflow/react';
 import { Box, Typography, Avatar, Paper, Tooltip, IconButton } from '@mui/material';
-import { Person } from '../../types/Person';
+import { Person, PersonNodeData } from '../../types/Person';
 import { useThemeContext } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useFamilyTree } from '../../context/FamilyTreeContext';
 import EditIcon from '@mui/icons-material/Edit';
 import InfoIcon from '@mui/icons-material/Info';
 // import DeleteIcon from '@mui/icons-material/Delete'; // Removed for now
-import { useFamilyTree } from '../../context/FamilyTreeContext';
 
-// Type for the data prop within the Node
-interface PersonNodeData {
-  person: Person;
-  [key: string]: any; // Add index signature
-}
-
-// Explicitly type the component with NodeProps using the specific data type
-const PersonNode: React.FC<NodeProps<Node<PersonNodeData>>> = (props) => {
-  const { data, id } = props; // props'tan data ve id alınıyor
-  const { selectPersonById, openEditModal, openDetailModal } = useFamilyTree();
-
-  // data prop'unu PersonNodeData olarak cast et
-  const nodeData = data as PersonNodeData;
-
-  // Güvenli erişim eklendi (artık nodeData üzerinden)
-  if (!nodeData?.person) {
-    console.error("PersonNode: Missing person data in node", id);
-    return null; // veya bir hata göstergesi döndür
-  }
-
-  // Güvenli erişim eklendi (artık nodeData üzerinden)
-  const { person } = nodeData;
+// PersonNode component with proper typing
+export const PersonNode: React.FC<NodeProps<Node<PersonNodeData>>> = (props) => {
+  const { data, id } = props;
   const { mode } = useThemeContext();
   const { t } = useLanguage();
+  const { selectPersonById, openEditModal, openDetailModal } = useFamilyTree();
+
+  // Safe access to person data
+  const person = data?.person;
   
+  if (!person) {
+    console.error("PersonNode: Missing person data in node", id);
+    return (
+      <Paper sx={{ padding: '10px', borderRadius: '8px', width: 130, textAlign: 'center' }}>
+        <Typography variant="body2" color="error">
+          {t('errorLoadingPerson') || 'Error loading person'}
+        </Typography>
+      </Paper>
+    );
+  }
+
   const handleNodeClick = () => {
-    // Use selectPersonById
-    if (selectPersonById && person && person.id) {
+    if (selectPersonById && person.id) {
       selectPersonById(person.id);
     }
   };
 
   const handleEditClick = (event: React.MouseEvent) => {
-    event.stopPropagation(); // Prevent node selection/drag
-    openEditModal(person);
+    event.stopPropagation();
+    if (openEditModal) {
+      openEditModal(person);
+    }
   };
 
   const handleInfoClick = (event: React.MouseEvent) => {
-    event.stopPropagation(); 
-    if (person) {
+    event.stopPropagation();
+    if (openDetailModal) {
       openDetailModal(person);
     }
   };
@@ -105,12 +102,28 @@ const PersonNode: React.FC<NodeProps<Node<PersonNodeData>>> = (props) => {
 
       <Box sx={{ position: 'absolute', top: 2, right: 2, display: 'flex', flexDirection: 'column', gap: 0.2 }}>
         <Tooltip title={t('editPerson')} placement="left">
-          <IconButton size="small" onClick={handleEditClick} sx={{ p: 0.2, backgroundColor: 'rgba(0,0,0,0.05)', "&:hover": { backgroundColor: 'rgba(0,0,0,0.1)' } }}>
+          <IconButton 
+            size="small" 
+            onClick={handleEditClick} 
+            sx={{ 
+              p: 0.2, 
+              backgroundColor: 'rgba(0,0,0,0.05)', 
+              "&:hover": { backgroundColor: 'rgba(0,0,0,0.1)' } 
+            }}
+          >
             <EditIcon fontSize="inherit" />
           </IconButton>
         </Tooltip>
         <Tooltip title={t('personDetails')} placement="left">
-          <IconButton size="small" onClick={handleInfoClick} sx={{ p: 0.2, backgroundColor: 'rgba(0,0,0,0.05)', "&:hover": { backgroundColor: 'rgba(0,0,0,0.1)' } }}>
+          <IconButton 
+            size="small" 
+            onClick={handleInfoClick} 
+            sx={{ 
+              p: 0.2, 
+              backgroundColor: 'rgba(0,0,0,0.05)', 
+              "&:hover": { backgroundColor: 'rgba(0,0,0,0.1)' } 
+            }}
+          >
             <InfoIcon fontSize="inherit" />
           </IconButton>
         </Tooltip>

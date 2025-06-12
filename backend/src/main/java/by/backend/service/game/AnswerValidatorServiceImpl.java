@@ -17,8 +17,10 @@ import org.springframework.context.MessageSource;
 import org.springframework.context.NoSuchMessageException;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 @Service
 @Slf4j
@@ -29,6 +31,9 @@ public class AnswerValidatorServiceImpl implements AnswerValidatorService {
     private final RelationshipService relationshipService;
     private final PersonMapper personMapper;
     private final MessageSource messageSource;
+
+    private static final String RELATIONSHIP_PREFIX = "relationship.";
+    private static final String GAME_ANSWER_PREFIX = "game.answer.";
 
     @Override
     public AnswerValidationResult validateAnswer(String questionId, String userAnswer, Locale locale) {
@@ -56,9 +61,28 @@ public class AnswerValidatorServiceImpl implements AnswerValidatorService {
                 throw new GameException("Could not determine relationship for validation.");
             }
 
-            String correctAnswerKey = result.getMessageKey();
-            String correctAnswerText = getMessage(correctAnswerKey, locale);
-            boolean isCorrect = normalizeAnswer(correctAnswerText).equalsIgnoreCase(normalizeAnswer(userAnswer));
+            Set<String> correctAnswers = new HashSet<>();
+            addAnswerVariations(result.getMessageKey(), p1, correctAnswers, locale);
+
+            if (result.getAcceptableMessageKeys() != null) {
+                for (String acceptableKey : result.getAcceptableMessageKeys()) {
+                    addAnswerVariations(acceptableKey, p1, correctAnswers, locale);
+                }
+            }
+            
+            boolean isCorrect = correctAnswers.stream()
+                    .anyMatch(answer -> normalizeAnswer(answer).equalsIgnoreCase(normalizeAnswer(userAnswer)));
+            
+            String specificAnswerKey = generateSpecificAnswerKey(result.getMessageKey(), p1);
+            String correctAnswerText = getMessage(specificAnswerKey, locale);
+
+            if (correctAnswerText.equals(specificAnswerKey) || correctAnswerText.startsWith(GAME_ANSWER_PREFIX)) {
+                String genericGameKey = result.getMessageKey().replace(RELATIONSHIP_PREFIX, GAME_ANSWER_PREFIX);
+                correctAnswerText = getMessage(genericGameKey, locale);
+                if (correctAnswerText.equals(genericGameKey) || correctAnswerText.startsWith(GAME_ANSWER_PREFIX)) {
+                    correctAnswerText = getMessage(result.getMessageKey(), locale);
+                }
+            }
             
             RelationshipPathDTO relationshipPath = null;
             if (isCorrect) {
@@ -68,7 +92,7 @@ public class AnswerValidatorServiceImpl implements AnswerValidatorService {
                 relationshipPath.setDescription(correctAnswerText);
             }
             
-            String category = getRelationshipCategory(correctAnswerKey);
+            String category = getRelationshipCategory(result.getMessageKey());
 
             return new AnswerValidationResult(isCorrect, correctAnswerText, category, relationshipPath);
 
@@ -76,6 +100,62 @@ public class AnswerValidatorServiceImpl implements AnswerValidatorService {
             log.error("Error validating answer for questionId '{}': {}", questionId, e.getMessage(), e);
             throw new GameException(getMessage("game.error.could_not_determine_correct_answer", locale));
         }
+    }
+
+    private void addAnswerVariations(String relationshipKey, Person targetPerson, Set<String> correctAnswers, Locale locale) {
+        if (relationshipKey == null || relationshipKey.isEmpty()) {
+            return;
+        }
+
+        String genericGameKey = relationshipKey.replace(RELATIONSHIP_PREFIX, GAME_ANSWER_PREFIX);
+        String genericAnswer = getMessage(genericGameKey, locale);
+        if (!genericAnswer.equals(genericGameKey) && !genericAnswer.startsWith(GAME_ANSWER_PREFIX)) {
+            correctAnswers.add(genericAnswer);
+        }
+
+        String specificGameKey = generateSpecificAnswerKey(relationshipKey, targetPerson);
+        String specificAnswer = getMessage(specificGameKey, locale);
+        if (!specificAnswer.equals(specificGameKey) && !specificAnswer.startsWith(GAME_ANSWER_PREFIX)) {
+            correctAnswers.add(specificAnswer);
+        }
+        
+        String directAnswer = getMessage(relationshipKey, locale);
+        if(!directAnswer.equals(relationshipKey) && !directAnswer.startsWith(RELATIONSHIP_PREFIX)) {
+            correctAnswers.add(directAnswer);
+        }
+    }
+
+    private String generateSpecificAnswerKey(String relationshipKey, Person targetPerson) {
+        if (relationshipKey == null || targetPerson == null) {
+            return "";
+        }
+        String baseKey = relationshipKey.replace(RELATIONSHIP_PREFIX, GAME_ANSWER_PREFIX);
+        String gender = targetPerson.getGender().name();
+        
+        if (relationshipKey.contains("father")) return GAME_ANSWER_PREFIX + "father";
+        if (relationshipKey.contains("mother")) return GAME_ANSWER_PREFIX + "mother";
+        if (relationshipKey.contains("son")) return GAME_ANSWER_PREFIX + "son";
+        if (relationshipKey.contains("daughter")) return GAME_ANSWER_PREFIX + "daughter";
+        if (relationshipKey.contains("brother")) return GAME_ANSWER_PREFIX + "brother";
+        if (relationshipKey.contains("sister")) return GAME_ANSWER_PREFIX + "sister";
+        if (relationshipKey.contains("grandfather")) return GAME_ANSWER_PREFIX + "grandfather";
+        if (relationshipKey.contains("grandmother")) return GAME_ANSWER_PREFIX + "grandmother";
+        if (relationshipKey.contains("grandson")) return GAME_ANSWER_PREFIX + "grandson";
+        if (relationshipKey.contains("granddaughter")) return GAME_ANSWER_PREFIX + "granddaughter";
+        if (relationshipKey.contains("nephew")) return GAME_ANSWER_PREFIX + "nephew";
+        if (relationshipKey.contains("niece")) return GAME_ANSWER_PREFIX + "niece";
+        if (relationshipKey.contains("spouse")) return GAME_ANSWER_PREFIX + "spouse";
+        
+        if (relationshipKey.contains("parent")) return "MALE".equals(gender) ? GAME_ANSWER_PREFIX + "father" : GAME_ANSWER_PREFIX + "mother";
+        if (relationshipKey.contains("child")) return "MALE".equals(gender) ? GAME_ANSWER_PREFIX + "son" : GAME_ANSWER_PREFIX + "daughter";
+        if (relationshipKey.contains("sibling")) return "MALE".equals(gender) ? GAME_ANSWER_PREFIX + "brother" : GAME_ANSWER_PREFIX + "sister";
+        if (relationshipKey.contains("grandparent")) return "MALE".equals(gender) ? GAME_ANSWER_PREFIX + "grandfather" : GAME_ANSWER_PREFIX + "grandmother";
+        if (relationshipKey.contains("grandchild")) return "MALE".equals(gender) ? GAME_ANSWER_PREFIX + "grandson" : GAME_ANSWER_PREFIX + "granddaughter";
+        if (relationshipKey.contains("cousin")) return "MALE".equals(gender) ? GAME_ANSWER_PREFIX + "cousin_male" : GAME_ANSWER_PREFIX + "cousin_female";
+        if (relationshipKey.contains("uncle") || relationshipKey.contains("aunt")) return "MALE".equals(gender) ? GAME_ANSWER_PREFIX + "uncle" : GAME_ANSWER_PREFIX + "aunt";
+        if (relationshipKey.contains("nephew") || relationshipKey.contains("niece")) return "MALE".equals(gender) ? GAME_ANSWER_PREFIX + "nephew" : GAME_ANSWER_PREFIX + "niece";
+        
+        return baseKey;
     }
 
     private String normalizeAnswer(String answer) {

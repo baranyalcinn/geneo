@@ -3,14 +3,22 @@ package by.backend.service.person;
 import by.backend.model.dto.PersonDTO;
 import by.backend.model.dto.PersonSummaryDTO;
 import by.backend.model.entity.Person;
+import by.backend.model.entity.Relationship;
+import by.backend.model.enums.RelationshipType;
 import by.backend.repository.PersonRepository;
+import by.backend.repository.RelationshipRepository;
 import by.backend.mapper.PersonMapper;
+import by.backend.service.validation.RelationshipValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.i18n.LocaleContextHolder;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -18,10 +26,13 @@ import java.util.List;
 public class PersonServiceImpl implements PersonService {
 
     private final PersonRepository personRepository;
+    private final RelationshipRepository relationshipRepository;
     private final PersonMapper personMapper;
+    private final RelationshipValidator relationshipValidator;
 
     @Override
     @Transactional
+    @CacheEvict(value = "persons", allEntries = true)
     public PersonDTO createPerson(PersonDTO personDTO) {
         try {
             log.info("Kişi oluşturma DTO: {}", personDTO);
@@ -39,19 +50,36 @@ public class PersonServiceImpl implements PersonService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "persons", allEntries = true)
     public PersonDTO updatePerson(Long id, PersonDTO personDTO) {
         Person personEntity = personRepository.findById(id)
-            .orElseThrow(() -> new IllegalArgumentException("Güncellenecek kişi bulunamadı: " + id));
+            .orElseThrow(() -> new RuntimeException("Kişi bulunamadı: " + id));
         
         personMapper.updateEntityFromDto(personDTO, personEntity);
+        
+        validateRelatedRelationships(personEntity);
         
         Person updatedPerson = personRepository.save(personEntity);
         log.info("Kişi güncellendi: {}", updatedPerson);
         return personMapper.toDTO(updatedPerson);
     }
 
+    private void validateRelatedRelationships(Person person) {
+        Locale locale = LocaleContextHolder.getLocale();
+        List<Relationship> relationshipsAsParent = relationshipRepository.findByPerson1AndType(person, RelationshipType.PARENT_CHILD);
+        for (Relationship rel : relationshipsAsParent) {
+            relationshipValidator.validateRelationship(rel.getPerson1(), rel.getPerson2(), rel.getType());
+        }
+
+        List<Relationship> relationshipsAsChild = relationshipRepository.findByPerson2AndType(person, RelationshipType.PARENT_CHILD);
+        for (Relationship rel : relationshipsAsChild) {
+            relationshipValidator.validateRelationship(rel.getPerson1(), rel.getPerson2(), rel.getType());
+        }
+    }
+
     @Override
     @Transactional
+    @CacheEvict(value = "persons", allEntries = true)
     public void deletePerson(Long id) {
         personRepository.deleteById(id);
         log.info("Kişi silindi: id={}", id);

@@ -106,6 +106,68 @@ public class RelationshipPathFinderImpl implements RelationshipPathFinder {
     }
 
     @Override
+    public List<Relationship> findDirectedPath(Person startPerson, Person endPerson, int maxDepth) {
+        List<List<Relationship>> allPathsFound = new ArrayList<>();
+        Queue<PathExpansionState> queue = new LinkedList<>();
+
+        Set<Long> initialPersonsInPath = new HashSet<>();
+        initialPersonsInPath.add(startPerson.getId());
+        queue.add(new PathExpansionState(new ArrayList<>(), startPerson, initialPersonsInPath));
+
+        while (!queue.isEmpty()) {
+            PathExpansionState currentState = queue.poll();
+            
+            if (processDirectedPathState(currentState, endPerson, maxDepth, allPathsFound, queue)) {
+                break; 
+            }
+        }
+        
+        return allPathsFound.stream()
+            .min(Comparator.comparingInt(List::size))
+            .orElse(Collections.emptyList());
+    }
+
+    private boolean processDirectedPathState(PathExpansionState currentState, Person endPerson, int maxDepth, 
+                                           List<List<Relationship>> allPathsFound, Queue<PathExpansionState> queue) {
+        List<Relationship> currentRelations = currentState.relationsInPath();
+        Person currentLastPerson = currentState.currentEndPerson();
+
+        if (currentLastPerson.getId().equals(endPerson.getId())) {
+            allPathsFound.add(new ArrayList<>(currentRelations));
+            // For directed path, we usually want the first and shortest, so we can stop.
+            return true; 
+        }
+
+        if (currentRelations.size() >= maxDepth) {
+            return false; // Skip this path
+        }
+
+        expandDirectedPathState(currentState, queue);
+        return false; // Continue processing
+    }
+    
+    private void expandDirectedPathState(PathExpansionState currentState, Queue<PathExpansionState> queue) {
+        Person currentLastPerson = currentState.currentEndPerson();
+        List<Relationship> currentRelations = currentState.relationsInPath();
+        Set<Long> personsCurrentlyInThisPath = currentState.personsInThisPathIds();
+        
+        // Only find relationships where the current person is person1
+        List<Relationship> relationshipsToExplore = findForwardRelationshipsForPathFinder(currentLastPerson);
+
+        for (Relationship relationship : relationshipsToExplore) {
+            Person neighbor = relationship.getPerson2(); // In forward relationships, neighbor is always person2
+
+            if (!personsCurrentlyInThisPath.contains(neighbor.getId())) {
+                List<Relationship> newRelationsForPath = new ArrayList<>(currentRelations);
+                newRelationsForPath.add(relationship);
+                Set<Long> newPersonsInThisPath = new HashSet<>(personsCurrentlyInThisPath);
+                newPersonsInThisPath.add(neighbor.getId());
+                queue.add(new PathExpansionState(newRelationsForPath, neighbor, newPersonsInThisPath));
+            }
+        }
+    }
+
+    @Override
     public List<RelationshipStepDTO> convertPathToDTO(List<Relationship> path, Person startPerson, Person endPerson, Locale locale) {
         List<RelationshipStepDTO> dtos = new ArrayList<>();
         Person currentPerson = startPerson;
@@ -208,5 +270,12 @@ public class RelationshipPathFinderImpl implements RelationshipPathFinder {
             }
             return "[[PATH_MSG_NOT_FOUND: " + fallback + "]] ";
         }
+    }
+
+    /**
+     * Finds only forward-facing relationships for a person for directed pathfinding.
+     */
+    private List<Relationship> findForwardRelationshipsForPathFinder(Person person) {
+        return relationshipRepository.findByPerson1AndIsActiveTrue(person);
     }
 } 

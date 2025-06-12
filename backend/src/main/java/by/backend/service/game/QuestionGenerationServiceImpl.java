@@ -267,7 +267,8 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
     }
 
     private GameQuestionDTO processRelationshipForQuestion(PersonPair personPair, Difficulty difficulty, 
-                                                          Locale locale, QuestionGenerationContext context) {
+                                                         Locale locale, QuestionGenerationContext context) {
+
         RelationshipDescriptionResult relationshipResult = relationshipService.findRelationshipDescription(
             personMapper.toSummaryDTO(personPair.getPerson1()), 
             personMapper.toSummaryDTO(personPair.getPerson2())
@@ -276,7 +277,7 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
         if (relationshipResult == null) {
             return null;
         }
-
+        
         context.incrementFoundRelationships();
         
         if (relationshipResult.getStatus() != RelationshipStatus.FOUND) {
@@ -299,9 +300,10 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
     }
 
     private void logSuccessfulGeneration(Difficulty difficulty, GameQuestionDTO question, long startTime, int attempt) {
+        long duration = System.currentTimeMillis() - startTime;
         log.info("Soru üretildi (Zorluk: {}): {} -> {}. Cevap: {}. Süre: {}ms (deneme: {}/{})",
                 difficulty, extractFirstName(question.getPerson1()), extractFirstName(question.getPerson2()), 
-                question.getCorrectAnswer(), System.currentTimeMillis() - startTime, 
+                question.getCorrectAnswer(), duration, 
                 attempt + 1, MAX_ATTEMPTS_IN_GENERATE_INTERNAL);
     }
 
@@ -378,8 +380,8 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
             return null;
         }
 
-        // Cinsiyete göre spesifik cevap oluştur
-        String specificAnswerKey = generateSpecificAnswerKey(longAnswerKey, p2);
+        // Cinsiyete göre spesifik cevap oluşturulurken p1'in cinsiyeti kullanılmalı
+        String specificAnswerKey = generateSpecificAnswerKey(longAnswerKey, p1);
         String simpleCorrectAnswer = getMessage(specificAnswerKey, locale);
 
         // Eğer spesifik çeviri bulunamazsa genel anahtarı dene
@@ -395,9 +397,9 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
             specificAnswerKey = generalAnswerKey;
         }
 
-        Set<String> acceptableKeys = descResult.getAcceptableMessageKeys() != null ? 
+        Set<String> acceptableKeys = descResult.getAcceptableMessageKeys() != null ?
             new HashSet<>(descResult.getAcceptableMessageKeys()) : null;
-        List<String> options = generateOptionsEnhanced(difficulty, specificAnswerKey, acceptableKeys, locale, p2);
+        List<String> options = generateOptionsEnhanced(difficulty, specificAnswerKey, acceptableKeys, locale, p1);
 
         if (options.size() < getOptionCountForDifficulty(difficulty)) {
             log.warn("Soru için yeterli seçenek üretilemedi. Doğru cevap anahtarı: {}, üretilen seçenek sayısı: {}",
@@ -608,95 +610,78 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
      * Zorluk seviyesine göre akıllı çeldiriciler oluşturur
      */
     private List<String> generateSmartDistractorsByDifficulty(String correctType, Difficulty difficulty, Person targetPerson) {
-        List<String> distractors = new ArrayList<>();
-        String gender = targetPerson.getGender().name();
-        boolean isMale = "MALE".equals(gender);
+        boolean isMale = targetPerson.getGender() == by.backend.model.enums.Gender.ERKEK;
         
-        switch (difficulty) {
-            case EASY:
-                // Kolay: Aynı kategori içinden farklı cinsiyetli seçenekler
-                distractors.addAll(generateEasyDistractors(correctType, isMale));
-                break;
-            case MEDIUM:
-                // Orta: Benzer kategorilerden seçenekler
-                distractors.addAll(generateMediumDistractors(correctType, isMale));
-                break;
-            case HARD:
-                // Zor: Karışık ve benzer seçenekler
-                distractors.addAll(generateHardDistractors(correctType, isMale));
-                break;
-        }
-        
-        return distractors;
+        return switch (difficulty) {
+            case EASY -> generateEasyDistractors(correctType, isMale);
+            case MEDIUM -> generateMediumDistractors(correctType, isMale);
+            case HARD -> generateHardDistractors(correctType, isMale);
+            default -> Collections.emptyList();
+        };
     }
 
     private List<String> generateEasyDistractors(String correctType, boolean isMale) {
         List<String> distractors = new ArrayList<>();
         
-        switch (correctType) {
-            case "parent":
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "mother" : "father"));
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "sister" : "brother"));
-                distractors.add(GAME_ANSWER_PREFIX + "spouse");
-                break;
-            case "child":
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "daughter" : "son"));
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "sister" : "brother"));
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "mother" : "father"));
-                break;
-            case "sibling":
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "sister" : "brother"));
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "son" : "daughter"));
-                distractors.add(GAME_ANSWER_PREFIX + "cousin_" + (isMale ? "female" : "male"));
-                break;
-            default:
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "father" : "mother"));
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "brother" : "sister"));
-                distractors.add(GAME_ANSWER_PREFIX + "spouse");
+        // Farklı kategoriden temel ilişkiler ekle
+        if (!correctType.equals(CATEGORY_DIRECT)) distractors.add("parent");
+        if (!correctType.equals(CATEGORY_DIRECT)) distractors.add("child");
+        if (!correctType.equals(CATEGORY_SIBLINGS)) distractors.add("sibling");
+        
+        // Cinsiyetle uyumlu temel ilişkiler ekle
+        if (isMale) {
+            distractors.add("uncle"); // Amca/Dayı
+            distractors.add("nephew"); // Erkek yeğen
+        } else {
+            distractors.add("aunt"); // Teyze/Hala
+            distractors.add("niece"); // Kız yeğen
         }
         
+        Collections.shuffle(distractors);
         return distractors;
     }
 
     private List<String> generateMediumDistractors(String correctType, boolean isMale) {
         List<String> distractors = new ArrayList<>();
         
-        switch (correctType) {
-            case "parent":
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "uncle" : "aunt"));
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "grandfather" : "grandmother"));
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "brother" : "sister"));
-                break;
-            case "grandparent":
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "uncle" : "aunt"));
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "father" : "mother"));
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "grandmother" : "grandfather"));
-                break;
-            case "uncle_aunt":
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "father" : "mother"));
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "grandfather" : "grandmother"));
-                distractors.add(GAME_ANSWER_PREFIX + (isMale ? "aunt" : "uncle"));
-                break;
-            default:
-                distractors.addAll(generateEasyDistractors(correctType, isMale));
+        // Kuzen ve torun ilişkileri
+        if (!correctType.equals(CATEGORY_COUSIN)) distractors.add("cousin");
+        if (!correctType.equals(CATEGORY_GRANDCHILD)) distractors.add("grandchild");
+        if (!correctType.equals(CATEGORY_GRANDPARENT)) distractors.add("grandparent");
+
+        // Cinsiyete göre daha uzak ilişkiler
+        if (isMale) {
+            distractors.add("grandpa");
+            distractors.add("brother_in_law");
+        } else {
+            distractors.add("grandma");
+            distractors.add("sister_in_law");
         }
         
+        Collections.shuffle(distractors);
         return distractors;
     }
 
     private List<String> generateHardDistractors(String correctType, boolean isMale) {
         List<String> distractors = new ArrayList<>();
+
+        // Karmaşık ve üvey ilişkiler
+        if (!correctType.equals(CATEGORY_INLAW)) distractors.add("inlaw.parent");
+        if (!correctType.equals(CATEGORY_STEP)) distractors.add("step.sibling");
+        if (!correctType.equals(CATEGORY_DISTANT)) distractors.add("distant.cousin_once_removed");
         
-        // Zor seviye için karışık ve benzer ilişkiler
-        distractors.add(GAME_ANSWER_PREFIX + (isMale ? "uncle" : "aunt"));
-        distractors.add(GAME_ANSWER_PREFIX + (isMale ? "nephew" : "niece"));
-        distractors.add(GAME_ANSWER_PREFIX + "cousin_" + (isMale ? "male" : "female"));
-        distractors.add(GAME_ANSWER_PREFIX + (isMale ? "grandfather" : "grandmother"));
-        distractors.add(GAME_ANSWER_PREFIX + (isMale ? "grandson" : "granddaughter"));
-        
-        // Önceki seviye seçeneklerini de ekle
-        distractors.addAll(generateMediumDistractors(correctType, isMale));
-        
+        // Cinsiyete göre en karmaşık ilişkiler
+        if (isMale) {
+            distractors.add("inlaw.son"); // Damat
+            distractors.add("step.father"); // Üvey baba
+            distractors.add("cousin.male"); // Erkek kuzen
+        } else {
+            distractors.add("inlaw.daughter"); // Gelin
+            distractors.add("step.mother"); // Üvey anne
+            distractors.add("cousin.female"); // Kız kuzen
+        }
+
+        Collections.shuffle(distractors);
         return distractors;
     }
 

@@ -317,4 +317,7 @@ public interface RelationshipRepository extends JpaRepository<Relationship, Long
            "AND r.isActive = true")
     List<String> batchCheckRelationshipExistence(@Param("person1Ids") List<Long> person1Ids, 
                                                  @Param("person2Ids") List<Long> person2Ids);
+
+    List<Relationship> findByPerson1AndType(Person person, RelationshipType type);
+    List<Relationship> findByPerson2AndType(Person person, RelationshipType type);
 } 
