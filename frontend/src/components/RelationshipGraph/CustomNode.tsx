@@ -23,8 +23,11 @@ interface CustomNodeData {
     hideHandles?: boolean;
 }
 
-const CustomNode: React.FC<NodeProps<any>> = ({ data }) => {
+const CustomNode: React.FC<NodeProps> = ({ data }) => {
     const theme = useTheme();
+    
+    // Data tipini güvenli şekilde cast edelim
+    const nodeData = (data as unknown) as CustomNodeData;
 
     const getGenderColor = (gender?: string): string => {
         if (!gender) return theme.palette.grey[400];
@@ -37,7 +40,7 @@ const CustomNode: React.FC<NodeProps<any>> = ({ data }) => {
         return theme.palette.grey[400];
     };
 
-    const isHighlighted = data?.isSource || data?.isTarget;
+    const isHighlighted = nodeData?.isSource || nodeData?.isTarget;
 
     return (
         <Paper
@@ -73,7 +76,7 @@ const CustomNode: React.FC<NodeProps<any>> = ({ data }) => {
                 },
             }}
         >
-            {!data?.hideHandles && (
+            {!nodeData?.hideHandles && (
                 <Handle
                     type="target"
                     position={Position.Left}
@@ -105,14 +108,14 @@ const CustomNode: React.FC<NodeProps<any>> = ({ data }) => {
                         width: 36,
                         height: 36,
                         mr: 1.5,
-                        bgcolor: getGenderColor(data?.gender),
+                        bgcolor: getGenderColor(nodeData?.gender),
                         fontSize: "1rem",
                         fontWeight: "600",
                         color: "#fff",
-                        boxShadow: `0 2px 8px ${alpha(getGenderColor(data?.gender), 0.4)}`,
+                        boxShadow: `0 2px 8px ${alpha(getGenderColor(nodeData?.gender), 0.4)}`,
                     }}
                 >
-                    {data?.name?.charAt(0).toUpperCase()}
+                    {nodeData?.name?.charAt(0).toUpperCase()}
                 </Avatar>
                 <Typography
                     variant="h6"
@@ -127,7 +130,7 @@ const CustomNode: React.FC<NodeProps<any>> = ({ data }) => {
                         textAlign: "left",
                     }}
                 >
-                    {data?.name}
+                    {nodeData?.name}
                 </Typography>
             </Box>
 
@@ -145,22 +148,22 @@ const CustomNode: React.FC<NodeProps<any>> = ({ data }) => {
                     color: isHighlighted ? alpha("#FFFFFF", 0.9) : theme.palette.text.secondary,
                 }}
             >
-                {data?.gender && (
+                {nodeData?.gender && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, fontSize: "0.8rem", fontWeight: "500" }}>
                         <WcIcon sx={{ fontSize: "0.9rem" }} />
-                        {data.gender}
+                        {nodeData.gender}
                     </Box>
                 )}
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, fontSize: "0.8rem", fontWeight: "500" }}>
                     <CakeIcon sx={{ fontSize: "0.9rem" }} />
                     <Typography component="span" sx={{ fontSize: "0.8rem" }}>
-                        {data?.birthYear ? `Doğum: ${data.birthYear}` : "Doğum: ?"}
-                        {data?.deathYear ? ` - Ölüm: ${data.deathYear}` : ""}
+                        {nodeData?.birthYear ? `Doğum: ${nodeData.birthYear}` : "Doğum: ?"}
+                        {nodeData?.deathYear ? ` - Ölüm: ${nodeData.deathYear}` : ""}
                     </Typography>
                 </Box>
             </Box>
 
-            {!data?.hideHandles && (
+            {!nodeData?.hideHandles && (
                 <Handle
                     type="source"
                     position={Position.Right}

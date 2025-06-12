@@ -190,8 +190,8 @@ public class RelationshipPathFinderImpl implements RelationshipPathFinder {
                 currentPerson.getGender() != null ? currentPerson.getGender().name() : null,
                 currentPerson.getBirthDate() != null ? currentPerson.getBirthDate().getYear() : null,
                 description,
-                currentPerson.getId().equals(startPerson.getId()) && i == 0,
-                nextPersonInRel.getId().equals(endPerson.getId()) && i == path.size() - 1,
+                currentPerson.getId().equals(startPerson.getId()),
+                false, // ara kişiler targetPerson olarak işaretlenmez
                 nextPersonInRel.getId(),
                 nextPersonInRel.getFirstName() + " " + nextPersonInRel.getLastName(),
                 rel.getType().name(),
@@ -200,6 +200,25 @@ public class RelationshipPathFinderImpl implements RelationshipPathFinder {
             ));
             currentPerson = nextPersonInRel;
         }
+        
+        // Son kişiyi (endPerson) DTO listesine ekle
+        if (!path.isEmpty()) {
+            dtos.add(new RelationshipStepDTO(
+                endPerson.getId(),
+                endPerson.getFirstName() + " " + endPerson.getLastName(),
+                endPerson.getGender() != null ? endPerson.getGender().name() : null,
+                endPerson.getBirthDate() != null ? endPerson.getBirthDate().getYear() : null,
+                null, // Son kişi için relationship description yok
+                false, // Son kişi sourcePerson değil
+                true,  // Son kişi targetPerson
+                null,  // Son kişi için nextPersonId yok
+                null,  // Son kişi için nextPersonName yok
+                null,  // Son kişi için relationshipType yok
+                null,  // Son kişi için startDate yok
+                null   // Son kişi için endDate yok
+            ));
+        }
+        
         return dtos;
     }
 

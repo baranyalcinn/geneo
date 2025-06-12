@@ -95,6 +95,8 @@ public class GameServiceImpl implements GameService {
         log.info("New game session created with ID '{}' for player '{}', first question: {}", sessionId, playerName, firstQuestion.getId());
         
         firstQuestion.setCorrectAnswer(null);
+        // İlişki yolunu oyun başlangıcında da koruyalım
+        // firstQuestion.setRelationshipPath(null); // Bu satırı kaldırdık
 
         return InitialGameDataDTO.builder()
                 .sessionId(sessionId)
@@ -228,7 +230,8 @@ public class GameServiceImpl implements GameService {
             throw new GameException(getMessage(ERROR_GENERATE_QUESTION_FAILED, locale));
         }
         question.setCorrectAnswer(null);
-        question.setRelationshipPath(null);
+        // İlişki yolunu manuel soru üretiminde de koruyalım
+        // question.setRelationshipPath(null); // Bu satırı kaldırdık
         return question;
     }
     

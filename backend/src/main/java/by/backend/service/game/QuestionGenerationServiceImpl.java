@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSource;
 import org.springframework.context.NoSuchMessageException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.PostConstruct;
 import java.time.LocalDate;
@@ -25,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
 
 @Service
@@ -176,6 +178,7 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
     }
 
     @Override
+    @Transactional(readOnly = true)
     public GameQuestionDTO generateQuestion(Difficulty difficulty, Set<String> askedSignatures, Locale locale) {
         // Gerçek ilişki tabanlı soru üretimi (tüm zorluk seviyeleri için)
         GameQuestionDTO question = generateQuestionInternal(difficulty, askedSignatures, locale);
@@ -251,9 +254,102 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
     }
 
     private PersonPair selectRandomPersonPair(List<Person> activePersons) {
+        // %70 aile bağlantılı, %20 nesil farklı, %10 tamamen rastgele seçim 
+        // (karmaşık ilişkileri artırmak için aile bağlantılı seçimi artırdık)
+        double selector = random.nextDouble();
+        
+        if (selector < 0.70) { // Aile bağlantılı seçimi artır
+            PersonPair familyPair = selectFamilyConnectedPair(activePersons);
+            if (familyPair != null && !familyPair.isSamePerson()) {
+                return familyPair;
+            }
+        } else if (selector < 0.90) { // Nesil farklı seçimi de artır
+            PersonPair generationPair = selectGenerationDifferentPair(activePersons);
+            if (generationPair != null && !generationPair.isSamePerson()) {
+                return generationPair;
+            }
+        }
+        
+        // Fallback: tamamen rastgele
+        return selectCompletelyRandomPair(activePersons);
+    }
+    
+    private PersonPair selectCompletelyRandomPair(List<Person> activePersons) {
         Person p1 = activePersons.get(random.nextInt(activePersons.size()));
         Person p2 = activePersons.get(random.nextInt(activePersons.size()));
         return new PersonPair(p1, p2);
+    }
+    
+    private PersonPair selectFamilyConnectedPair(List<Person> activePersons) {
+        Set<Long> familyNetworkIds = new HashSet<>();
+        Person basePerson = activePersons.get(random.nextInt(activePersons.size()));
+        addFamilyNetworkIds(basePerson, familyNetworkIds, 3);  // Daha derin ilişki arayışı için depth 3
+        
+        List<Person> connectedPersons = activePersons.stream()
+            .filter(p -> familyNetworkIds.contains(p.getId()) && !p.getId().equals(basePerson.getId()))
+            .toList();
+        
+        if (connectedPersons.isEmpty()) {
+            return null;
+        }
+        
+        // Karmaşık ilişkiler için daha uzak akrabaları önceliklendir
+        List<Person> prioritizedPersons = connectedPersons.stream()
+            .sorted((p1, p2) -> {
+                // Nesil farkı olan kişileri öncelikle
+                int generationDiff1 = Math.abs((p1.getBirthDate() != null ? p1.getBirthDate().getYear() : 1990) - 
+                                              (basePerson.getBirthDate() != null ? basePerson.getBirthDate().getYear() : 1990));
+                int generationDiff2 = Math.abs((p2.getBirthDate() != null ? p2.getBirthDate().getYear() : 1990) - 
+                                              (basePerson.getBirthDate() != null ? basePerson.getBirthDate().getYear() : 1990));
+                return Integer.compare(generationDiff2, generationDiff1); // Daha fazla nesil farkı olanları önce
+            })
+            .toList();
+        
+        Person targetPerson = prioritizedPersons.get(random.nextInt(Math.min(prioritizedPersons.size(), 5))); // İlk 5 arasından seç
+        return new PersonPair(basePerson, targetPerson);
+    }
+    
+    private PersonPair selectGenerationDifferentPair(List<Person> activePersons) {
+        // Doğum yılları farklı olan (30+ yaş farkı) kişiler seç
+        for (int attempt = 0; attempt < 10; attempt++) {
+            Person p1 = activePersons.get(random.nextInt(activePersons.size()));
+            Person p2 = activePersons.get(random.nextInt(activePersons.size()));
+            
+            if (p1.getBirthDate() != null && p2.getBirthDate() != null) {
+                int p1BirthYear = p1.getBirthDate().getYear();
+                int p2BirthYear = p2.getBirthDate().getYear();
+                int ageDiff = Math.abs(p1BirthYear - p2BirthYear);
+                if (ageDiff >= 25) { // Minimum 25 yaş farkı (potansiyel dede-torun)
+                    log.info("👴👶 Nesil farklı seçim: {} ({}) -> {} ({}), yaş farkı: {}", 
+                             p1.getFirstName(), p1BirthYear, 
+                             p2.getFirstName(), p2BirthYear, ageDiff);
+                    return new PersonPair(p1, p2);
+                }
+            }
+        }
+        // Bulamazsa rastgele seç
+        log.info("⚡ Nesil farklı bulunamadı, rastgele seçim yapılıyor");
+        return selectCompletelyRandomPair(activePersons);
+    }
+    
+    private void addFamilyNetworkIds(Person person, Set<Long> networkIds, int maxDepth) {
+        if (maxDepth <= 0 || networkIds.contains(person.getId())) {
+            return;
+        }
+        
+        networkIds.add(person.getId());
+        
+        // LAZY loading sorununu çözmek için try-catch kullan
+        try {
+            // Ebeveynler, çocuklar, eş, kardeşler ekle
+            person.getParents().forEach(parent -> addFamilyNetworkIds(parent, networkIds, maxDepth - 1));
+            person.getChildren().forEach(child -> addFamilyNetworkIds(child, networkIds, maxDepth - 1));
+            person.getSpouseOptional().ifPresent(spouse -> addFamilyNetworkIds(spouse, networkIds, maxDepth - 1));
+            person.getSiblings().forEach(sibling -> addFamilyNetworkIds(sibling, networkIds, maxDepth - 1));
+        } catch (Exception e) {
+            // Hibernate session sorunları için sessizce atla
+            log.debug("LAZY loading hatası için aile ağı genişletme atlandı: {}", e.getMessage());
+        }
     }
 
     private boolean isQuestionAlreadyAsked(PersonPair personPair, Set<String> askedSignatures) {
@@ -371,6 +467,9 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
     }
     
     private GameQuestionDTO createQuestionDTO(Person p1, Person p2, RelationshipDescriptionResult descResult, Difficulty difficulty, Locale locale) {
+        log.info("Creating question DTO for {} -> {}, path steps: {}", 
+                 p1.getFirstName(), p2.getFirstName(), 
+                 descResult.getPath() != null ? descResult.getPath().size() : 0);
         String person1Name = p1.getFirstName() + " " + p1.getLastName();
         String person2Name = p2.getFirstName() + " " + p2.getLastName();
         String questionText = getMessage(GAME_QUESTION_FORMAT_KEY, locale, true, person1Name, person2Name);
@@ -741,18 +840,21 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
     }
     
     private boolean isEasyLevelRelationship(String messageKey, String category) {
+        // EASY seviyeyi daha geniş tutarak karmaşık ilişkilerin de sorulabilmesini sağlayalım
         return CATEGORY_DIRECT.equals(category) || 
                CATEGORY_SIBLINGS.equals(category) ||
-               messageKey.contains("spouse");
+               messageKey.contains("spouse") ||
+               CATEGORY_GRANDPARENT.equals(category) || 
+               CATEGORY_GRANDCHILD.equals(category);
     }
     
     private boolean isMediumLevelRelationship(String messageKey, String category) {
         return isEasyLevelRelationship(messageKey, category) ||
-               CATEGORY_GRANDPARENT.equals(category) || 
-               CATEGORY_GRANDCHILD.equals(category) ||
                CATEGORY_AUNT_UNCLE.equals(category) || 
                CATEGORY_NEPHEW_NIECE.equals(category) ||
-               (CATEGORY_COUSIN.equals(category) && !messageKey.contains("second") && !messageKey.contains("third"));
+               (CATEGORY_COUSIN.equals(category) && !messageKey.contains("second") && !messageKey.contains("third")) ||
+               CATEGORY_INLAW.equals(category) ||
+               CATEGORY_STEP.equals(category);
     }
 
     private boolean isHardLevelRelationship(String messageKey, String category) {
@@ -795,6 +897,9 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
         if (key.contains(COUSIN_TERM)) return CATEGORY_COUSIN;
         if (key.contains(INLAW_TERM)) return CATEGORY_INLAW;
         if (key.contains(STEP_TERM)) return CATEGORY_STEP;
+        
+        // Distant relationship kontrolü ekleyelim
+        if (key.contains("distant") || key.contains("complex") || key.contains("remote")) return CATEGORY_DISTANT;
         
         // Special cases
         if (key.contains(ITSELF_TERM)) return CATEGORY_SELF;

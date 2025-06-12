@@ -13,7 +13,7 @@ export const useGameSession = () => {
   const [gameAnalysis, setGameAnalysis] = useState<GameAnalysis | null>(null);
   const [canAnswer, setCanAnswer] = useState(true);
   const [questionCount, setQuestionCount] = useState(0);
-  const [totalQuestions] = useState(10);
+  const [totalQuestions, setTotalQuestions] = useState(10);
   
   const gameTimerRef = useRef<NodeJS.Timeout | null>(null);
   const questionTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -33,46 +33,59 @@ export const useGameSession = () => {
     startGame: startLocalGame,
   } = useGameStore();
 
-  const startGame = useCallback(async (playerName: string, difficulty: Difficulty, lang: string) => {
-    setLoading(true);
-    setError(null);
+  const startGame = useCallback(async (playerName: string, difficulty: Difficulty) => {
     try {
-      const initialData = await gameService.startGame(playerName, difficulty, lang);
+      setLoading(true);
+      setError(null);
       
-      createSession(playerName, difficulty);
+      const initialData = await gameService.startGame(playerName, difficulty);
       
-      startLocalGame();
-      setIsGameActive(true);
+      // Backend'den gelen total questions değerini kullan
+      setTotalQuestions(initialData.totalQuestions);
       
-      setCurrentQuestion(initialData.firstQuestion);
-      
-      updateSession({
+      createSession({
         sessionId: initialData.sessionId,
+        playerName: initialData.playerName,
+        difficulty: initialData.difficulty,
+        startTime: Date.now(),
+        currentScore: 0,
+        currentStreak: 0,
+        maxStreak: 0,
+        questionsAnswered: 0,
+        correctAnswers: 0,
         totalQuestions: initialData.totalQuestions,
         timeRemaining: initialData.gameDurationInSeconds,
+        isActive: true,
+        isPaused: false,
+        askedQuestions: [initialData.firstQuestion.id],
       });
-
-      setTimeLeft(initialData.gameDurationInSeconds);
-      setQuestionCount(1);
-      setShowAnalysis(false);
-      setGameAnalysis(null);
       
+      setCurrentQuestion(initialData.firstQuestion);
+      setQuestionCount(1);
+      setTimeLeft(initialData.gameDurationInSeconds);
+      setIsGameActive(true);
+      setCanAnswer(true);
+      
+      startLocalGame();
       startGameTimer();
       
-      toast.success(
-        `🎮 Oyun başladı! ${playerName}, ${difficulty} seviyesinde!`,
-        { duration: 3000 }
-      );
-    } catch (err: any) {
-      console.error('Oyun başlatılırken hata:', err);
-      const errorMessage = err.response?.data?.message ?? 'Oyun başlatılırken bir hata oluştu.';
-      setError(errorMessage);
-      toast.error(errorMessage);
-      setIsGameActive(false);
+      let timeLimit = 15; // HARD difficulty default
+      if (initialData.difficulty === Difficulty.EASY) {
+        timeLimit = 20;
+      } else if (initialData.difficulty === Difficulty.MEDIUM) {
+        timeLimit = 18;
+      }
+      
+      startQuestionTimer(timeLimit);
+      
+    } catch (error: any) {
+      console.error('Oyun başlatma hatası:', error);
+      setError(error.message || 'Oyun başlatılamadı');
+      toast.error(`Hata: ${error.message || 'Oyun başlatılamadı'}`);
     } finally {
       setLoading(false);
     }
-  }, [createSession, setCurrentQuestion, updateSession, startLocalGame, setLoading, setError]);
+  }, [createSession, setCurrentQuestion, setLoading, setError, startLocalGame, startGameTimer, startQuestionTimer]);
 
   const startGameTimer = useCallback(() => {
     if (gameTimerRef.current) {

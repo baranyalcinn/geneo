@@ -64,31 +64,35 @@ export const transformDataToFlow = (
 
     const nodes: Node[] = [];
     const edges: Edge[] = [];
+    const existingNodeIds = new Set<string>();
 
     path.forEach((step, index) => {
         const nodeId = step.personId.toString();
         
-        nodes.push({
-            id: nodeId,
-            type: 'custom', // Özel düğüm tipi
-            position: { x: 0, y: 0 }, // Linter hatasını gidermek için varsayılan pozisyon
-            data: {
-                name: step.personName,
-                gender: step.personGender,
-                birthYear: step.personBirthYear,
-                deathYear: step.personDeathYear,
-                isSource: step.sourcePerson,
-                isTarget: step.targetPerson,
-                // Dagre'nin kullanması için düğüm boyutları
-                width: GRAPH_NODE_WIDTH,
-                height: GRAPH_NODE_HEIGHT,
-            },
-            // sourcePosition ve targetPosition dagre tarafından otomatik yönetilebilir
-            // veya belirli portlar tanımlanırsa kullanılabilir.
-            // Şimdilik kaldırabilir veya yorum satırı yapabiliriz.
-            // sourcePosition: Position.Right, 
-            // targetPosition: Position.Left,
-        });
+        if (!existingNodeIds.has(nodeId)) {
+            nodes.push({
+                id: nodeId,
+                type: 'custom', // Özel düğüm tipi
+                position: { x: 0, y: 0 }, // Linter hatasını gidermek için varsayılan pozisyon
+                data: {
+                    name: step.personName,
+                    gender: step.personGender,
+                    birthYear: step.personBirthYear,
+                    deathYear: step.personDeathYear,
+                    isSource: step.sourcePerson,
+                    isTarget: step.targetPerson,
+                    // Dagre'nin kullanması için düğüm boyutları
+                    width: GRAPH_NODE_WIDTH,
+                    height: GRAPH_NODE_HEIGHT,
+                },
+                // sourcePosition ve targetPosition dagre tarafından otomatik yönetilebilir
+                // veya belirli portlar tanımlanırsa kullanılabilir.
+                // Şimdilik kaldırabilir veya yorum satırı yapabiliriz.
+                // sourcePosition: Position.Right, 
+                // targetPosition: Position.Left,
+            });
+            existingNodeIds.add(nodeId);
+        }
 
         if (index < path.length - 1) {
             const nextStep = path[index + 1];
@@ -97,7 +101,7 @@ export const transformDataToFlow = (
             const edgeColor = getEdgeColorByRelationship(relationshipType, themeColors.edgeBaseColor);
 
             edges.push({
-                id: `e${nodeId}-${nextNodeId}`,
+                id: `e${nodeId}-${nextNodeId}-${index}`,
                 source: nodeId,
                 target: nextNodeId,
                 type: EDGE_TYPE_DEFAULT,

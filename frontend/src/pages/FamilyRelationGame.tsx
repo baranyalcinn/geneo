@@ -251,13 +251,22 @@ const FamilyRelationGame = () => {
 
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const relationshipPathForGraph = useMemo(() => {
+    console.log('🔍 Debug relationshipPathForGraph:', {
+      showResult,
+      currentRelationshipPath: currentRelationshipPath?.length || 0,
+      questionRelationshipPath: currentQuestion?.relationshipPath?.length || 0,
+      currentQuestion: currentQuestion?.id
+    });
+    
     // Eğer sunucudan gelen detaylı bir yol varsa (cevap sonrası) onu kullan
     if (showResult && currentRelationshipPath && currentRelationshipPath.length > 0) {
+      console.log('✅ Using currentRelationshipPath:', currentRelationshipPath);
       return currentRelationshipPath;
     }
 
     // Backend'den gelen relationshipPath varsa onu kullan
     if (currentQuestion?.relationshipPath && currentQuestion.relationshipPath.length > 0) {
+      console.log('✅ Using question relationshipPath:', currentQuestion.relationshipPath);
       return currentQuestion.relationshipPath;
     }
 

@@ -1,44 +1,174 @@
-import React, { useMemo, useEffect, useState } from "react";
+import React, { useEffect, useState } from 'react';
 import {
   ReactFlow,
+  useNodesState,
+  useEdgesState,
   Controls,
   Background,
   MiniMap,
-  ReactFlowProvider,
   Node,
   Edge,
-  useReactFlow,
+  Position,
+  ReactFlowProvider,
   BackgroundVariant,
-  useNodesState,
-  useEdgesState,
-} from "@xyflow/react";
-import "@xyflow/react/dist/style.css"; // React Flow stilleri
-import {
-  Box,
-  useTheme,
-  alpha,
-} from "@mui/material";
-import { transformDataToFlow } from "../utils/graphUtils";
-import CustomNode from "./RelationshipGraph/CustomNode";
-import { useRelationshipGraphLayout } from "../hooks/useRelationshipGraphLayout";
-import GraphLoadingIndicator from "./RelationshipGraph/GraphLoadingIndicator";
-import GraphEmptyState from "./RelationshipGraph/GraphEmptyState";
-import GraphNodeErrorState from "./RelationshipGraph/GraphNodeErrorState";
-import SingleNodeView from "./RelationshipGraph/SingleNodeView";
-import { RelationshipStep } from "../types/game";
-
-interface RelationshipGraphProps {
-  path?: RelationshipStep[];
-  height?: string;
-  width?: string;
-  layoutDirection?: 'TB' | 'LR' | 'BT' | 'RL'; // Layout yönü seçeneği
+} from '@xyflow/react';
+import { Box, useTheme, alpha } from '@mui/material';
+import dagre from 'dagre';
+// RelationshipStep tipini yerel olarak tanımlayalım
+interface RelationshipStep {
+  personId: number | string;
+  personName: string;
+  personGender?: string;
+  personBirthYear?: number;
+  personDeathYear?: number;
+  relationshipToNextPerson?: string;
+  sourcePerson?: boolean;
+  targetPerson?: boolean;
 }
 
-// Bileşen dışında tipleri tanımla - CustomNode import edildiği için nodeTypes'ı güncelle
-export const nodeTypes: any = { custom: CustomNode };
-export const edgeTypes = {};
+// Graph utils - gerekli sabitler ve fonksiyonlar
+const GRAPH_NODE_WIDTH = 200;
+const GRAPH_NODE_HEIGHT = 130;
+const EDGE_TYPE_DEFAULT = 'smoothstep';
+const RELATIONSHIP_COLOR_SPOUSE = '#4CAF50';
+const RELATIONSHIP_COLOR_PARENT_CHILD = '#2196F3';
 
-// Flow bileşeni - ReactFlow Provider içerisinde
+interface GraphThemeColors {
+  edgeBaseColor: string;
+  edgeLabelColor: string;
+  edgeLabelBg: string;
+}
+
+const getEdgeColorByRelationship = (relationshipType: string | undefined, defaultColor: string): string => {
+  if (!relationshipType) return defaultColor;
+  const lowerRel = relationshipType.toLowerCase();
+  if (lowerRel.includes('eş') || lowerRel.includes('koca') || lowerRel.includes('karı')) {
+    return RELATIONSHIP_COLOR_SPOUSE;
+  }
+  if (lowerRel.includes('baba') || lowerRel.includes('anne') || lowerRel.includes('çocuk') || lowerRel.includes('oğul') || lowerRel.includes('kız')) {
+    return RELATIONSHIP_COLOR_PARENT_CHILD;
+  }
+  return defaultColor;
+};
+
+const transformDataToFlow = (
+  path: RelationshipStep[] | undefined,
+  themeColors: GraphThemeColors,
+): { nodes: Node[]; edges: Edge[] } => {
+  if (!path || path.length === 0) {
+    return { nodes: [], edges: [] };
+  }
+
+  const nodes: Node[] = [];
+  const edges: Edge[] = [];
+  const existingNodeIds = new Set<string>();
+
+  path.forEach((step, index) => {
+    const nodeId = step.personId.toString();
+    
+    if (!existingNodeIds.has(nodeId)) {
+      nodes.push({
+        id: nodeId,
+        type: 'custom',
+        position: { x: 0, y: 0 },
+        data: {
+          name: step.personName,
+          gender: step.personGender,
+          birthYear: step.personBirthYear,
+          deathYear: step.personDeathYear,
+          isSource: step.sourcePerson,
+          isTarget: step.targetPerson,
+          width: GRAPH_NODE_WIDTH,
+          height: GRAPH_NODE_HEIGHT,
+        },
+      });
+      existingNodeIds.add(nodeId);
+    }
+
+    if (index < path.length - 1) {
+      const nextStep = path[index + 1];
+      const nextNodeId = nextStep.personId.toString();
+      const relationshipType = step.relationshipToNextPerson;
+      const edgeColor = getEdgeColorByRelationship(relationshipType, themeColors.edgeBaseColor);
+
+      edges.push({
+        id: `e${nodeId}-${nextNodeId}-${index}`,
+        source: nodeId,
+        target: nextNodeId,
+        type: EDGE_TYPE_DEFAULT,
+        style: {
+          strokeWidth: 2.5,
+          stroke: edgeColor,
+        },
+        label: relationshipType || "?",
+        labelStyle: {
+          fill: '#fff',
+          fontWeight: 'bold',
+          fontSize: 12,
+          fontFamily: 'Inter, system-ui, sans-serif',
+        },
+        labelBgPadding: [10, 6],
+        labelBgBorderRadius: 8,
+        labelBgStyle: {
+          fill: edgeColor,
+          fillOpacity: 0.95,
+          stroke: '#fff',
+          strokeWidth: 1,
+        },
+        data: {
+          relationshipType: relationshipType,
+        }
+      } as any);
+    }
+  });
+
+  return { nodes, edges };
+};
+import CustomNode from './RelationshipGraph/CustomNode';
+import GraphLoadingIndicator from './RelationshipGraph/GraphLoadingIndicator';
+import GraphEmptyState from './RelationshipGraph/GraphEmptyState';
+import GraphNodeErrorState from './RelationshipGraph/GraphNodeErrorState';
+import SingleNodeView from './RelationshipGraph/SingleNodeView';
+import 'reactflow/dist/style.css';
+
+const nodeTypes = {
+  custom: CustomNode,
+};
+
+const getLayoutedElements = (
+  nodes: Node[],
+  edges: Edge[],
+  direction: 'TB' | 'LR' | 'BT' | 'RL'
+) => {
+  const dagreGraph = new dagre.graphlib.Graph();
+  dagreGraph.setDefaultEdgeLabel(() => ({}));
+  const nodeWidth = 172;
+  const nodeHeight = 50; 
+  dagreGraph.setGraph({ rankdir: direction, nodesep: 25, ranksep: 60 });
+
+  nodes.forEach((node) => {
+    dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+  });
+
+  edges.forEach((edge) => {
+    dagreGraph.setEdge(edge.source, edge.target);
+  });
+
+  dagre.layout(dagreGraph);
+
+  nodes.forEach((node) => {
+    const nodeWithPosition = dagreGraph.node(node.id);
+    node.targetPosition = direction === 'TB' ? Position.Top : Position.Left;
+    node.sourcePosition = direction === 'TB' ? Position.Bottom : Position.Right;
+    node.position = {
+      x: nodeWithPosition.x - nodeWidth / 2,
+      y: nodeWithPosition.y - nodeHeight / 2,
+    };
+  });
+
+  return { nodes, edges };
+};
+
 const FlowComponent: React.FC<{
   nodes: Node[];
   edges: Edge[];
@@ -46,224 +176,141 @@ const FlowComponent: React.FC<{
   onEdgesChange: (changes: any) => void;
 }> = ({ nodes, edges, onNodesChange, onEdgesChange }) => {
   const theme = useTheme();
-  const { fitView } = useReactFlow();
-
-  useEffect(() => {
-    if (nodes.length > 0) {
-      const timeoutId = setTimeout(() => {
-        fitView({ padding: 0.2, duration: 300 });
-      }, 50);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [nodes, fitView]);
-
   return (
-    <div style={{ width: "100%", height: "100%" }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.25, duration: 450 }}
-        style={{
-          width: "100%",
-          height: "100%",
-          background:
-            theme.palette.mode === "dark"
-              ? alpha(theme.palette.grey[900], 0.9)
-              : alpha(theme.palette.grey[50], 0.9),
-        }}
-        proOptions={{ hideAttribution: true }}
-        zoomOnScroll={true}
-        panOnScroll={true}
-        minZoom={0.5}
-        maxZoom={1.5}
-      >
-      <Controls
-        style={{
-          left: 15,
-          bottom: 15,
-          boxShadow: `0 3px 10px ${alpha(theme.palette.common.black, 0.15)}`,
-          border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
-          borderRadius: `${Number(theme.shape.borderRadius) * 1.5}px`,
-          padding: theme.spacing(0.5),
-          gap: theme.spacing(0.5),
-        }}
-      />
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      nodeTypes={nodeTypes}
+      fitView
+      proOptions={{ hideAttribution: true }}
+      style={{
+        background: theme.palette.mode === 'dark' ? alpha(theme.palette.background.default, 0.8) : alpha(theme.palette.grey[50], 0.8)
+      }}
+    >
+      <Controls />
       <Background
-        variant={
-          theme.palette.mode === "dark"
-            ? BackgroundVariant.Dots
-            : BackgroundVariant.Lines
-        }
-        gap={20}
+        variant={theme.palette.mode === 'dark' ? BackgroundVariant.Dots : BackgroundVariant.Lines}
+        gap={15}
         size={1}
-        color={
-          theme.palette.mode === "dark"
-            ? alpha(theme.palette.primary.main, 0.15)
-            : alpha(theme.palette.primary.main, 0.08)
-        }
+        color={alpha(theme.palette.primary.main, 0.1)}
       />
-      <MiniMap
-        nodeStrokeWidth={3}
-        nodeStrokeColor={(n) => {
-          if (n.data?.isSource) return theme.palette.success.main;
-          if (n.data?.isTarget) return theme.palette.secondary.main;
-          return theme.palette.primary.main;
-        }}
-        nodeColor={(n) => {
-          if (n.data?.isSource) return alpha(theme.palette.success.light, 0.7);
-          if (n.data?.isTarget)
-            return alpha(theme.palette.secondary.light, 0.7);
-          return alpha(theme.palette.primary.light, 0.7);
-        }}
-        nodeBorderRadius={Number(theme.shape.borderRadius) * 0.5}
-        style={{
-          bottom: 15,
-          right: 15,
-          height: 100,
-          width: 150,
-          backgroundColor: alpha(theme.palette.background.paper, 0.9),
-          border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
-          borderRadius: `${Number(theme.shape.borderRadius) * 1.5}px`,
-          boxShadow: `0 3px 12px ${alpha(theme.palette.common.black, 0.18)}`,
-        }}
-      />
+      <MiniMap nodeStrokeWidth={3} pannable zoomable />
     </ReactFlow>
-    </div>
   );
-};
+}
 
-// Ana bileşen
+interface RelationshipGraphProps {
+  path?: RelationshipStep[];
+  height?: string;
+  width?: string;
+  layoutDirection?: 'TB' | 'LR' | 'BT' | 'RL';
+}
+
 const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
   path,
-  height = "600px",
-  width = "100%",
-  layoutDirection,
+  height = '400px',
+  width = '100%',
+  layoutDirection = 'TB',
 }) => {
-  // React Flow için minimum boyutları garanti etmek
-  const containerHeight = height === "100%" ? "100%" : (parseInt(height as string) < 300 ? "300px" : height);
-  const containerWidth = width === "100%" ? "100%" : (parseInt(width as string) < 300 ? "300px" : width);
   const theme = useTheme();
-  const [isLoading, setIsLoading] = useState(true);
-  const themeMode = theme.palette.mode;
-
-  const themeColorsForFlow = useMemo(
-    () => ({
-      edgeBaseColor: "#FF0000",
-      edgeLabelColor: "#FFFFFF",
-      edgeLabelBg: "#FF0000",
-      themeMode,
-    }),
-    [themeMode],
-  );
-
-  const { nodes: initialNodes, edges: initialEdges } = useMemo(
-    () => transformDataToFlow(path, themeColorsForFlow),
-    [path, themeColorsForFlow],
-  );
-
-  const layoutedNodes = useRelationshipGraphLayout({
-    nodes: initialNodes,
-    edges: initialEdges,
-    direction: layoutDirection,
-  });
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState([] as any);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([] as any);
+  const [status, setStatus] = useState<'loading' | 'error' | 'empty' | 'single' | 'ready'>('loading');
 
   useEffect(() => {
-    setNodes(layoutedNodes);
-  }, [layoutedNodes, setNodes]);
+    setStatus('loading');
+    console.log('RelationshipGraph - Gelen path:', path);
+    if (!path || path.length === 0) {
+      setNodes([]);
+      setEdges([]);
+      setStatus('empty');
+      return;
+    }
 
-  useEffect(() => {
-    setEdges(initialEdges);
-  }, [initialEdges, setEdges]);
+    try {
+      const themeColors = {
+        edgeBaseColor: theme.palette.divider,
+        edgeLabelColor: theme.palette.text.secondary,
+        edgeLabelBg: theme.palette.background.default,
+      };
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 50);
-    return () => clearTimeout(timer);
-  }, [path]);
+      const { nodes: initialNodes, edges: initialEdges } = transformDataToFlow(path, themeColors);
+      
+      if (initialNodes.length === 0) {
+        setNodes([]);
+        setEdges([]);
+        setStatus('empty');
+        return;
+      }
+      
+      if (initialNodes.length === 1) {
+        setNodes(initialNodes.map((n: Node) => ({...n, position: {x: 0, y: 0}})));
+        setEdges([]);
+        setStatus('single');
+        return;
+      }
+      
+      const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+        initialNodes,
+        initialEdges,
+        layoutDirection
+      );
 
-  if (isLoading) {
-    return <GraphLoadingIndicator width={containerWidth} height={containerHeight} />;
-  }
+      setNodes(layoutedNodes);
+      setEdges(layoutedEdges);
+      setStatus('ready');
 
-  if (!path || path.length === 0) {
-    return <GraphEmptyState width={containerWidth} height={containerHeight} />;
-  }
+    } catch (e) {
+      console.error("Failed to build relationship graph:", e);
+      setNodes([]);
+      setEdges([]);
+      setStatus('error');
+    }
+  }, [path, theme.palette.mode, layoutDirection, setNodes, setEdges]);
 
-  if (initialNodes.length === 0 && path && path.length > 0) {
-    return <GraphNodeErrorState width={containerWidth} height={containerHeight} />;
-  }
-  
+  const renderContent = () => {
+    switch (status) {
+      case 'loading':
+        return <GraphLoadingIndicator width={width} height={height} />;
+      case 'empty':
+        return <GraphEmptyState width={width} height={height} messageBody="Görüntülenecek ilişki yolu bulunamadı." />;
+      case 'error':
+        return <GraphNodeErrorState width={width} height={height} />;
+      case 'single':
+        return <SingleNodeView node={nodes[0]} width={width} height={height} />;
+      case 'ready':
+        return (
+          <ReactFlowProvider>
+            <FlowComponent
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+            />
+          </ReactFlowProvider>
+        );
+      default:
+        return <GraphEmptyState width={width} height={height} />;
+    }
+  };
+
   return (
     <Box
       sx={{
-        width: containerWidth,
-        height: containerHeight,
-        minHeight: "350px",
-        minWidth: "300px",
-        border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-        borderRadius: `${Number(theme.shape.borderRadius) * 1.5}px`,
-        overflow: "hidden",
-        position: "relative",
-        display: "flex",
-        boxShadow: `0 5px 15px ${alpha(theme.palette.common.black, 0.08)}`,
-        background:
-          theme.palette.mode === "dark"
-            ? alpha(theme.palette.grey[900], 0.5)
-            : alpha(theme.palette.grey[50], 0.5),
-        backdropFilter: "blur(8px)",
-        "& .react-flow__node": {
-          background: "transparent",
-          border: "none",
-          width: "auto",
-          height: "auto",
-        },
-        "& .react-flow__handle": {
-          width: 12,
-          height: 12,
-          background: theme.palette.primary.main,
-          border: `2px solid ${theme.palette.background.paper}`,
-          zIndex: 5,
-        },
-        "& .react-flow__edge-path": {
-          strokeWidth: 2,
-          strokeLinecap: "butt",
-          strokeLinejoin: "miter",
-        },
-        "& .react-flow__edge-text": {
-          fontWeight: "bold",
-          fontSize: "0.85rem",
-          filter: "none",
-          textShadow: "none",
-        },
-        "& .react-flow__edge-textbg": {
-          borderRadius: 0,
-          padding: "2px 4px",
-          boxShadow: "none",
-        },
-        "& .react-flow__attribution": {
-          background: "transparent",
-          color: theme.palette.text.secondary,
-        },
-        "& .react-flow__pane": {
-          width: "100%",
-          height: "100%",
-        },
+        height,
+        width,
+        minHeight: '300px',
+        position: 'relative',
+        borderRadius: 2,
+        overflow: 'hidden',
+        border: '1px solid',
+        borderColor: theme.palette.divider,
+        backgroundColor: theme.palette.background.paper,
       }}
     >
-      <ReactFlowProvider>
-        <FlowComponent 
-          nodes={nodes} 
-          edges={edges} 
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-        />
-      </ReactFlowProvider>
+      {renderContent()}
     </Box>
   );
 };
