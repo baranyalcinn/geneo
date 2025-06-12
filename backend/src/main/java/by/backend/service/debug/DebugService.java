@@ -68,6 +68,10 @@ public class DebugService {
             log.info("=== DEBUG: Test Soru Üretimi ===");
             debugQuestionGeneration(allPersons);
             
+            // 4. YENİ: Zorluk Seviyesi Analizi
+            log.info("=== DEBUG: Yeni Zorluk Seviyesi Analizi ===");
+            debugDifficultyAnalysis(allPersons);
+            
         } catch (Exception e) {
             log.error("Debug sırasında hata: {}", e.getMessage(), e);
         }
@@ -139,5 +143,89 @@ public class DebugService {
         return lower.contains("parent") || lower.contains("child") || 
                lower.contains("sibling") || lower.contains("spouse") ||
                lower.contains("grandparent") || lower.contains("grandchild");
+    }
+    
+    /**
+     * Yeni zorluk algoritmasını test eder
+     */
+    private void debugDifficultyAnalysis(List<Person> persons) {
+        Random random = new Random();
+        int testCount = 20;
+        int easyCount = 0, mediumCount = 0, hardCount = 0;
+        
+        for (int i = 0; i < testCount; i++) {
+            Person p1 = persons.get(random.nextInt(persons.size()));
+            Person p2 = persons.get(random.nextInt(persons.size()));
+            
+            if (p1.getId().equals(p2.getId())) {
+                continue;
+            }
+            
+            try {
+                RelationshipDescriptionResult result = relationshipService.findRelationshipDescription(
+                    personMapper.toSummaryDTO(p1), personMapper.toSummaryDTO(p2));
+                
+                if (result != null && result.getStatus() == RelationshipStatus.FOUND) {
+                    String messageKey = result.getMessageKey();
+                    
+                    // Her zorluk seviyesi için test et
+                    boolean isEasy = isTestEasyLevel(messageKey);
+                    boolean isMedium = isTestMediumLevel(messageKey);
+                    boolean isHard = isTestHardLevel(messageKey);
+                    
+                    if (isEasy) easyCount++;
+                    if (isMedium) mediumCount++;
+                    if (isHard) hardCount++;
+                    
+                    log.info("Test #{}: {} -> {} | Key: {} | Easy: {} | Medium: {} | Hard: {}",
+                        i+1, p1.getFirstName(), p2.getFirstName(), messageKey, isEasy, isMedium, isHard);
+                }
+            } catch (Exception e) {
+                log.debug("Test #{} sırasında hata: {}", i+1, e.getMessage());
+            }
+        }
+        
+        log.info("=== ZORLUK SEVİYESİ DAĞILIMI ===");
+        log.info("KOLAY seviyeye uygun: {} ilişki", easyCount);
+        log.info("ORTA seviyeye uygun: {} ilişki", mediumCount);
+        log.info("ZOR seviyeye uygun: {} ilişki", hardCount);
+        
+        if (easyCount == 0) {
+            log.warn("KOLAY seviyede hiç ilişki bulunamadı! Temel aile ilişkileri eksik olabilir.");
+        }
+        if (mediumCount == 0) {
+            log.warn("ORTA seviyede hiç ilişki bulunamadı! Genişletilmiş aile ilişkileri eksik olabilir.");
+        }
+        if (hardCount == 0) {
+            log.warn("ZOR seviyede hiç ilişki bulunamadı! Karmaşık ilişkiler eksik olabilir.");
+        }
+    }
+    
+    // Test metodları - asıl sınıftaki private metodları simüle eder
+    private boolean isTestEasyLevel(String messageKey) {
+        return messageKey.contains("parent") || messageKey.contains("child") || 
+               messageKey.contains("father") || messageKey.contains("mother") ||
+               messageKey.contains("son") || messageKey.contains("daughter") ||
+               messageKey.contains("sibling") || messageKey.contains("brother") || 
+               messageKey.contains("sister") || messageKey.contains("spouse") ||
+               messageKey.contains("husband") || messageKey.contains("wife");
+    }
+    
+    private boolean isTestMediumLevel(String messageKey) {
+        return messageKey.contains("grandfather") || messageKey.contains("grandmother") ||
+               messageKey.contains("grandparent") || messageKey.contains("grandchild") ||
+               messageKey.contains("grandson") || messageKey.contains("granddaughter") ||
+               messageKey.contains("aunt") || messageKey.contains("uncle") ||
+               messageKey.contains("nephew") || messageKey.contains("niece") ||
+               (messageKey.contains("cousin") && !messageKey.contains("second") && !messageKey.contains("third")) ||
+               messageKey.contains("inlaw") || messageKey.contains("gelin") || messageKey.contains("damat");
+    }
+    
+    private boolean isTestHardLevel(String messageKey) {
+        return messageKey.contains("great_grand") || messageKey.contains("second_cousin") ||
+               messageKey.contains("third_cousin") || messageKey.contains("removed") ||
+               messageKey.contains("elti") || messageKey.contains("bacanak") ||
+               messageKey.contains("step") || messageKey.contains("distant") ||
+               messageKey.contains("complex") || messageKey.contains("spouse_sibling");
     }
 } 

@@ -727,228 +727,51 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
 
         String messageKey = result.getMessageKey();
         String category = getRelationshipCategory(messageKey);
-        int pathLength = (result.getPath() != null) ? result.getPath().size() : estimatePathLengthByCategory(category, messageKey);
-        pathLength = Math.min(pathLength, MAX_PATH_LENGTH); // Clamp path length
-
-        double complexityScore = calculateComplexityScore(category, pathLength, messageKey);
         
-        boolean isAppropriate;
         switch (difficulty) {
             case EASY:
-                // Kolay: Sadece doğrudan ilişkiler ve basit aile bağları (0.0 - 0.4 arası)
-                isAppropriate = complexityScore <= 0.4 && 
-                               (CATEGORY_DIRECT.equals(category) || CATEGORY_SIBLINGS.equals(category) || 
-                                CATEGORY_GRANDPARENT.equals(category) || CATEGORY_GRANDCHILD.equals(category));
-                break;
+                return isEasyLevelRelationship(messageKey, category);
             case MEDIUM:
-                // Orta: Orta seviye ilişkiler ve bazı karmaşık durumlar (0.25 - 0.7 arası)
-                isAppropriate = complexityScore >= 0.25 && complexityScore <= 0.7 &&
-                               !CATEGORY_DISTANT.equals(category);
-                break;
+                return isMediumLevelRelationship(messageKey, category);
             case HARD:
-                // Zor: Karmaşık ilişkiler, kayın akrabalık, uzak akrabalık (0.5+ veya özel durumlar)
-                isAppropriate = complexityScore >= 0.5 || 
-                               isSpecialHardRelationship(messageKey, category, complexityScore) ||
-                               CATEGORY_INLAW.equals(category) || CATEGORY_STEP.equals(category) ||
-                               CATEGORY_DISTANT.equals(category) || CATEGORY_COUSIN.equals(category);
-                break;
+                return isHardLevelRelationship(messageKey, category);
             default:
-                isAppropriate = true; // Default olarak kabul et
+                return false;
         }
-        
-        log.debug("Difficulty check: Key:{}, Category:{}, Path:{}, Score:{:.2f}, Difficulty:{}, Appropriate:{}",
-            messageKey, category, pathLength, complexityScore, difficulty, isAppropriate);
-        return isAppropriate;
-    }
-
-    private int estimatePathLengthByCategory(String category, String messageKey) {
-        switch (category) {
-            case CATEGORY_DIRECT: 
-                return 1;
-            case CATEGORY_SIBLINGS: 
-                return 2;
-            case CATEGORY_GRANDPARENT, CATEGORY_GRANDCHILD: 
-                return 2;
-            case CATEGORY_AUNT_UNCLE, CATEGORY_NEPHEW_NIECE: 
-                return DEFAULT_PATH_LENGTH;
-            case CATEGORY_COUSIN: 
-                return getCousinPathLength(messageKey);
-            case CATEGORY_INLAW: 
-                return getInlawPathLength(messageKey);
-            case CATEGORY_STEP: 
-                return getStepPathLength(messageKey);
-            case CATEGORY_DISTANT: 
-                return getDistantPathLength(messageKey);
-            default: 
-                return DEFAULT_PATH_LENGTH;
-        }
-    }
-
-    private int getCousinPathLength(String messageKey) {
-        if (messageKey.contains(SECOND)) {
-            return COUSIN_SECOND_PATH_LENGTH;
-        }
-        if (messageKey.contains(THIRD)) {
-            return COUSIN_THIRD_PATH_LENGTH;
-        }
-        return DEFAULT_PATH_LENGTH;
-    }
-
-    private int getInlawPathLength(String messageKey) {
-        if (messageKey.contains(SPOUSE_SIBLING_SPOUSE) || messageKey.contains(COMPLEX)) {
-            return INLAW_COMPLEX_PATH_LENGTH;
-        }
-        if (messageKey.contains(".parent") || messageKey.contains(".child")) {
-            return STEP_PARENT_CHILD_PATH_LENGTH;
-        }
-        return DEFAULT_PATH_LENGTH;
-    }
-
-    private int getStepPathLength(String messageKey) {
-        if (messageKey.contains(".parent") || messageKey.contains(".child")) {
-            return STEP_PARENT_CHILD_PATH_LENGTH;
-        }
-        return DEFAULT_PATH_LENGTH;
-    }
-
-    private int getDistantPathLength(String messageKey) {
-        if (messageKey.contains("close")) {
-            return DISTANT_CLOSE_PATH_LENGTH;
-        }
-        if (messageKey.contains("moderate")) {
-            return DISTANT_MODERATE_PATH_LENGTH;
-        }
-        return DISTANT_FAR_PATH_LENGTH;
-    }
-
-    private double calculateComplexityScore(String category, int pathLength, String messageKey) {
-        double baseScore = getBaseScoreByCategory(category, messageKey);
-        double pathBonus = calculatePathBonus(pathLength);
-        double specialBonus = calculateSpecialBonus(messageKey);
-        
-        return Math.min(MAX_COMPLEXITY_SCORE, baseScore + pathBonus + specialBonus);
-    }
-
-    private double getBaseScoreByCategory(String category, String messageKey) {
-        switch (category) {
-            case CATEGORY_DIRECT: 
-                return 0.1;
-            case CATEGORY_SIBLINGS: 
-                return 0.2;
-            case CATEGORY_GRANDPARENT, CATEGORY_GRANDCHILD: 
-                return 0.25;
-            case CATEGORY_AUNT_UNCLE, CATEGORY_NEPHEW_NIECE: 
-                return 0.4;
-            case CATEGORY_COUSIN: 
-                return getCousinComplexityScore(messageKey);
-            case CATEGORY_INLAW: 
-                return getInlawComplexityScore(messageKey);
-            case CATEGORY_STEP: 
-                return 0.6;
-            case CATEGORY_DISTANT: 
-                return messageKey.contains(COMPLEX) ? 0.9 : 0.7;
-            default: 
-                return 0.5;
-        }
-    }
-
-    private double getCousinComplexityScore(String messageKey) {
-        if (messageKey.contains(SECOND)) {
-            return 0.6;
-        }
-        if (messageKey.contains(THIRD)) {
-            return 0.75;
-        }
-        return 0.45;
-    }
-
-    private double getInlawComplexityScore(String messageKey) {
-        if (messageKey.contains(SPOUSE_SIBLING_SPOUSE)) {
-            return 0.8;
-        }
-        if (messageKey.contains(COMPLEX)) {
-            return 0.85;
-        }
-        return 0.5;
-    }
-
-    private double calculatePathBonus(int pathLength) {
-        return Math.min(MAX_PATH_BONUS, (pathLength - 1) * PATH_BONUS_MULTIPLIER);
-    }
-
-    private double calculateSpecialBonus(String messageKey) {
-        double specialBonus = 0.0;
-        if (messageKey.contains(MATERNAL) || messageKey.contains(PATERNAL)) {
-            specialBonus += MATERNAL_PATERNAL_BONUS;
-        }
-        if (messageKey.contains("once_removed") || messageKey.contains("twice_removed")) {
-            specialBonus += REMOVED_RELATIONSHIP_BONUS;
-        }
-        if (messageKey.contains("half") || messageKey.contains("step")) {
-            specialBonus += HALF_STEP_BONUS;
-        }
-        return specialBonus;
     }
     
-    private boolean isSpecialHardRelationship(String messageKey, String category, double complexityScore) {
-        return hasTurkishSpecialTerms(messageKey) ||
-               hasComplexSpouseRelations(messageKey) ||
-               hasTurkishInLawTerms(messageKey) ||
-               hasDistantCategoryComplexity(category, complexityScore) ||
-               hasCrossFamilyOrMultipleMarriageTerms(messageKey) ||
-               hasStepCategoryComplexity(category, complexityScore) ||
-               hasGreatRelationshipTerms(messageKey) ||
-               hasCousinTerms(messageKey) ||
-               hasRemovedRelationshipTerms(messageKey) ||
-               hasComplexMaternalPaternalTerms(messageKey) ||
-               hasHalfOrStepSiblingTerms(messageKey);
+    private boolean isEasyLevelRelationship(String messageKey, String category) {
+        return CATEGORY_DIRECT.equals(category) || 
+               CATEGORY_SIBLINGS.equals(category) ||
+               messageKey.contains("spouse");
+    }
+    
+    private boolean isMediumLevelRelationship(String messageKey, String category) {
+        return isEasyLevelRelationship(messageKey, category) ||
+               CATEGORY_GRANDPARENT.equals(category) || 
+               CATEGORY_GRANDCHILD.equals(category) ||
+               CATEGORY_AUNT_UNCLE.equals(category) || 
+               CATEGORY_NEPHEW_NIECE.equals(category) ||
+               (CATEGORY_COUSIN.equals(category) && !messageKey.contains("second") && !messageKey.contains("third"));
     }
 
-    private boolean hasTurkishSpecialTerms(String messageKey) {
+    private boolean isHardLevelRelationship(String messageKey, String category) {
+        return isMediumLevelRelationship(messageKey, category) ||
+               messageKey.contains("great") ||
+               messageKey.contains("second") ||
+               messageKey.contains("third") ||
+               messageKey.contains("removed") ||
+               CATEGORY_INLAW.equals(category) ||
+               CATEGORY_STEP.equals(category) ||
+               CATEGORY_DISTANT.equals(category) ||
+               hasTurkishComplexTerms(messageKey);
+    }
+    
+    /**
+     * Türkçe'ye özgü karmaşık aile terimleri kontrolü
+     */
+    private boolean hasTurkishComplexTerms(String messageKey) {
         return messageKey.contains("bacanak") || messageKey.contains("elti");
-    }
-
-    private boolean hasComplexSpouseRelations(String messageKey) {
-        return messageKey.contains("spouse_sibling") && 
-               !messageKey.equals("relationship.sibling_spouse.male") && 
-               !messageKey.equals("relationship.sibling_spouse.female");
-    }
-
-    private boolean hasTurkishInLawTerms(String messageKey) {
-        return messageKey.contains("eniste") || messageKey.contains("yenge");
-    }
-
-    private boolean hasDistantCategoryComplexity(String category, double complexityScore) {
-        return category.equals(CATEGORY_DISTANT) && complexityScore >= COMPLEXITY_SCORE_THRESHOLD_07;
-    }
-
-    private boolean hasCrossFamilyOrMultipleMarriageTerms(String messageKey) {
-        return messageKey.contains("cross_family") || messageKey.contains("multiple_marriage");
-    }
-
-    private boolean hasStepCategoryComplexity(String category, double complexityScore) {
-        return category.equals(CATEGORY_STEP) && complexityScore >= COMPLEXITY_SCORE_THRESHOLD_06;
-    }
-
-    private boolean hasGreatRelationshipTerms(String messageKey) {
-        return messageKey.contains("great_") && !messageKey.contains("great_grand");
-    }
-
-    private boolean hasCousinTerms(String messageKey) {
-        return messageKey.contains("second_cousin") || messageKey.contains("third_cousin");
-    }
-
-    private boolean hasRemovedRelationshipTerms(String messageKey) {
-        return messageKey.contains("once_removed") || messageKey.contains("twice_removed");
-    }
-
-    private boolean hasComplexMaternalPaternalTerms(String messageKey) {
-        return (messageKey.contains(MATERNAL) && messageKey.contains(COMPLEX)) ||
-               (messageKey.contains(PATERNAL) && messageKey.contains(COMPLEX));
-    }
-
-    private boolean hasHalfOrStepSiblingTerms(String messageKey) {
-        return messageKey.contains("half_sibling") || messageKey.contains("step_sibling");
     }
 
     private String getRelationshipCategory(String messageKey) {

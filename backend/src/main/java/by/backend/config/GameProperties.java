@@ -59,4 +59,8 @@ public class GameProperties {
     public int getQuestionTimeLimit(Difficulty difficulty) {
         return questionTimeLimit.getOrDefault(difficulty, 18);
     }
+    
+    public int getGameDuration(Difficulty difficulty) {
+        return durationInSeconds.getOrDefault(difficulty, 180);
+    }
 } 

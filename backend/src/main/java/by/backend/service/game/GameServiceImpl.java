@@ -85,7 +85,7 @@ public class GameServiceImpl implements GameService {
         log.info("Oyun {} zorluğunda başlatıldı (istenen: {})", actualDifficulty, difficulty);
 
         String sessionId = UUID.randomUUID().toString();
-        long gameDurationInSeconds = gameProperties.getDurationInSeconds().get(actualDifficulty);
+        long gameDurationInSeconds = gameProperties.getGameDuration(actualDifficulty);
         int totalQuestions = gameProperties.getQuestionsPerGame();
 
         GameSession newSession = new GameSession(sessionId, playerName, actualDifficulty, gameDurationInSeconds, totalQuestions, new ArrayList<>());
