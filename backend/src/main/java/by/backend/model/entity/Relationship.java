@@ -23,11 +23,11 @@ import java.time.LocalDateTime;
     @Index(name = "idx_relationship_person1", columnList = "person1_id"),
     @Index(name = "idx_relationship_person2", columnList = "person2_id"),
     @Index(name = "idx_relationship_type", columnList = "type"),
-    @Index(name = "idx_relationship_active", columnList = "isActive"),
+    @Index(name = "idx_relationship_active", columnList = "is_active"),
     @Index(name = "idx_relationship_persons", columnList = "person1_id, person2_id"),
-    @Index(name = "idx_relationship_type_active", columnList = "type, isActive"),
+    @Index(name = "idx_relationship_type_active", columnList = "type, is_active"),
     @Index(name = "idx_relationship_start_date", columnList = "start_date"),
-    @Index(name = "idx_relationship_search", columnList = "person1_id, person2_id, type, isActive") // Composite for complex queries
+    @Index(name = "idx_relationship_search", columnList = "person1_id, person2_id, type, is_active") // Composite for complex queries
 })
 @Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "relationshipCache")
 @Data
@@ -82,7 +82,7 @@ public class Relationship {
     private LocalDate endDate;
 
     @Builder.Default
-    @Column(nullable = false)
+    @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 
     // Performance and audit fields

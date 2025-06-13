@@ -3,6 +3,7 @@ import { ThemeProvider } from './ThemeContext';
 import { CssBaseline } from '@mui/material';
 import { LanguageProvider } from './LanguageContext';
 import { FamilyTreeProvider } from './FamilyTreeContext';
+import { GameProvider } from '../contexts/GameContext';
 
 interface AppProvidersProps {
   children: ReactNode;
@@ -20,7 +21,9 @@ const AppProviders: React.FC<AppProvidersProps> = ({ children }) => {
       {/* Diğer provider'lar da burada iç içe geçebilir */}
       <LanguageProvider>
         <FamilyTreeProvider>
-          {children}
+          <GameProvider>
+            {children}
+          </GameProvider>
         </FamilyTreeProvider>
       </LanguageProvider>
     </ThemeProvider>

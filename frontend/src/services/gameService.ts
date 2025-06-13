@@ -133,10 +133,24 @@ export const getQuestion = async (difficulty: Difficulty, lang: string): Promise
         id: questionData.id || `adhoc-question-${Date.now()}`,
       };
     }
-    throw new Error("Sunucudan geçerli soru alınamadı (getQuestion servisi).");
-  } catch (error) {
+    throw new Error("Sunucudan geçerli soru alınamadı");
+  } catch (error: any) {
     console.error("Soru alınırken hata:", error);
-    throw error;
+    
+    // Backend bağlantı hataları için özel mesajlar
+    if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
+      throw new Error("Backend sunucusuna bağlanılamıyor. Sunucunun çalıştığından emin olun.");
+    }
+    
+    if (error.response?.status === 404) {
+      throw new Error("Soru servisi bulunamadı. API endpoint'leri kontrol edin.");
+    }
+    
+    if (error.response?.status >= 500) {
+      throw new Error("Sunucu hatası. Lütfen daha sonra tekrar deneyin.");
+    }
+    
+    throw new Error(error.message || "Soru alınırken bilinmeyen bir hata oluştu");
   }
 };
 

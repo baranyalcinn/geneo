@@ -211,8 +211,8 @@ public class DatabasePerformanceService {
         try {
             String sql = "SELECT " +
                         "schemaname, " +
-                        "tablename, " +
-                        "indexname, " +
+                        "relname as tablename, " +
+                        "indexrelname as indexname, " +
                         "idx_tup_read, " +
                         "idx_tup_fetch " +
                         "FROM pg_stat_user_indexes " +
@@ -235,8 +235,8 @@ public class DatabasePerformanceService {
             // Check for unused indexes
             String unusedIndexSql = "SELECT " +
                                    "schemaname, " +
-                                   "tablename, " +
-                                   "indexname " +
+                                   "relname as tablename, " +
+                                   "indexrelname as indexname " +
                                    "FROM pg_stat_user_indexes " +
                                    "WHERE schemaname = 'public' " +
                                    "AND idx_tup_read = 0 " +
@@ -332,7 +332,7 @@ public class DatabasePerformanceService {
     private List<Map<String, Object>> getIndexStatsInfo() {
         try {
             String sql = "SELECT " +
-                        "schemaname, tablename, indexname, " +
+                        "schemaname, relname as tablename, indexrelname as indexname, " +
                         "idx_tup_read, idx_tup_fetch " +
                         "FROM pg_stat_user_indexes " +
                         "WHERE schemaname = 'public' " +

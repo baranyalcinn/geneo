@@ -14,13 +14,13 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "high_scores", indexes = {
-    @Index(name = "idx_highscore_player", columnList = "playerName"),
+    @Index(name = "idx_highscore_player", columnList = "player_name"),
     @Index(name = "idx_highscore_difficulty", columnList = "difficulty"),
     @Index(name = "idx_highscore_score", columnList = "score DESC"),
-    @Index(name = "idx_highscore_player_difficulty", columnList = "playerName, difficulty"),
+    @Index(name = "idx_highscore_player_difficulty", columnList = "player_name, difficulty"),
     @Index(name = "idx_highscore_difficulty_score", columnList = "difficulty, score DESC"),
-    @Index(name = "idx_highscore_played_at", columnList = "playedAt DESC"),
-    @Index(name = "idx_highscore_leaderboard", columnList = "difficulty, score DESC, playedAt DESC") // For leaderboard queries
+    @Index(name = "idx_highscore_played_at", columnList = "played_at DESC"),
+    @Index(name = "idx_highscore_leaderboard", columnList = "difficulty, score DESC, played_at DESC") // For leaderboard queries
 })
 @Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "highScoreCache")
 @Data

@@ -189,6 +189,8 @@ public class Person {
 
     @Transient
     private Optional<Person> cachedSpouse;
+    
+    @Transient
     private boolean spouseCached = false;
 
     public Optional<Person> getSpouseOptional() {

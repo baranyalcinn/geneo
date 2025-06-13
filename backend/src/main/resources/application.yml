@@ -52,9 +52,9 @@ spring:
     properties:
       hibernate:
         # Performance optimizations
-        format-sql: false
+        format_sql: false
         use_sql_comments: false
-        generate_statistics: true # For monitoring
+        generate_statistics: false # Statistics ve Session Metrics'i kapat
         
         # Connection and statement optimization
         connection:
@@ -136,7 +136,7 @@ server:
     connection-timeout: 20000 # 20 seconds
     max-connections: 8192
     accept-count: 100
-    max-http-post-size: 2MB
+    max-http-form-post-size: 2MB
 
 # Management and Monitoring
 management:
@@ -146,32 +146,30 @@ management:
         include: health,info,metrics,prometheus,caches,httptrace
   endpoint:
     health:
-      show-details: when-authorized
+      show-details: WHEN_AUTHORIZED
     metrics:
-      enabled: true
+      access: UNRESTRICTED
   metrics:
-    export:
-      prometheus:
-        enabled: true
-    web:
-      server:
-        request:
-          autotime:
-            enabled: true
     distribution:
       percentiles-histogram:
         http.server.requests: true
       percentiles:
         http.server.requests: 0.5, 0.9, 0.95, 0.99
+  prometheus:
+    metrics:
+      export:
+        enabled: true
         
 # Logging Configuration for Performance Monitoring
 logging:
   level:
-    org.hibernate.SQL: WARN # Change to DEBUG for development
-    org.hibernate.type.descriptor.sql.BasicBinder: WARN
-    org.springframework.cache: INFO
-    com.zaxxer.hikari: INFO
-    by.backend: INFO
+    "[org.hibernate.SQL]": WARN # Change to DEBUG for development
+    "[org.hibernate.type.descriptor.sql.BasicBinder]": WARN
+    "[org.hibernate.engine.internal.StatisticalLoggingSessionEventListener]": ERROR # Session Metrics'i kapat
+    "[org.hibernate.stat]": ERROR # Hibernate Statistics'i kapat
+    "[org.springframework.cache]": WARN
+    "[com.zaxxer.hikari]": WARN
+    "[by.backend]": INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
