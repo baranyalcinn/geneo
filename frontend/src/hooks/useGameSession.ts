@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useGameStore } from '../store/gameStore';
 import * as gameService from '../services/gameService';
-import { Difficulty, GameAnalysis } from '../types/game';
+import { Difficulty } from '../types/game';
 import toast from 'react-hot-toast';
 
 export const useGameSession = () => {
@@ -9,12 +9,19 @@ export const useGameSession = () => {
   const [questionTimeLeft, setQuestionTimeLeft] = useState(20);
   const [isGameActive, setIsGameActive] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [showAnalysis, setShowAnalysis] = useState(false);
-  const [gameAnalysis, setGameAnalysis] = useState<GameAnalysis | null>(null);
   const [canAnswer, setCanAnswer] = useState(true);
   const [questionCount, setQuestionCount] = useState(0);
   const [totalQuestions, setTotalQuestions] = useState(10);
   const [currentQuestion, setCurrentQuestion] = useState<any>(null);
+  const [playerName, setPlayerName] = useState('');
+  const [currentDifficulty, setCurrentDifficulty] = useState<Difficulty>(Difficulty.MEDIUM);
+  const [gameStarted, setGameStarted] = useState(false);
+  const [gameOver, setGameOver] = useState(false);
+  const [currentScore, setCurrentScore] = useState(0);
+  const [currentStreak, setCurrentStreak] = useState(0);
+  const [maxStreak, setMaxStreak] = useState(0);
+  const [correctAnswers, setCorrectAnswers] = useState(0);
+
   
   const gameTimerRef = useRef<NodeJS.Timeout | null>(null);
   const questionTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -27,22 +34,18 @@ export const useGameSession = () => {
   const endGameSessionRef = useRef<((reason: 'completed' | 'time' | 'manual') => Promise<void>) | null>(null);
   
   const {
-    currentSession,
-    createSession,
-    updateSession,
-    endSession,
-    gameStarted,
-    gameOver,
     setLoading,
     error,
     setError,
-    startGame: startLocalGame,
   } = useGameStore();
 
   const endGameSession = useCallback(async (reason: 'completed' | 'time' | 'manual') => {
     try {
+      console.log(`Oyun bitiriliyor: ${reason}`);
+      
       setIsGameActive(false);
       setCanAnswer(false);
+      setGameOver(true);
       
       if (gameTimerRef.current) {
         clearInterval(gameTimerRef.current);
@@ -51,49 +54,37 @@ export const useGameSession = () => {
         clearInterval(questionTimerRef.current);
       }
       
-      const messages = {
-        completed: '🎊 Oyun tamamlandı! Analiz hazırlanıyor...',
-        time: '⏰ Süre doldu! Analiz hazırlanıyor...',
-        manual: '🛑 Oyun durduruldu! Analiz hazırlanıyor...'
-      };
+      if (reason === 'time') {
+        toast.error('⏰ Süre doldu! Oyun bitti.', { duration: 3000 });
+      } else if (reason === 'completed') {
+        toast.success('🎉 Tebrikler! Oyunu tamamladınız!', { duration: 3000 });
+      }
       
-      toast.success(messages[reason], { duration: 3000 });
-      
-      if (currentSession?.sessionId) {
-        setLoading(true);
-        
+      // Oyun sonunda score kaydet
+      if (currentScore > 0 && playerName.trim()) {
         try {
-          const response = await fetch(`http://localhost:8080/api/game/analysis?sessionId=${currentSession.sessionId}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          });
+          const scoreData = {
+            playerName: playerName.trim(),
+            score: currentScore,
+            difficulty: currentDifficulty,
+            correctAnswers: correctAnswers,
+            totalQuestions: totalQuestions,
+            maxStreak: maxStreak
+          };
           
-          if (response.ok) {
-            const analysis = await response.json();
-            setGameAnalysis(analysis);
-            setShowAnalysis(true);
-            
-            toast.success('📊 Analiz hazır!', { duration: 2000 });
-          } else {
-            throw new Error('Analiz alınamadı');
-          }
+          await gameService.recordGameResult(scoreData, 'tr');
+          toast.success('🏆 Skorunuz kaydedildi!', { duration: 2000 });
         } catch (error) {
-          console.error('Analiz hatası:', error);
-          toast.error('Analiz alınırken hata oluştu');
-        } finally {
-          setLoading(false);
+          console.error('Skor kaydetme hatası:', error);
+          toast.error('Skor kaydedilemedi');
         }
       }
       
-      endSession();
-      
-    } catch (error) {
+    } catch (error: any) {
       console.error('Oyun bitirme hatası:', error);
-      toast.error('Oyun bitirme sırasında bir hata oluştu');
+      setError(error.message || 'Oyun bitirilemedi');
     }
-  }, [currentSession, endSession, setLoading]);
+  }, [currentScore, playerName, currentDifficulty, correctAnswers, totalQuestions, maxStreak, setError]);
 
   const startQuestionTimer = useCallback((timeLimit: number = 20) => {
     if (questionTimerRef.current) {
@@ -113,8 +104,9 @@ export const useGameSession = () => {
           return 0;
         }
         
-        if (prev === 5) {
-          toast('⏰ 5 saniye kaldı!', { duration: 2000, icon: '⚠️' });
+        // Sadece gerçekten az kaldığında uyarı ver
+        if (prev === 3) {
+          toast('⏰ 3 saniye kaldı!', { duration: 1500, icon: '⚠️' });
         }
         
         return prev - 1;
@@ -136,16 +128,11 @@ export const useGameSession = () => {
           return 0;
         }
         
-        if (prev === 30) {
-          toast.error('⏰ Son 30 saniye!', { 
-            duration: 3000,
+        // Sadece gerçekten kritik anlarda uyarı ver
+        if (prev === 15) {
+          toast.error('⏰ Son 15 saniye!', { 
+            duration: 2000,
             icon: '🚨' 
-          });
-        }
-        
-        if (prev <= 10 && prev > 0) {
-          toast.error(`⏰ ${prev} saniye kaldı!`, { 
-            duration: 1000 
           });
         }
         
@@ -155,6 +142,7 @@ export const useGameSession = () => {
   }, []);
 
   const nextQuestion = useCallback(() => {
+    // Eğer toplam soru sayısına ulaştıysak oyunu bitir
     if (questionCount >= totalQuestions) {
       if (endGameSessionRef.current) {
         endGameSessionRef.current('completed');
@@ -162,21 +150,23 @@ export const useGameSession = () => {
       return;
     }
     
-    // Sonraki soruyu almak için sadece timer başlat
-    // Gerçek soru alma işi FamilyRelationGame'de olacak
-    const difficulty = currentSession?.difficulty ?? Difficulty.MEDIUM;
+    // Timer'ları temizle
+    if (questionTimerRef.current) {
+      clearInterval(questionTimerRef.current);
+    }
     
+    // Yeni soru için timer başlat
     let timeLimit = 15; // HARD difficulty default
-    if (difficulty === Difficulty.EASY) {
+    if (currentDifficulty === Difficulty.EASY) {
       timeLimit = 20;
-    } else if (difficulty === Difficulty.MEDIUM) {
+    } else if (currentDifficulty === Difficulty.MEDIUM) {
       timeLimit = 18;
     }
     
     if (startQuestionTimerRef.current) {
       startQuestionTimerRef.current(timeLimit);
     }
-  }, [questionCount, totalQuestions, currentSession]);
+  }, [questionCount, totalQuestions, currentDifficulty]);
 
   const handleQuestionTimeout = useCallback(() => {
     if (questionTimerRef.current) {
@@ -188,6 +178,9 @@ export const useGameSession = () => {
       duration: 2000,
       icon: '⏳' 
     });
+    
+    // Soru sayısını artır
+    setQuestionCount(prev => prev + 1);
     
     setTimeout(() => {
       if (nextQuestionRef.current) {
@@ -204,25 +197,30 @@ export const useGameSession = () => {
     handleQuestionTimeoutRef.current = handleQuestionTimeout;
   }, [endGameSession, startQuestionTimer, nextQuestion, handleQuestionTimeout]);
 
-  const startGame = useCallback(async (playerName: string, difficulty: Difficulty) => {
+  const startGame = useCallback(async (name: string, difficulty: Difficulty) => {
     try {
       setLoading(true);
       setError(null);
       
-      const initialData = await gameService.startGameSimple(playerName, difficulty);
+      const initialData = await gameService.startGameSimple(name, difficulty);
       
-      // Backend'den gelen total questions değerini kullan
+      // Game state'i başlat
+      setPlayerName(name);
+      setCurrentDifficulty(difficulty);
       setTotalQuestions(initialData.totalQuestions);
-      
-      createSession(initialData.playerName, initialData.difficulty);
-      
       setCurrentQuestion(initialData.firstQuestion);
       setQuestionCount(1);
       setTimeLeft(initialData.gameDurationInSeconds);
       setIsGameActive(true);
       setCanAnswer(true);
+      setGameStarted(true);
+      setGameOver(false);
+      setCurrentScore(0);
+      setCurrentStreak(0);
+      setMaxStreak(0);
+      setCorrectAnswers(0);
+      setAskedQuestions([initialData.firstQuestion.id]);
       
-      startLocalGame();
       startGameTimer();
       
       let timeLimit = 15; // HARD difficulty default
@@ -241,10 +239,13 @@ export const useGameSession = () => {
     } finally {
       setLoading(false);
     }
-  }, [createSession, setCurrentQuestion, setLoading, setError, startLocalGame, startGameTimer, startQuestionTimer]);
+  }, [setLoading, setError, startGameTimer, startQuestionTimer]);
 
-  const answerQuestion = useCallback((answer: string, isCorrect: boolean) => {
-    if (!canAnswer) return;
+  const answerQuestion = useCallback((answer: string, isCorrect: boolean, pointsEarned: number = 0) => {
+    if (!canAnswer) {
+      console.warn("Cevap verilemiyor: canAnswer =", canAnswer);
+      return;
+    }
     
     setCanAnswer(false);
     
@@ -252,7 +253,15 @@ export const useGameSession = () => {
       clearInterval(questionTimerRef.current);
     }
     
+    // Score güncelle
+    setCurrentScore(prev => prev + pointsEarned);
+    
+    // Streak güncelle
     if (isCorrect) {
+      setCurrentStreak(prev => prev + 1);
+      setMaxStreak(prev => Math.max(prev, currentStreak + 1));
+      setCorrectAnswers(prev => prev + 1);
+      
       const messages = [
         '🎉 Doğru!',
         '✅ Harika!',
@@ -264,25 +273,18 @@ export const useGameSession = () => {
         duration: 2000
       });
     } else {
+      setCurrentStreak(0);
       toast.error('❌ Yanlış cevap!', { duration: 2000 });
     }
     
-    if (currentSession) {
-      updateSession({
-        questionsAnswered: currentSession.questionsAnswered + 1,
-        correctAnswers: isCorrect ? currentSession.correctAnswers + 1 : currentSession.correctAnswers,
-        currentStreak: isCorrect ? currentSession.currentStreak + 1 : 0,
-        maxStreak: isCorrect ? Math.max(currentSession.maxStreak, currentSession.currentStreak + 1) : currentSession.maxStreak,
-      });
-    }
+    // Soru sayısını artır
+    setQuestionCount(prev => {
+      const newCount = prev + 1;
+      console.log(`Soru sayısı güncellendi: ${prev} -> ${newCount} / ${totalQuestions}`);
+      return newCount;
+    });
     
-    setQuestionCount(prev => prev + 1);
-    
-    setTimeout(() => {
-      nextQuestion();
-    }, 2000);
-    
-  }, [canAnswer, currentSession, updateSession, nextQuestion]);
+  }, [canAnswer, currentStreak, totalQuestions]);
 
   const pauseGame = useCallback(() => {
     setIsPaused(true);
@@ -308,6 +310,32 @@ export const useGameSession = () => {
     toast('▶️ Oyun devam ediyor', { duration: 2000 });
   }, [questionTimeLeft, startGameTimer, startQuestionTimer]);
 
+  const restartGame = useCallback(() => {
+    // Tüm state'i sıfırla
+    setIsGameActive(false);
+    setGameStarted(false);
+    setGameOver(false);
+    setCurrentQuestion(null);
+    setQuestionCount(0);
+    setTimeLeft(180);
+    setQuestionTimeLeft(20);
+    setCanAnswer(true);
+    setCurrentScore(0);
+    setCurrentStreak(0);
+    setMaxStreak(0);
+    setCorrectAnswers(0);
+
+    setError(null);
+    
+    // Timer'ları temizle
+    if (gameTimerRef.current) {
+      clearInterval(gameTimerRef.current);
+    }
+    if (questionTimerRef.current) {
+      clearInterval(questionTimerRef.current);
+    }
+  }, [setError]);
+
   useEffect(() => {
     return () => {
       if (gameTimerRef.current) {
@@ -319,39 +347,59 @@ export const useGameSession = () => {
     };
   }, []);
 
-  const closeAnalysis = useCallback(() => {
-    setShowAnalysis(false);
-    setGameAnalysis(null);
-  }, []);
-
   return {
+    // Game state
     isGameActive,
     isPaused,
-    timeLeft,
-    questionTimeLeft,
-    canAnswer,
-    questionCount,
-    totalQuestions,
-    showAnalysis,
-    gameAnalysis,
-    currentSession,
     gameStarted,
     gameOver,
-    error,
+    
+    // Question state
     currentQuestion,
     setCurrentQuestion,
+    questionCount,
+    totalQuestions,
+    canAnswer,
+    
+    // Timer state
+    timeLeft,
+    questionTimeLeft,
+    
+    // Score state
+    currentScore,
+    currentStreak,
+    maxStreak,
+    correctAnswers,
+    
+    // Player state
+    playerName,
+    currentDifficulty,
+    
+    // Actions
     startGame,
     answerQuestion,
     nextQuestion,
     endGameSession,
     pauseGame,
     resumeGame,
-    closeAnalysis,
+    restartGame,
     startQuestionTimer,
+    
+    // Error state
+    error,
+    
+    // Progress helpers
     getProgress: () => (questionCount / totalQuestions) * 100,
     getTimeProgress: () => (timeLeft / 180) * 100,
-    getQuestionTimeProgress: () => (questionTimeLeft / 20) * 100,
-    getAccuracy: () => currentSession ? 
-      (currentSession.correctAnswers / Math.max(currentSession.questionsAnswered, 1)) * 100 : 0,
+    getQuestionTimeProgress: () => {
+      let timeLimit = 15;
+      if (currentDifficulty === Difficulty.EASY) {
+        timeLimit = 20;
+      } else if (currentDifficulty === Difficulty.MEDIUM) {
+        timeLimit = 18;
+      }
+      return (questionTimeLeft / timeLimit) * 100;
+    },
+    getAccuracy: () => (correctAnswers / Math.max(questionCount - 1, 1)) * 100,
   };
 };

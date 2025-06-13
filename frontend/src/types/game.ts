@@ -57,19 +57,7 @@ export interface InitialGameData {
   totalQuestions: number;
 }
 
-export interface GameSession {
-  playerName: string;
-  difficulty: Difficulty;
-  currentQuestion?: GameQuestion | null;
-  currentScore: number;
-  currentStreak: number;
-  questionsAnswered: number;
-  correctAnswersCount: number;
-  totalQuestionsInGame: number;
-  askedQuestionSignaturesInThisGame: string[];
-  isGameOver: boolean;
-  finalResult?: GameResult | null;
-}
+
 
 export interface GameAnswer {
   questionId: string;

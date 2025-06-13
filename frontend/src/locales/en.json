@@ -70,5 +70,7 @@
   "close": "Close",
   "player_name.required": "Player name is required",
   "error.game_start": "Error starting game",
-  "error.answer_submit": "Error submitting answer"
+  "error.answer_submit": "Error submitting answer",
+  "errors.session_expired": "Your game session has expired. Please start a new game.",
+  "errors.no_current_question": "No current question found."
 } 

@@ -213,7 +213,6 @@ const FamilyRelationGame = () => {
   const gameSession = useGameSession();
   const {
     startGame: startGameSession,
-    currentSession,
     isGameActive,
     currentQuestion,
     setCurrentQuestion,
@@ -223,14 +222,22 @@ const FamilyRelationGame = () => {
     gameStarted,
     gameOver,
     questionCount,
-    totalQuestions: totalQuestionsFromSession,
+    totalQuestions,
     timeLeft,
     questionTimeLeft,
     canAnswer,
     getProgress,
     getTimeProgress,
     getQuestionTimeProgress,
-    getAccuracy
+    getAccuracy,
+    currentScore,
+    currentStreak,
+    maxStreak,
+    correctAnswers,
+    playerName: sessionPlayerName,
+    currentDifficulty: sessionDifficulty,
+
+    restartGame: restartGameSession
   } = gameSession;
 
   const {
@@ -243,7 +250,6 @@ const FamilyRelationGame = () => {
   const [selectedAnswer, setSelectedAnswer] = useState('');
   const [isCorrect, setIsCorrect] = useState(false);
   const [lastAnswerResponse, setLastAnswerResponse] = useState<AnswerResponse | null>(null);
-  const [askedQuestions, setAskedQuestions] = useState<string[]>([]);
   const [highScores, setHighScores] = useState<HighScores | null>(null);
   const [showScores, setShowScores] = useState(false);
   const [playerName, setPlayerName] = useState<string>(localStorage.getItem('playerName') || '');
@@ -253,10 +259,6 @@ const FamilyRelationGame = () => {
   const [showHint, setShowHint] = useState(false);
   const [currentRelationshipPath, setCurrentRelationshipPath] = useState<RelationshipStep[] | undefined>();
   const [feedbackSent, setFeedbackSent] = useState(false);
-  const [totalQuestions, setTotalQuestions] = useState(10);
-  const [score, setScore] = useState(0);
-  const [correctAnswers, setCorrectAnswers] = useState(0);
-  const [maxStreak, setMaxStreak] = useState(0);
 
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -387,25 +389,29 @@ const FamilyRelationGame = () => {
     }
   }, [gameOver, currentDifficulty, i18n.language, setCurrentQuestion, setLoading, setError]);
 
-  const handleNextQuestion = (nextQuestion?: GameQuestion, result?: AnswerResponse) => {
+  const handleNextQuestionClick = async () => {
+    if (gameOver) {
+      // Oyun bittiyse results sayfasına git
+      return;
+    }
+    
+    // Backend'den sonraki soruyu al
+    if (lastAnswerResponse?.nextQuestion) {
+      // Backend'den gelen sonraki soru varsa onu kullan
+      setCurrentQuestionSafely(lastAnswerResponse.nextQuestion);
+    } else {
+      // Yoksa manuel olarak sonraki soruyu al
+      await fetchNextQuestion();
+    }
+    
+    // State'leri temizle
     setShowResult(false);
     setSelectedAnswer('');
     setIsCorrect(false);
     setLastAnswerResponse(null);
     setShowHint(false);
     setFeedbackSent(false);
-    if (gameOver) {
-      console.info('Game is over, not fetching next question.');
-      return;
-    }
-    
-    const questionToUse = nextQuestion || result?.nextQuestion;
-    if (questionToUse) {
-        setCurrentQuestionSafely(questionToUse);
-        resetTimer();
-    } else {
-        fetchNextQuestion();
-    }
+    setCurrentRelationshipPath(undefined);
   };
 
   const startGame = async () => {
@@ -415,15 +421,9 @@ const FamilyRelationGame = () => {
       return;
     }
     
-    try {
-      setLoading(true);
-      setError(null);
-      await startGameSession(playerName, currentDifficulty);
-      setLoading(false);
-    } catch (error: any) {
-      setLoading(false);
-      setError(error.message || 'Oyun başlatılamadı');
-    }
+    localStorage.setItem('playerName', playerName);
+    setFinalResult(null);
+    await startGameSession(playerName, currentDifficulty);
   };
 
   const checkAnswer = async (answer: string) => {
@@ -437,18 +437,87 @@ const FamilyRelationGame = () => {
       console.log("Cevap verilemez durumda");
       return;
     }
+
+    // Session kontrolü ekle
+    if (!sessionPlayerName || gameOver) {
+      console.warn("Session bulunamadı veya oyun bitti, cevap gönderilmiyor.");
+      setError(t('errors.session_expired'));
+      return;
+    }
     
     setSelectedAnswer(answer);
-    const isCorrect = currentQuestion.options.indexOf(answer) !== -1 && answer === currentQuestion.correctAnswer;
-    setIsCorrect(isCorrect);
-    setShowResult(true);
     
-    // useGameSession'dan answerQuestion çağır
-    answerQuestion(answer, isCorrect);
-    
-    // Relationship path'i güncelle
-    if (currentQuestion.relationshipPath) {
-      setCurrentRelationshipPath(currentQuestion.relationshipPath);
+    try {
+      setLoading(true);
+      
+      // Backend'e cevabı gönder
+      const gameAnswer = {
+        sessionId: sessionPlayerName,
+        questionId: currentQuestion.id,
+        answer: answer,
+        timeTakenInSeconds: Math.max(1, 20 - questionTimeLeft), // Minimum 1 saniye
+        playerName: sessionPlayerName,
+        difficulty: sessionDifficulty,
+        askedQuestionSignaturesInThisGame: askedQuestions,
+        currentScore: currentScore,
+        currentStreak: currentStreak
+      };
+      
+      console.log("Cevap gönderiliyor:", gameAnswer);
+      
+      const response = await submitAnswer(gameAnswer, i18n.language);
+      
+      setIsCorrect(response.correctAnswer);
+      setLastAnswerResponse(response);
+      setShowResult(true);
+      
+      // useGameSession'dan answerQuestion çağır ve sonraki soruyu dahil et
+      answerQuestion(answer, response.correctAnswer, response.pointsEarned);
+      
+      // Sonraki soruyu ayarla
+      if (response.nextQuestion) {
+        setAskedQuestions(prev => [...prev, response.nextQuestion!.id]);
+      }
+      
+      // Relationship path'i güncelle
+      if (response.relationshipPath) {
+        setCurrentRelationshipPath(response.relationshipPath);
+      }
+      
+      // Eğer oyun bittiyse final result'ı ayarla
+      if (response.gameOver) {
+        console.log("Oyun bitti, final result ayarlanıyor");
+        setFinalResult({
+          playerName: sessionPlayerName,
+          score: response.updatedScore,
+          difficulty: sessionDifficulty,
+          correctAnswers: correctAnswers + (response.correctAnswer ? 1 : 0),
+          totalQuestions: totalQuestions,
+          maxStreak: maxStreak,
+          date: new Date().toISOString().split('T')[0]
+        });
+        
+        // Oyun bittiğinde session'ı temizle
+        setTimeout(() => {
+          endGameSession('completed');
+        }, 3000);
+      }
+      
+    } catch (error: any) {
+      console.error('Cevap kontrol hatası:', error);
+      
+      // Session expired hatası kontrolü
+      if (error.response?.status === 400 && error.response?.data?.message?.includes('oturum')) {
+        setError(t('errors.session_expired'));
+        toast.error('Oyun oturumunuz sona erdi. Yeni oyun başlatın.');
+        setTimeout(() => {
+          endGameSession('manual');
+        }, 2000);
+      } else {
+        setError(error.message || 'Cevap kontrol edilemedi');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -476,9 +545,10 @@ const FamilyRelationGame = () => {
     setLastAnswerResponse(null);
     setCurrentRelationshipPath(undefined);
     setFeedbackSent(false);
+    setFinalResult(null);
     
     // useGameSession restart
-    endGameSession('manual');
+    restartGameSession();
   };
 
   const formatDifficulty = (diff: string): string => {
@@ -651,7 +721,7 @@ const FamilyRelationGame = () => {
         <Typography variant={isMobile? "h5" : "h4"} component="h2" gutterBottom sx={{ color: theme.palette.primary.main, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <EmojiEventsIcon sx={{ fontSize: isMobile ? 30 : 40, mr: 1.5, color: theme.palette.warning.main }} /> {t('game_over.title')}
         </Typography>
-        <Typography variant="h6" sx={{ mb: 1 }}>{final.playerName}, {t('game_over.score')}: {final.score}</Typography>
+        <Typography variant="h6" sx={{ mb: 1 }}>{sessionPlayerName}, {t('game_over.score')}: {final.score}</Typography>
         <Divider sx={{ my: 2 }} />
         <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', mb: 2 }}>
           <Box sx={{ flex: '1 1 calc(50% - 16px)', minWidth: '120px', p: 1 }}>
@@ -709,13 +779,13 @@ const FamilyRelationGame = () => {
     }
 
     // Save final score to local state
-    const finalScore = currentSession?.currentScore || score;
-    const finalCorrectAnswers = currentSession?.correctAnswers || correctAnswers;
-    const finalTotalQuestions = totalQuestionsFromSession || totalQuestions;
-    const finalMaxStreak = currentSession?.maxStreak || maxStreak;
+    const finalScore = currentScore;
+    const finalCorrectAnswers = correctAnswers;
+    const finalTotalQuestions = totalQuestions;
+    const finalMaxStreak = maxStreak;
 
     const gameResult: GameResult = {
-      playerName: currentSession?.playerName || playerName,
+      playerName: sessionPlayerName,
       score: finalScore,
       difficulty: currentDifficulty,
       correctAnswers: finalCorrectAnswers,
@@ -852,13 +922,13 @@ const FamilyRelationGame = () => {
             <ScoreTimeDisplay>
               <Chip 
                 icon={<EmojiEventsIcon />} 
-                label={`${t('game.score')}: ${currentSession?.currentScore || 0}`} 
+                label={`${t('game.score')}: ${currentScore || 0}`} 
                 color="primary" 
                 variant="filled" 
               />
               <Chip 
                 icon={<TimerIcon />} 
-                label={`${t('streak')}: ${currentSession?.currentStreak || 0}`} 
+                label={`${t('streak')}: ${currentStreak || 0}`} 
                 color="secondary" 
                 variant="filled" 
               />
@@ -998,7 +1068,7 @@ const FamilyRelationGame = () => {
                   <Button
                     variant="contained"
                     color="secondary"
-                    onClick={fetchNextQuestion}
+                    onClick={handleNextQuestionClick}
                     sx={{ mt: 2 }}
                     disabled={gameOver || isLoading}
                   >

@@ -126,5 +126,7 @@
   "close": "Kapat",
   "player_name.required": "Oyuncu adı gereklidir",
   "error.game_start": "Oyun başlatılırken hata oluştu",
-  "error.answer_submit": "Cevap gönderilirken hata oluştu"
+  "error.answer_submit": "Cevap gönderilirken hata oluştu",
+  "errors.session_expired": "Oyun oturumunuzun süresi doldu. Lütfen yeni bir oyun başlatın.",
+  "errors.no_current_question": "Mevcut soru bulunamadı."
 } 

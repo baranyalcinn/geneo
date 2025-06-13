@@ -44,15 +44,13 @@ public class GameController {
     
     // Error messages
     private static final String INVALID_REQUEST_MSG = "Geçersiz istek: İstek gövdesi boş";
-    private static final String SESSION_ID_REQUIRED_MSG = "Session ID gereklidir.";
+
     private static final String PLAYER_NAME_REQUIRED_MSG = "Oyuncu adı gereklidir";
     private static final String QUESTION_ID_REQUIRED_MSG = "Soru ID gereklidir.";
     private static final String DIFFICULTY_REQUIRED_MSG = "Zorluk seviyesi gereklidir.";
     private static final String REQUEST_BODY_REQUIRED_MSG = "Request body gereklidir.";
     private static final String PLAYER_NAME_DIFFICULTY_REQUIRED_MSG = "Oyuncu adı ve zorluk seviyesi gereklidir.";
-    private static final String GAME_SESSION_NOT_FOUND_MSG = "Oyun oturumu bulunamadı.";
-    private static final String ANALYSIS_ERROR_MSG = "Analiz oluşturulurken bir hata oluştu.";
-    private static final String GAME_END_ERROR_MSG = "Oyun bitirilirken bir hata oluştu.";
+
     private static final String SCORE_RECORD_ERROR_PREFIX = "Skor kaydedilirken bir hata oluştu: ";
     private static final String ANSWER_PROCESS_ERROR_PREFIX = "Cevap işlenirken bir hata oluştu: ";
     private static final String GAME_START_ERROR_PREFIX = "Oyun başlatılırken bir hata oluştu: ";
@@ -64,8 +62,7 @@ public class GameController {
     private static final String LOG_RECORD_PREFIX = "POST /record-result: ";
     private static final String LOG_HIGHSCORES_PREFIX = "GET /highscores: ";
     private static final String LOG_QUESTION_PREFIX = "GET /question: ";
-    private static final String LOG_ANALYSIS_PREFIX = "POST /analysis: ";
-    private static final String LOG_END_PREFIX = "POST /end: ";
+
     private static final String LOG_FEEDBACK_PREFIX = "POST /feedback: ";
     
     // Default values
@@ -161,29 +158,7 @@ public class GameController {
         }
     }
 
-    @PostMapping("/analysis")
-    public ResponseEntity<Object> getGameAnalysis(@RequestParam("sessionId") String sessionId) {
-        String operationName = "Analiz oluşturma";
-        try {
-            return processAnalysisRequest(sessionId);
-        } catch (GameException e) {
-            return handleGameException(e, operationName, LOG_ANALYSIS_PREFIX);
-        } catch (Exception e) {
-            return handleGenericException(e, operationName, LOG_ANALYSIS_PREFIX, ANALYSIS_ERROR_MSG);
-        }
-    }
-
-    @PostMapping("/end")
-    public ResponseEntity<Object> endGame(@RequestParam("sessionId") String sessionId) {
-        String operationName = "Oyun bitirme";
-        try {
-            return processEndGameRequest(sessionId);
-        } catch (GameException e) {
-            return handleGameException(e, operationName, LOG_END_PREFIX);
-        } catch (Exception e) {
-            return handleGenericException(e, operationName, LOG_END_PREFIX, GAME_END_ERROR_MSG);
-        }
-    }
+    
 
     @PostMapping("/feedback")
     public ResponseEntity<Void> submitFeedback(@Valid @RequestBody GameQuestionFeedbackDTO feedbackDTO) {
@@ -245,9 +220,9 @@ public class GameController {
         sanitizeGameAnswer(gameAnswer);
         
         if (logger.isInfoEnabled()) {
-            logger.info("{}Oyuncu: {}, Soru ID: {}, Cevap: {}, Session: {}, Dil: {}", LOG_ANSWER_PREFIX,
+            logger.info("{}Oyuncu: {}, Soru ID: {}, Cevap: {}, Dil: {}", LOG_ANSWER_PREFIX,
                        gameAnswer.getPlayerName(), gameAnswer.getQuestionId(), gameAnswer.getAnswer(), 
-                       gameAnswer.getSessionId(), locale.toLanguageTag());
+                       locale.toLanguageTag());
         }
         
         AnswerResponseDTO answerResponse = gameService.answerQuestion(gameAnswer, locale);
@@ -304,41 +279,7 @@ public class GameController {
         }
     }
 
-    private ResponseEntity<Object> processAnalysisRequest(String sessionId) {
-        logger.info("{}Oyun analizi isteniyor, Session ID: {}", LOG_ANALYSIS_PREFIX, sessionId);
-        
-        if (isInvalidSessionId(sessionId)) {
-            logger.warn("{}Session ID eksik", LOG_ANALYSIS_PREFIX);
-            return createErrorResponse(SESSION_ID_REQUIRED_MSG, HttpStatus.BAD_REQUEST);
-        }
-        
-        GameAnalysisDTO analysis = gameService.getGameAnalysis(sessionId);
-        if (analysis != null) {
-            logger.info("{}Analiz başarıyla oluşturuldu, Session: {}", LOG_ANALYSIS_PREFIX, sessionId);
-            return ResponseEntity.ok(analysis);
-        } else {
-            logger.warn("{}Session bulunamadı: {}", LOG_ANALYSIS_PREFIX, sessionId);
-            return createErrorResponse(GAME_SESSION_NOT_FOUND_MSG, HttpStatus.NOT_FOUND);
-        }
-    }
 
-    private ResponseEntity<Object> processEndGameRequest(String sessionId) {
-        logger.info("{}Oyun bitiriliyor, Session ID: {}", LOG_END_PREFIX, sessionId);
-        
-        if (isInvalidSessionId(sessionId)) {
-            logger.warn("{}Session ID eksik", LOG_END_PREFIX);
-            return createErrorResponse(SESSION_ID_REQUIRED_MSG, HttpStatus.BAD_REQUEST);
-        }
-        
-        GameAnalysisDTO finalAnalysis = gameService.endGame(sessionId);
-        if (finalAnalysis != null) {
-            logger.info("{}Oyun başarıyla bitirildi, Session: {}", LOG_END_PREFIX, sessionId);
-            return ResponseEntity.ok(finalAnalysis);
-        } else {
-            logger.warn("{}Session bulunamadı: {}", LOG_END_PREFIX, sessionId);
-            return createErrorResponse(GAME_SESSION_NOT_FOUND_MSG, HttpStatus.NOT_FOUND);
-        }
-    }
 
     // Exception handling methods
     private ResponseEntity<Object> handleGameException(GameException e, String operationName, String logPrefix) {
@@ -365,26 +306,22 @@ public class GameController {
     
     private ResponseEntity<Object> validateGameAnswer(GameAnswerDTO gameAnswer) {
         if (gameAnswer == null) {
-            logger.warn("{}Request body is null", LOG_ANSWER_PREFIX);
-            return createErrorResponse(REQUEST_BODY_REQUIRED_MSG, HttpStatus.BAD_REQUEST);
-        }
-        
-        if (isInvalidSessionId(gameAnswer.getSessionId())) {
-            logger.warn("{}Session ID eksik: {}", LOG_ANSWER_PREFIX, gameAnswer);
-            return createErrorResponse(SESSION_ID_REQUIRED_MSG, HttpStatus.BAD_REQUEST);
+            return createErrorResponse(INVALID_REQUEST_MSG, HttpStatus.BAD_REQUEST);
         }
         
         if (isInvalidString(gameAnswer.getQuestionId())) {
-            logger.warn("{}Question ID eksik: {}", LOG_ANSWER_PREFIX, gameAnswer);
             return createErrorResponse(QUESTION_ID_REQUIRED_MSG, HttpStatus.BAD_REQUEST);
         }
         
         if (gameAnswer.getDifficulty() == null) {
-            logger.warn("{}Difficulty eksik: {}", LOG_ANSWER_PREFIX, gameAnswer);
             return createErrorResponse(DIFFICULTY_REQUIRED_MSG, HttpStatus.BAD_REQUEST);
         }
         
-        return null;
+        if (isInvalidString(gameAnswer.getPlayerName())) {
+            return createErrorResponse(PLAYER_NAME_REQUIRED_MSG, HttpStatus.BAD_REQUEST);
+        }
+        
+        return null; // No validation errors
     }
     
     private void sanitizeGameAnswer(GameAnswerDTO gameAnswer) {
@@ -439,9 +376,7 @@ public class GameController {
         }
     }
     
-    private boolean isInvalidSessionId(String sessionId) {
-        return isInvalidString(sessionId);
-    }
+
     
     private boolean isInvalidString(String str) {
         return str == null || str.trim().isEmpty();

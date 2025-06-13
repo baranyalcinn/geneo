@@ -21,9 +21,7 @@ public interface GameService {
     Map<Difficulty, List<GameResultDTO>> getHighScores();
     GameQuestionDTO generateQuestion(Difficulty difficulty, Locale locale);
     
-    // Yeni analiz metotları
-    GameAnalysisDTO getGameAnalysis(String sessionId);
-    GameAnalysisDTO endGame(String sessionId);
+
     
     // Debug metodu
     Map<String, Object> getPersonsDebugInfo();

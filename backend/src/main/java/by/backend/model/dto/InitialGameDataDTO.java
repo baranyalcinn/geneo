@@ -13,9 +13,6 @@ import lombok.NonNull;
 @AllArgsConstructor
 public class InitialGameDataDTO {
     @NonNull
-    private String sessionId;
-
-    @NonNull
     private GameQuestionDTO firstQuestion;
 
     @NonNull

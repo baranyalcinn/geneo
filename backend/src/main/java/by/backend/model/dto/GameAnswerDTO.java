@@ -16,19 +16,14 @@ import java.util.Set;
 @AllArgsConstructor
 public class GameAnswerDTO {
     @NonNull
-    private String sessionId;
-
-    @NonNull
     private String questionId;
 
     private String answer;
     private long timeTakenInSeconds;
     private Difficulty difficulty;
-    private Set<String> askedQuestionSignaturesInThisGame;
     private int currentScore;
     private int currentStreak;
     private String playerName;
-    private int gameQuestionCount;
+    private int questionsAnswered;
     private int correctAnswersCount;
-    private List<QuestionProgressionPoint> currentProgression;
 }
