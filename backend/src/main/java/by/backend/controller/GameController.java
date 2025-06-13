@@ -80,12 +80,26 @@ public class GameController {
     public ResponseEntity<Object> startGame(@RequestBody StartGameRequestDTO startGameRequest,
                                               @RequestParam(name = "lang", required = false) String lang) {
         String operationName = "Oyun başlatma";
+        long startTime = System.currentTimeMillis();
+        
         try {
-            return processStartGameRequest(startGameRequest, lang);
+            if (logger.isDebugEnabled()) {
+                logger.debug("{}Oyun başlatma isteği alındı: {}", LOG_START_PREFIX, 
+                           maskSensitiveData(startGameRequest));
+            }
+            
+            ResponseEntity<Object> response = processStartGameRequest(startGameRequest, lang);
+            
+            long executionTime = System.currentTimeMillis() - startTime;
+            logger.info("{}Oyun başarıyla başlatıldı: Oyuncu='{}', Zorluk='{}', Süre={}ms", 
+                       LOG_START_PREFIX, startGameRequest.getPlayerName(), 
+                       startGameRequest.getDifficulty(), executionTime);
+            
+            return response;
         } catch (GameException e) {
-            return handleGameException(e, operationName, LOG_START_PREFIX);
+            return handleGameException(e, operationName, LOG_START_PREFIX, startTime);
         } catch (Exception e) {
-            return handleGenericException(e, operationName, LOG_START_PREFIX, GAME_START_ERROR_PREFIX);
+            return handleGenericException(e, operationName, LOG_START_PREFIX, GAME_START_ERROR_PREFIX, startTime);
         }
     }
 
@@ -93,16 +107,35 @@ public class GameController {
     public ResponseEntity<Object> answerQuestion(@RequestBody GameAnswerDTO gameAnswer,
                                                    @RequestParam(name = "lang", required = false) String lang) {
         String operationName = "Cevap işleme";
+        long startTime = System.currentTimeMillis();
+        
         try {
-            return processAnswerRequest(gameAnswer, lang);
+            if (logger.isDebugEnabled()) {
+                logger.debug("{}Cevap işleme isteği alındı: QuestionId='{}', Oyuncu='{}'", 
+                           LOG_ANSWER_PREFIX, gameAnswer.getQuestionId(), 
+                           getPlayerNameSafely(gameAnswer));
+            }
+            
+            ResponseEntity<Object> response = processAnswerRequest(gameAnswer, lang);
+            
+            long executionTime = System.currentTimeMillis() - startTime;
+            logger.info("{}Cevap başarıyla işlendi: QuestionId='{}', Süre={}ms", 
+                       LOG_ANSWER_PREFIX, gameAnswer.getQuestionId(), executionTime);
+            
+            return response;
         } catch (GameException e) {
             String playerName = getPlayerNameSafely(gameAnswer);
-            logger.error("{}{} özel hata (Oyuncu: {}): {}", LOG_ANSWER_PREFIX, operationName, playerName, e.getMessage());
-            return createErrorResponse(e.getMessage(), HttpStatus.BAD_REQUEST);
+            return handleGameExceptionWithContext(e, operationName, LOG_ANSWER_PREFIX, 
+                                                 Map.of("oyuncu", playerName, 
+                                                        "questionId", gameAnswer.getQuestionId()), 
+                                                 startTime);
         } catch (Exception e) {
             String playerName = getPlayerNameSafely(gameAnswer);
-            logger.error("{}{} beklenmeyen hata (Oyuncu: {}): {}", LOG_ANSWER_PREFIX, operationName, playerName, e.getMessage(), e);
-            return createErrorResponse(ANSWER_PROCESS_ERROR_PREFIX + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+            return handleGenericExceptionWithContext(e, operationName, LOG_ANSWER_PREFIX, 
+                                                    ANSWER_PROCESS_ERROR_PREFIX,
+                                                    Map.of("oyuncu", playerName, 
+                                                           "questionId", gameAnswer.getQuestionId()), 
+                                                    startTime);
         }
     }
 
@@ -110,28 +143,62 @@ public class GameController {
     public ResponseEntity<Object> recordScore(@RequestBody RecordScoreRequestDTO scoreRequest,
                                                  @RequestParam(name = "lang", required = false) String lang) {
         String operationName = "Skor kaydetme";
+        long startTime = System.currentTimeMillis();
+        
         try {
-            return processScoreRequest(scoreRequest, lang);
+            if (logger.isDebugEnabled()) {
+                logger.debug("{}Skor kaydetme isteği alındı: Oyuncu='{}', Skor={}, Zorluk='{}'", 
+                           LOG_RECORD_PREFIX, scoreRequest.getPlayerName(), 
+                           scoreRequest.getScore(), scoreRequest.getDifficulty());
+            }
+            
+            ResponseEntity<Object> response = processScoreRequest(scoreRequest, lang);
+            
+            long executionTime = System.currentTimeMillis() - startTime;
+            logger.info("{}Skor başarıyla kaydedildi: Oyuncu='{}', Skor={}, Süre={}ms", 
+                       LOG_RECORD_PREFIX, scoreRequest.getPlayerName(), 
+                       scoreRequest.getScore(), executionTime);
+            
+            return response;
         } catch (GameException e) {
             String playerName = getPlayerNameSafely(scoreRequest);
-            logger.error("{}{} özel hata (Oyuncu: {}): {}", LOG_RECORD_PREFIX, operationName, playerName, e.getMessage());
-            return createErrorResponse(e.getMessage(), HttpStatus.BAD_REQUEST);
+            return handleGameExceptionWithContext(e, operationName, LOG_RECORD_PREFIX,
+                                                 Map.of("oyuncu", playerName, 
+                                                        "skor", scoreRequest.getScore()), 
+                                                 startTime);
         } catch (Exception e) {
             String playerName = getPlayerNameSafely(scoreRequest);
-            logger.error("{}{} beklenmeyen hata (Oyuncu: {}): {}", LOG_RECORD_PREFIX, operationName, playerName, e.getMessage(), e);
-            return createScoreErrorResponse(e.getMessage(), scoreRequest);
+            return handleGenericExceptionWithContext(e, operationName, LOG_RECORD_PREFIX, 
+                                                    SCORE_RECORD_ERROR_PREFIX,
+                                                    Map.of("oyuncu", playerName, 
+                                                           "skor", scoreRequest.getScore()), 
+                                                    startTime);
         }
     }
 
     @GetMapping("/highscores")
     public ResponseEntity<Object> getHighScores() {
+        long startTime = System.currentTimeMillis();
+        
         try {
-            return processHighScoresRequest();
+            logger.debug("{}Yüksek skorlar isteniyor", LOG_HIGHSCORES_PREFIX);
+            
+            ResponseEntity<Object> response = processHighScoresRequest();
+            
+            long executionTime = System.currentTimeMillis() - startTime;
+            logger.info("{}Yüksek skorlar başarıyla getirildi: Süre={}ms", 
+                       LOG_HIGHSCORES_PREFIX, executionTime);
+            
+            return response;
         } catch (GameException e) {
-            logger.error("{}Yüksek skorlar getirilirken özel hata: {}", LOG_HIGHSCORES_PREFIX, e.getMessage());
+            logger.error("{}Yüksek skorlar getirilirken oyun hatası: {} (Süre: {}ms)", 
+                        LOG_HIGHSCORES_PREFIX, e.getMessage(), 
+                        System.currentTimeMillis() - startTime);
             return ResponseEntity.ok(Map.of());
         } catch (Exception e) {
-            logger.error("{}Yüksek skorlar getirilirken beklenmeyen hata: {}", LOG_HIGHSCORES_PREFIX, e.getMessage(), e);
+            logger.error("{}Yüksek skorlar getirilirken beklenmeyen hata: {} (Süre: {}ms)", 
+                        LOG_HIGHSCORES_PREFIX, e.getMessage(), 
+                        System.currentTimeMillis() - startTime, e);
             return ResponseEntity.ok(createEmptyHighScores());
         }
     }
@@ -141,47 +208,77 @@ public class GameController {
             @RequestParam(value = "difficulty", required = false) String difficultyStr,
             @RequestParam(name = "lang", required = false) String lang) {
         
-        logger.info("{}Zorluk seviyesine göre soru isteniyor: {}, Dil: {}", LOG_QUESTION_PREFIX, difficultyStr, lang);
+        long startTime = System.currentTimeMillis();
+        logger.info("{}Zorluk seviyesine göre soru isteniyor: Zorluk='{}', Dil='{}'", 
+                   LOG_QUESTION_PREFIX, difficultyStr, lang);
         
         try {
-            return processQuestionRequest(difficultyStr, lang);
+            ResponseEntity<GameQuestionDTO> response = processQuestionRequest(difficultyStr, lang);
+            
+            long executionTime = System.currentTimeMillis() - startTime;
+            logger.info("{}Soru başarıyla oluşturuldu: Zorluk='{}', Süre={}ms", 
+                       LOG_QUESTION_PREFIX, difficultyStr, executionTime);
+            
+            return response;
         } catch (GameException e) {
-            logger.error("{}Soru oluşturulurken oyunla ilgili bir hata oluştu (Zorluk: {}): {}", 
-                        LOG_QUESTION_PREFIX, difficultyStr, e.getMessage(), e);
+            logger.error("{}Soru oluşturulurken oyun hatası: Zorluk='{}', Hata='{}' (Süre: {}ms)", 
+                        LOG_QUESTION_PREFIX, difficultyStr, e.getMessage(), 
+                        System.currentTimeMillis() - startTime, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         } catch (Exception e) {
-            logger.error("{}Soru oluşturulurken beklenmedik bir hata oluştu (Zorluk: {}): {}", 
-                        LOG_QUESTION_PREFIX, difficultyStr, e.getMessage(), e);
+            logger.error("{}Soru oluşturulurken beklenmedik hata: Zorluk='{}', Hata='{}' (Süre: {}ms)", 
+                        LOG_QUESTION_PREFIX, difficultyStr, e.getMessage(), 
+                        System.currentTimeMillis() - startTime, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
-    
-
     @PostMapping("/feedback")
     public ResponseEntity<Void> submitFeedback(@Valid @RequestBody GameQuestionFeedbackDTO feedbackDTO) {
-        logger.info("{}Geri bildirim alındı. Soru ID: {}, Feedback: {}", 
+        long startTime = System.currentTimeMillis();
+        
+        logger.info("{}Geri bildirim alındı: Soru ID='{}', Feedback='{}'", 
                     LOG_FEEDBACK_PREFIX, feedbackDTO.getQuestionId(), feedbackDTO.getFeedback());
+        
         try {
             gameService.saveFeedback(feedbackDTO);
+            
+            long executionTime = System.currentTimeMillis() - startTime;
+            logger.info("{}Geri bildirim başarıyla kaydedildi: Soru ID='{}', Süre={}ms", 
+                       LOG_FEEDBACK_PREFIX, feedbackDTO.getQuestionId(), executionTime);
+            
             return ResponseEntity.ok().build();
         } catch (IllegalArgumentException e) {
-            logger.warn("{}Geçersiz geri bildirim: {}", LOG_FEEDBACK_PREFIX, e.getMessage());
+            logger.warn("{}Geçersiz geri bildirim: Soru ID='{}', Hata='{}' (Süre: {}ms)", 
+                       LOG_FEEDBACK_PREFIX, feedbackDTO.getQuestionId(), e.getMessage(),
+                       System.currentTimeMillis() - startTime);
             return ResponseEntity.badRequest().build();
         } catch (Exception e) {
-            logger.error("{}Geri bildirim kaydedilirken hata oluştu", LOG_FEEDBACK_PREFIX, e);
+            logger.error("{}Geri bildirim kaydedilirken hata: Soru ID='{}', Hata='{}' (Süre: {}ms)", 
+                        LOG_FEEDBACK_PREFIX, feedbackDTO.getQuestionId(), e.getMessage(),
+                        System.currentTimeMillis() - startTime, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
     @GetMapping("/debug/persons")
     public ResponseEntity<Object> getPersonsDebugInfo() {
+        long startTime = System.currentTimeMillis();
+        
         try {
+            logger.debug("Debug bilgileri isteniyor");
+            
             Map<String, Object> debugInfo = gameService.getPersonsDebugInfo();
+            
+            long executionTime = System.currentTimeMillis() - startTime;
+            logger.info("Debug bilgileri başarıyla getirildi: Süre={}ms", executionTime);
+            
             return ResponseEntity.ok(debugInfo);
         } catch (Exception e) {
-            logger.error("Debug bilgileri alınırken hata oluştu: {}", e.getMessage(), e);
-            return createErrorResponse("Debug bilgileri alınamadı: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+            logger.error("Debug bilgileri alınırken hata: {} (Süre: {}ms)", 
+                        e.getMessage(), System.currentTimeMillis() - startTime, e);
+            return createErrorResponse("Debug bilgileri alınamadı: " + e.getMessage(), 
+                                     HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -277,17 +374,37 @@ public class GameController {
         }
     }
 
-
-
     // Exception handling methods
-    private ResponseEntity<Object> handleGameException(GameException e, String operationName, String logPrefix) {
-        logger.error("{}{} oyunla ilgili hata: {}", logPrefix, operationName, e.getMessage());
+    private ResponseEntity<Object> handleGameException(GameException e, String operationName, 
+                                                      String logPrefix, long startTime) {
+        long executionTime = System.currentTimeMillis() - startTime;
+        logger.error("{}{} oyun hatası: {} (Süre: {}ms)", logPrefix, operationName, e.getMessage(), executionTime);
         return createErrorResponse(e.getMessage(), HttpStatus.BAD_REQUEST);
     }
-
-    private ResponseEntity<Object> handleGenericException(Exception e, String operationName, String logPrefix, String errorMessage) {
-        logger.error("{}{} beklenmeyen hata: {}", logPrefix, operationName, e.getMessage(), e);
-        return createErrorResponse(errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+    
+    private ResponseEntity<Object> handleGenericException(Exception e, String operationName, 
+                                                         String logPrefix, String errorPrefix, long startTime) {
+        long executionTime = System.currentTimeMillis() - startTime;
+        logger.error("{}{} beklenmeyen hata: {} (Süre: {}ms)", logPrefix, operationName, e.getMessage(), executionTime, e);
+        return createErrorResponse(errorPrefix + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+    
+    private ResponseEntity<Object> handleGameExceptionWithContext(GameException e, String operationName, 
+                                                                 String logPrefix, Map<String, Object> context, 
+                                                                 long startTime) {
+        long executionTime = System.currentTimeMillis() - startTime;
+        logger.error("{}{} oyun hatası: {} | Kontekst: {} (Süre: {}ms)", 
+                    logPrefix, operationName, e.getMessage(), context, executionTime);
+        return createErrorResponse(e.getMessage(), HttpStatus.BAD_REQUEST);
+    }
+    
+    private ResponseEntity<Object> handleGenericExceptionWithContext(Exception e, String operationName, 
+                                                                    String logPrefix, String errorPrefix, 
+                                                                    Map<String, Object> context, long startTime) {
+        long executionTime = System.currentTimeMillis() - startTime;
+        logger.error("{}{} beklenmeyen hata: {} | Kontekst: {} (Süre: {}ms)", 
+                    logPrefix, operationName, e.getMessage(), context, executionTime, e);
+        return createErrorResponse(errorPrefix + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     // Utility methods
@@ -374,8 +491,6 @@ public class GameController {
         }
     }
     
-
-    
     private boolean isInvalidString(String str) {
         return str == null || str.trim().isEmpty();
     }
@@ -402,5 +517,13 @@ public class GameController {
             RESULT_KEY, scoreRequest != null ? scoreRequest : Map.of()
         );
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorBody);
+    }
+
+    // Data masking for sensitive information
+    private String maskSensitiveData(StartGameRequestDTO request) {
+        if (request == null) return "null";
+        return String.format("StartGameRequest{playerName='%s', difficulty='%s'}", 
+                           request.getPlayerName() != null ? "***" : "null", 
+                           request.getDifficulty());
     }
 } 

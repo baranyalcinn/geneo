@@ -205,86 +205,371 @@ type ExtendedGameAnswer = Partial<GameAnswer> & {
 };
 
 const FamilyRelationGame = () => {
-  const navigate = useNavigate();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { t, i18n } = useTranslation();
-  const gameSession = useGameSession();
+  const theme = useTheme();
+  const navigate = useNavigate();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  
+  // Optimized state management
   const {
-    startGame: startGameSession,
+    timeLeft,
+    questionTimeLeft, 
     isGameActive,
-    currentQuestion,
-    setCurrentQuestion,
-    answerQuestion,
-    endGameSession,
-    error,
-    gameStarted,
-    gameOver,
+    canAnswer,
     questionCount,
     totalQuestions,
-    timeLeft,
-    questionTimeLeft,
-    canAnswer,
-    getProgress,
-    getTimeProgress,
-    getQuestionTimeProgress,
-    getAccuracy,
+    currentQuestion,
+    playerName,
+    currentDifficulty,
+    gameStarted,
+    gameOver,
     currentScore,
     currentStreak,
     maxStreak,
     correctAnswers,
-    playerName: sessionPlayerName,
-    currentDifficulty: sessionDifficulty,
+    startGame: startGameSession,
+    endGameSession,
+    cleanup
+  } = useGameSession();
 
-    restartGame: restartGameSession
-  } = gameSession;
-
-  const {
-    isLoading,
-    setLoading,
-    setError
-  } = useGameStore();
-  
-  const [showResult, setShowResult] = useState(false);
-  const [selectedAnswer, setSelectedAnswer] = useState('');
-  const [isCorrect, setIsCorrect] = useState(false);
-  const [lastAnswerResponse, setLastAnswerResponse] = useState<AnswerResponse | null>(null);
-  const [highScores, setHighScores] = useState<HighScores | null>(null);
-  const [showScores, setShowScores] = useState(false);
-  const [playerName, setPlayerName] = useState<string>(localStorage.getItem('playerName') || '');
-  const [currentDifficulty, setCurrentDifficulty] = useState<Difficulty>(Difficulty.MEDIUM);
+  // Local state with performance optimization
+  const [selectedAnswer, setSelectedAnswer] = useState<string>('');
+  const [showResult, setShowResult] = useState<boolean>(false);
+  const [isCorrect, setIsCorrect] = useState<boolean>(false);
+  const [correctAnswerText, setCorrectAnswerText] = useState<string>('');
+  const [showHint, setShowHint] = useState<boolean>(false);
+  const [showPath, setShowPath] = useState<boolean>(false);
   const [finalResult, setFinalResult] = useState<GameResult | null>(null);
-  const [isPathVisible, setIsPathVisible] = useState(false);
-  const [showHint, setShowHint] = useState(false);
-  const [currentRelationshipPath, setCurrentRelationshipPath] = useState<RelationshipStep[] | undefined>();
-  const [feedbackSent, setFeedbackSent] = useState(false);
+  const [answerResponse, setAnswerResponse] = useState<AnswerResponse | null>(null);
+  const [highScores, setHighScores] = useState<HighScores>({
+    [Difficulty.EASY]: [],
+    [Difficulty.MEDIUM]: [],
+    [Difficulty.HARD]: [],
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const gameAreaRef = useRef<HTMLDivElement>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  // Performance refs
+  const questionStartTime = useRef<number>(0);
+  const gameInitialized = useRef<boolean>(false);
+  const lastQuestionId = useRef<string>('');
   
-  const resetTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
+  // Memoized values for performance
+  const gameProgress = useMemo(() => 
+    Math.round((questionCount / totalQuestions) * 100), 
+    [questionCount, totalQuestions]
+  );
+
+  const timeDisplays = useMemo(() => ({
+    gameTime: formatTime(timeLeft),
+    questionTime: formatTime(questionTimeLeft),
+    isGameTimeCritical: timeLeft <= 30,
+    isQuestionTimeCritical: questionTimeLeft <= 5
+  }), [timeLeft, questionTimeLeft]);
+
+  const gameStats = useMemo(() => ({
+    accuracy: questionCount > 0 ? Math.round((correctAnswers / questionCount) * 100) : 0,
+    questionsRemaining: totalQuestions - questionCount,
+    averageTimePerQuestion: questionCount > 0 ? (180 - timeLeft) / questionCount : 0
+  }), [questionCount, correctAnswers, totalQuestions, timeLeft]);
+
+  // Memoized callbacks for performance
+  const resetTimer = useCallback(() => {
+    questionStartTime.current = Date.now();
+  }, []);
+
+  const formatTime = useCallback((seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  }, []);
+
+  const getPersonInfoFromName = useCallback((personNameKey: string, path?: RelationshipStep[]): PersonInfo => {
+    if (!currentQuestion) {
+      return { id: '', fullName: personNameKey };
     }
-  };
+
+    // Önce path'ten ara
+    if (path) {
+      const foundInPath = path.find(step => 
+        step.personName === personNameKey || 
+        step.personName.includes(personNameKey)
+      );
+      if (foundInPath) {
+        return {
+          id: foundInPath.personId,
+          fullName: foundInPath.personName,
+          gender: foundInPath.personGender,
+          birthYear: foundInPath.personBirthYear,
+          deathYear: foundInPath.personDeathYear
+        };
+      }
+    }
+
+    // Person1 ve Person2 bilgilerini kontrol et
+    const { person1Info, person2Info } = currentQuestion;
+    
+    if (person1Info?.fullName === personNameKey) {
+      return person1Info;
+    }
+    if (person2Info?.fullName === personNameKey) {
+      return person2Info;
+    }
+
+    // Default return
+    return { id: '', fullName: personNameKey };
+  }, [currentQuestion]);
+
+  const handleNextQuestionClick = useCallback(async () => {
+    if (!canAnswer || !isGameActive) return;
+    
+    try {
+      const nextQuestionData = await getQuestion(currentDifficulty, 'tr');
+      if (nextQuestionData) {
+        // Component'ın mount edildiğini kontrol et
+        if (gameInitialized.current) {
+          setCurrentQuestion(nextQuestionData);
+          setShowResult(false);
+          setSelectedAnswer('');
+          setAnswerResponse(null);
+          resetTimer();
+        }
+      }
+    } catch (error) {
+      console.error('Sonraki soru yüklenemedi:', error);
+      if (gameInitialized.current) {
+        setError('Sonraki soru yüklenemedi');
+      }
+    }
+  }, [canAnswer, isGameActive, currentDifficulty, resetTimer]);
+
+  const startGame = useCallback(async () => {
+    if (!playerName.trim() || isLoading) return;
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      await startGameSession(playerName.trim(), currentDifficulty);
+      resetTimer();
+      toast.success(`🎮 ${formatDifficulty(currentDifficulty.toString())} seviyesinde oyun başladı!`);
+    } catch (error: any) {
+      console.error('Oyun başlatma hatası:', error);
+      setError(error.message || 'Oyun başlatılamadı');
+      toast.error('Oyun başlatılamadı');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [playerName, currentDifficulty, isLoading, startGameSession, resetTimer]);
+
+  const checkAnswer = useCallback(async (answer: string) => {
+    if (!canAnswer || !currentQuestion || isLoading) return;
+    
+    const timeTaken = (Date.now() - questionStartTime.current) / 1000;
+    setIsLoading(true);
+    
+    try {
+      const answerDetails: ExtendedGameAnswer = {
+        questionId: currentQuestion.id,
+        answer: answer,
+        timeTakenInSeconds: timeTaken,
+        difficulty: currentDifficulty,
+        playerName: playerName,
+        currentScore: currentScore,
+        currentStreak: currentStreak,
+        questionsAnswered: questionCount,
+        correctAnswersCount: correctAnswers
+      };
+
+      const response = await submitAnswer(answerDetails, 'tr');
+      
+      // Component mount kontrolü
+      if (!gameInitialized.current) return;
+
+      setAnswerResponse(response);
+      setIsCorrect(response.correctAnswer);
+      setCorrectAnswerText(response.correctAnswerText || '');
+      setShowResult(true);
+
+      // Toast notification with performance optimization
+      if (response.correctAnswer) {
+        toast.success(`✅ Doğru! +${response.pointsEarned} puan`, { 
+          duration: 2000,
+          position: 'top-center'
+        });
+      } else {
+        toast.error(`❌ Yanlış! Doğru cevap: ${response.correctAnswerText}`, { 
+          duration: 3000,
+          position: 'top-center'
+        });
+      }
+
+      // Oyun bitiş kontrolü
+      if (response.gameOver) {
+        setTimeout(() => {
+          if (gameInitialized.current) {
+            handleGameOver(response.finalResult);
+          }
+        }, 2000);
+      }
+
+    } catch (error: any) {
+      console.error('Cevap gönderme hatası:', error);
+      if (gameInitialized.current) {
+        setError(error.message || 'Cevap gönderilemedi');
+        toast.error('Cevap gönderilemedi');
+      }
+    } finally {
+      if (gameInitialized.current) {
+        setIsLoading(false);
+      }
+    }
+  }, [canAnswer, currentQuestion, isLoading, currentDifficulty, playerName, 
+      currentScore, currentStreak, questionCount, correctAnswers]);
+
+  const handleFeedback = useCallback(async (feedback: 'good' | 'bad') => {
+    if (!currentQuestion) return;
+    
+    try {
+      const feedbackData: GameQuestionFeedbackDTO = {
+        questionId: currentQuestion.id,
+        relationshipType: currentQuestion.relationshipType,
+        isCorrect: isCorrect,
+        feedback: feedback
+      };
+      
+      await sendFeedback(feedbackData);
+      toast.success(feedback === 'good' ? '👍 Teşekkürler!' : '👎 Geri bildiriminiz alındı');
+    } catch (error) {
+      console.error('Geri bildirim gönderme hatası:', error);
+    }
+  }, [currentQuestion, isCorrect]);
+
+  const restartGame = useCallback(() => {
+    setShowResult(false);
+    setSelectedAnswer('');
+    setGameStarted(false);
+    setGameOver(false);
+    setCurrentQuestion(null);
+    setFinalResult(null);
+    setAnswerResponse(null);
+    setError(null);
+    setShowHint(false);
+    setShowPath(false);
+    
+    cleanup(); // useGameSession cleanup
+  }, [cleanup]);
+
+  // Optimized format function
+  const formatDifficulty = useCallback((diff: string): string => {
+    const difficultyMap = { 'EASY': 'Kolay', 'MEDIUM': 'Orta', 'HARD': 'Zor' };
+    return difficultyMap[diff as keyof typeof difficultyMap] || diff;
+  }, []);
+
+  const toggleShowPath = useCallback(() => {
+    setShowPath(prev => !prev);
+  }, []);
+
+  const toggleHint = useCallback(() => {
+    setShowHint(prev => !prev);
+  }, []);
+
+  // Memoized hint calculation
+  const hintData = useMemo(() => {
+    const getHintByDifficulty = (): { generalHint: string, specificHints: string[] } => {
+      switch (currentDifficulty) {
+        case Difficulty.EASY:
+          return {
+            generalHint: "Bu kolay seviye bir soru. Doğrudan aile bağlarını düşünün.",
+            specificHints: [
+              "Anne, baba, kardeş gibi yakın aile üyelerini kontrol edin",
+              "Cinsiyete dikkat edin (erkek/kadın)",
+              "Yaş farkını göz önünde bulundurun"
+            ]
+          };
+        case Difficulty.MEDIUM:
+          return {
+            generalHint: "Bu orta seviye bir soru. Teyze, amca, kuzen gibi uzak akrabaları düşünün.",
+            specificHints: [
+              "Anne veya baba tarafından aile bağlarını inceleyin",
+              "Teyze (anne kız kardeşi), Dayı (anne erkek kardeşi)",
+              "Amca (baba erkek kardeşi), Hala (baba kız kardeşi)",
+              "Kuzen ilişkilerini kontrol edin"
+            ]
+          };
+        case Difficulty.HARD:
+          return {
+            generalHint: "Bu zor seviye bir soru. Karmaşık aile bağlarını ve evlilik ilişkilerini düşünün.",
+            specificHints: [
+              "Kayın ailesi ilişkilerini göz önünde bulundurun",
+              "Gelin, damat, kaynana, kaynata gibi evlilik bağları",
+              "Çok adımlı aile bağlarını takip edin",
+              "Nesil farkları ve yaş uyumluluğunu kontrol edin"
+            ]
+          };
+        default:
+          return {
+            generalHint: "Aile ilişkilerini dikkatlice düşünün.",
+            specificHints: ["Türk aile yapısındaki geleneksel isimlendirmeleri hatırlayın"]
+          };
+      }
+    };
+    
+    return getHintByDifficulty();
+  }, [currentDifficulty]);
+
+  // Component mount/unmount optimization
+  useEffect(() => {
+    gameInitialized.current = true;
+    
+    return () => {
+      gameInitialized.current = false;
+    };
+  }, []);
+
+  // High scores loading optimization
+  useEffect(() => {
+    let mounted = true;
+    
+    const loadHighScores = async () => {
+      try {
+        const scores = await getHighScores();
+        if (mounted && scores) {
+          setHighScores(scores);
+        }
+      } catch (error) {
+        console.error('High scores yüklenemedi:', error);
+      }
+    };
+
+    loadHighScores();
+    
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Question change optimization
+  useEffect(() => {
+    if (currentQuestion && currentQuestion.id !== lastQuestionId.current) {
+      lastQuestionId.current = currentQuestion.id;
+      resetTimer();
+      setSelectedAnswer('');
+      setShowResult(false);
+      setShowHint(false);
+      setShowPath(false);
+    }
+  }, [currentQuestion, resetTimer]);
 
   const relationshipPathForGraph = useMemo(() => {
     console.log('🔍 Debug relationshipPathForGraph:', {
       showResult,
-      currentRelationshipPath: currentRelationshipPath?.length || 0,
-      questionRelationshipPath: currentQuestion?.relationshipPath?.length || 0,
+      currentRelationshipPath: currentQuestion?.relationshipPath?.length || 0,
       currentQuestion: currentQuestion?.id
     });
     
     // Eğer sunucudan gelen detaylı bir yol varsa (cevap sonrası) onu kullan
-    if (showResult && currentRelationshipPath && currentRelationshipPath.length > 0) {
-      console.log('✅ Using currentRelationshipPath:', currentRelationshipPath);
-      return currentRelationshipPath;
-    }
-
-    // Backend'den gelen relationshipPath varsa onu kullan
-    if (currentQuestion?.relationshipPath && currentQuestion.relationshipPath.length > 0) {
+    if (showResult && currentQuestion && currentQuestion.relationshipPath && currentQuestion.relationshipPath.length > 0) {
       console.log('✅ Using question relationshipPath:', currentQuestion.relationshipPath);
       return currentQuestion.relationshipPath;
     }
@@ -296,7 +581,7 @@ const FamilyRelationGame = () => {
 
     // Cevap gösterilmiyorsa veya cevap sonrası yol gelmediyse, temel bir grafik oluştur
     const { person1Info, person2Info } = currentQuestion;
-    const relationshipLabel = showResult ? (lastAnswerResponse?.correctAnswerText || '...') : `?`;
+    const relationshipLabel = showResult ? (answerResponse?.correctAnswerText || '...') : `?`;
 
     const basicPath = [
       {
@@ -320,7 +605,7 @@ const FamilyRelationGame = () => {
     ];
 
     return basicPath;
-  }, [currentQuestion, currentRelationshipPath, showResult, lastAnswerResponse, t]);
+  }, [currentQuestion, showResult, answerResponse]);
 
   // Layout yönünü otomatik seç: 3+ kişi için LR, az kişi için TB
   const optimalLayoutDirection = useMemo(() => {
@@ -333,27 +618,17 @@ const FamilyRelationGame = () => {
   const person1 = currentQuestion?.person1Info?.fullName || '...';
   const person2 = currentQuestion?.person2Info?.fullName || '...';
   
-  const getPersonInfoFromName = (personNameKey: string, path?: RelationshipStep[]): PersonInfo => {
-    if (!path) return { id: 0, fullName: personNameKey };
-    
-    const foundStep = path.find(step => step.personName === personNameKey);
-    if (!foundStep) return { id: 0, fullName: personNameKey };
-    
-    return {
-      id: foundStep.personId,
-      fullName: foundStep.personName,
-      gender: foundStep.personGender,
-      birthYear: foundStep.personBirthYear
-    };
-  };
-  
   const fetchHighScores = useCallback(async () => {
     try {
       const scoresFromApi = await getHighScores(); 
       setHighScores(scoresFromApi); 
     } catch (err) {
       console.error('Yüksek skorlar getirilirken hata oluştu:', err);
-      setHighScores(null);
+      setHighScores({
+        [Difficulty.EASY]: [],
+        [Difficulty.MEDIUM]: [],
+        [Difficulty.HARD]: [],
+      });
     }
   }, []);
 
@@ -361,11 +636,165 @@ const FamilyRelationGame = () => {
     fetchHighScores();
   }, [fetchHighScores]);
 
-  // Timer artık useGameSession tarafından yönetiliyor
+  const handleGameOver = async (finalResultParam?: GameResult | null) => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
 
-  const fetchNextQuestion = useCallback(async () => {
-    if (gameOver) return;
+    // Save final score to local state
+    const finalScore = currentScore;
+    const finalCorrectAnswers = correctAnswers;
+    const finalTotalQuestions = totalQuestions;
+    const finalMaxStreak = maxStreak;
+
+    const gameResult: GameResult = {
+      playerName: playerName,
+      score: finalScore,
+      difficulty: currentDifficulty,
+      correctAnswers: finalCorrectAnswers,
+      totalQuestions: finalTotalQuestions,
+      maxStreak: finalMaxStreak,
+      accuracy: (finalCorrectAnswers / Math.max(finalTotalQuestions, 1)) * 100
+    };
     
+    setFinalResult(gameResult);
+    await fetchHighScores();
+  };
+
+  if (!gameStarted) {
+    return renderGameSetup();
+  }
+
+  if (gameOver) {
+    return renderGameOver();
+  }
+
+  if (isLoading && !currentQuestion) {
+    return <LoadingIndicator />;
+  }
+
+  if (error && !currentQuestion) {
+    return <ErrorMessage message={error} />;
+  }
+  
+  if (!currentQuestion) {
+    return <ErrorMessage message={t('error.question_load')} />;
+  }
+
+  const { options, timeLimit, difficulty: questionDifficulty } = currentQuestion;
+  const timeProgress = (timeLimit || 30) > 0 ? (questionTimeLeft / (timeLimit || 30)) * 100 : 0;
+
+  return (
+    <StyledContainer maxWidth={false} disableGutters>
+      <HeaderBar>
+        <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
+          <SportsEsportsIcon sx={{ mr: 1 }} /> {t('game.title')}
+        </Typography>
+        <Box>
+          <Tooltip title={t('restart_game')}>
+            <IconButton onClick={restartGame}><RefreshIcon /></IconButton>
+          </Tooltip>
+          <Tooltip title={t('home')}>
+            <IconButton onClick={() => navigate('/')}><HomeIcon /></IconButton>
+          </Tooltip>
+        </Box>
+      </HeaderBar>
+      <GamePlayArea ref={gameAreaRef} tabIndex={-1}>
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: { xs: 'column', md: 'row' }, 
+          flexGrow: 1, 
+          gap: { xs: 1.5, md: 2 },
+          height: '100%'
+        }}>
+          <Box sx={{ 
+            flex: { xs: '1 1 auto', md: '0 0 45%' }, 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: { xs: 1.5, md: 2 }, 
+            height: { xs: 'auto', md: '100%' }, 
+            overflowY: 'auto', 
+            pr: { xs: 0, md: 1 } 
+          }}>
+            <ScoreTimeDisplay>
+              <Chip 
+                icon={<EmojiEventsIcon />} 
+                label={`${t('game.score')}: ${currentScore || 0}`} 
+                color="primary" 
+                variant="filled" 
+              />
+              <Chip 
+                icon={<TimerIcon />} 
+                label={`${t('streak')}: ${currentStreak || 0}`} 
+                color="secondary" 
+                variant="filled" 
+              />
+            </ScoreTimeDisplay>
+
+            {timeLimit && timeLimit > 0 && (
+              <Box sx={{ width: '100%', mb: 1 }}>
+                <Box sx={{ height: 6, backgroundColor: alpha(theme.palette.secondary.light, 0.3), borderRadius: 3, overflow: 'hidden' }}>
+                  <Box sx={{ 
+                    width: `${timeProgress}%`, 
+                    height: '100%', 
+                    backgroundColor: questionTimeLeft < 10 ? theme.palette.error.main : questionTimeLeft < 20 ? theme.palette.warning.main : theme.palette.secondary.main, 
+                    borderRadius: 3, 
+                    transition: 'width 1s linear, background-color 0.5s ease' 
+                  }} />
+                </Box>
+              </Box>
+            )}
+            
+            <QuestionCard elevation={1}>
+              <Typography 
+                variant="h6" 
+                component="h2"
+                sx={{ mb: 1, fontWeight: '600' }}
+              >
+                {t('game.question_title', { number: questionCount })}
+              </Typography>
+              <Typography 
+                variant="body1" 
+                sx={{ mb: 1.5, fontWeight: "500" }}
+              >
+                {currentQuestion.questionText || t('game.question', { person1: person1, person2: person2 })}
+              </Typography>
+            </QuestionCard>
+
+            <GameCard elevation={2}>
+              <Typography 
+                variant="subtitle1" 
+                fontWeight="600" 
+                sx={{ mb: 1, pb: 0.5, borderBottom: `1px solid ${theme.palette.divider}`}}
+              >
+                {t('answer_options')}:
+              </Typography>
+              <RadioGroup
+                value={selectedAnswer}
+                onChange={(e) => setSelectedAnswer(e.target.value)}
+              >
+                {options.map((option: string, index: number) => (
+                  <OptionButton
+                    key={`${option}-${index}`}
+                    value={option}
+                    isSelected={selectedAnswer === option}
+                    control={<Radio sx={{display: 'none'}} />}
+                    label={
+                      <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                        <Typography variant="body1" sx={{ flexGrow: 1, fontWeight: selectedAnswer === option ? 600 : 400 }}>
+                          {option}
+                        </Typography>
+                        {showResult && selectedAnswer === option && (
+                          isCorrect ? <CheckCircleIcon color="success" /> : <CancelIcon color="error" />
+                        )}
+                        {showResult && answerResponse?.correctAnswerText === option && selectedAnswer !== option && (
+                          <CheckCircleIcon color="disabled" />
+                        )}
+                      </Box>
+                    }
+                    disabled={showResult || isLoading}
+                    sx={{
     try {
       setLoading(true);
       const nextQuestionData = await getQuestion(currentDifficulty, i18n.language);

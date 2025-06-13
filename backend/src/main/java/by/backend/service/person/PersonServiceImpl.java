@@ -104,7 +104,8 @@ public class PersonServiceImpl implements PersonService {
     @Override
     @Transactional(readOnly = true)
     public List<PersonDTO> findByLastName(String lastName) {
-        return personRepository.findByLastName(lastName).stream()
+        return personRepository.findAll().stream()
+            .filter(person -> person.getLastName().toLowerCase().contains(lastName.toLowerCase()))
             .map(personMapper::toDTO)
             .toList();
     }

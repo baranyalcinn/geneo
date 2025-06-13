@@ -3,34 +3,186 @@ spring:
     charset: UTF-8 # Banner için karakter kodlaması
   messages:
     encoding: UTF-8 # Mesajlar için karakter kodlaması
+    
+  # Optimized DataSource Configuration
   datasource:
-    url: jdbc:postgresql://localhost:5432/FamilyTreeDB?characterEncoding=UTF-8 # Veritabanı bağlantısı için karakter kodlaması
+    url: jdbc:postgresql://localhost:5432/FamilyTreeDB?characterEncoding=UTF-8&reWriteBatchedInserts=true&ApplicationName=FamilyTreeApp
     username: postgres
     password: 12345
     driver-class-name: org.postgresql.Driver
+    type: com.zaxxer.hikari.HikariDataSource
+    
+    # HikariCP Connection Pool Optimization
+    hikari:
+      maximum-pool-size: 20 # Maximum connections in pool
+      minimum-idle: 5 # Minimum idle connections
+      idle-timeout: 300000 # 5 minutes
+      max-lifetime: 1200000 # 20 minutes
+      connection-timeout: 20000 # 20 seconds
+      validation-timeout: 5000 # 5 seconds
+      leak-detection-threshold: 60000 # 1 minute
+      pool-name: FamilyTreeHikariCP
+      connection-test-query: SELECT 1
+      auto-commit: false # Better for transactions
+      
+      # Performance optimizations
+      data-source-properties:
+        cachePrepStmts: true
+        prepStmtCacheSize: 250
+        prepStmtCacheSqlLimit: 2048
+        useServerPrepStmts: true
+        useLocalSessionState: true
+        rewriteBatchedStatements: true
+        cacheResultSetMetadata: true
+        cacheServerConfiguration: true
+        elideSetAutoCommits: true
+        maintainTimeStats: false
+        
+  # JPA/Hibernate Optimization
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: update # Bu ayar veritabanı şemasını otomatik günceller, dikkatli olun.
-    show-sql: false # Geliştirme sırasında true yapmak faydalı olabilir.
-    open-in-view: false # Performans sorunlarına yol açabilir, genellikle false önerilir.
+      ddl-auto: update
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+        implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
+    show-sql: false # Set to true only in development
+    open-in-view: false # Prevent lazy loading issues
+    
     properties:
       hibernate:
-        format-sql: false # SQL loglarını daha okunaklı formatlar.
+        # Performance optimizations
+        format-sql: false
+        use_sql_comments: false
+        generate_statistics: true # For monitoring
+        
+        # Connection and statement optimization
+        connection:
+          provider_disables_autocommit: true
+        jdbc:
+          batch_size: 25 # Batch processing for better performance
+          batch_versioned_data: true
+          order_inserts: true
+          order_updates: true
+          
+        # Cache configuration
+        cache:
+          use_second_level_cache: true
+          use_query_cache: true
+          region_prefix: familytree
+          default_cache_concurrency_strategy: read_write
+          region:
+            factory_class: org.hibernate.cache.jcache.JCacheRegionFactory
+        javax:
+          cache:
+            provider: org.ehcache.jsr107.EhcacheCachingProvider
+          
+        # Query optimization
+        query:
+          fail_on_pagination_over_collection_fetch: true
+          in_clause_parameter_padding: true
+          
+        # Session optimization
+        session:
+          events:
+            log:
+              LOG_QUERIES_SLOWER_THAN_MS: 100 # Log slow queries
+              
+        # Additional performance settings
+        temp:
+          use_jdbc4_metadata_defaults: false
+        proc:
+          param_null_passing: true
+          
+  # Enhanced Cache Configuration
   cache:
-    type: CAFFEINE # Önbellek sağlayıcısı olarak Caffeine'i kullan.
+    type: CAFFEINE
     cache-names:
-      - relationshipPaths
-      - relationshipCache
-      - pathCache
-      - ancestorCache
-      - familyGraphCache
-      - gameQuestionCache
+      - personCache # Person entities
+      - relationshipCache # Relationship entities
+      - highScoreCache # High score entities
+      - gameQuestionCache # Game questions
+      - relationshipPaths # Calculated relationship paths
+      - familyGraphCache # Family graph data
+      - ancestorCache # Ancestor lookup cache
+      - pathCache # General path cache
+      - queryCache # Query result cache
+      - metadataCache # Metadata cache
     caffeine:
-      spec: maximumSize=10000,expireAfterWrite=600s,recordStats # High-performance cache config
-server: # Sunucu geneli karakter kodlaması ayarları
+      spec: maximumSize=10000,expireAfterWrite=600s,expireAfterAccess=300s,recordStats=true
+      
+  # Transaction Management
+  transaction:
+    default-timeout: 30s
+    rollback-on-commit-failure: true
+    
+  # Data initialization
+  sql:
+    init:
+      mode: never # Change to 'always' for development
+      continue-on-error: false
+
+# Server Configuration for Performance
+server:
   servlet:
     encoding:
       charset: UTF-8
       enabled: true
       force: true
+  tomcat:
+    threads:
+      max: 200 # Maximum threads
+      min-spare: 10 # Minimum spare threads
+    connection-timeout: 20000 # 20 seconds
+    max-connections: 8192
+    accept-count: 100
+    max-http-post-size: 2MB
+
+# Management and Monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,caches,httptrace
+  endpoint:
+    health:
+      show-details: when-authorized
+    metrics:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    web:
+      server:
+        request:
+          autotime:
+            enabled: true
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5, 0.9, 0.95, 0.99
+        
+# Logging Configuration for Performance Monitoring
+logging:
+  level:
+    org.hibernate.SQL: WARN # Change to DEBUG for development
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+    org.springframework.cache: INFO
+    com.zaxxer.hikari: INFO
+    by.backend: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    
+# Application-specific properties
+app:
+  database:
+    performance:
+      batch-size: 25
+      cache-size: 10000
+      connection-timeout: 20000
+  cache:
+    ttl: 600 # seconds
+    max-entries: 10000

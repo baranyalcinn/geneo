@@ -3,11 +3,18 @@ package by.backend.repository;
 import by.backend.model.entity.Person;
 import by.backend.model.entity.Relationship;
 import by.backend.model.enums.RelationshipType;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -320,4 +327,177 @@ public interface RelationshipRepository extends JpaRepository<Relationship, Long
 
     List<Relationship> findByPerson1AndType(Person person, RelationshipType type);
     List<Relationship> findByPerson2AndType(Person person, RelationshipType type);
+
+    // Optimized basic relationship queries
+    @Cacheable(value = "relationshipCache", key = "'person_' + #personId")
+    @Query("SELECT r FROM Relationship r WHERE (r.person1.id = :personId OR r.person2.id = :personId) AND r.isActive = true")
+    List<Relationship> findActiveByPersonId(@Param("personId") Long personId);
+
+    @Cacheable(value = "relationshipCache", key = "'persons_' + #person1Id + '_' + #person2Id")
+    @Query("SELECT r FROM Relationship r WHERE " +
+           "((r.person1.id = :person1Id AND r.person2.id = :person2Id) OR " +
+           " (r.person1.id = :person2Id AND r.person2.id = :person1Id)) " +
+           "AND r.isActive = true")
+    Optional<Relationship> findActiveByPersonIds(@Param("person1Id") Long person1Id, @Param("person2Id") Long person2Id);
+
+    @Cacheable(value = "relationshipCache", key = "'type_' + #relationshipType")
+    @Query("SELECT r FROM Relationship r WHERE r.type = :type AND r.isActive = true")
+    List<Relationship> findByTypeAndActive(@Param("type") RelationshipType relationshipType);
+
+    // Optimized path-finding queries for family relationship calculation
+    @Cacheable(value = "relationshipPaths", key = "'path_' + #startPersonId + '_' + #maxDepth")
+    @Query("SELECT r FROM Relationship r WHERE " +
+           "(r.person1.id = :startPersonId OR r.person2.id = :startPersonId) " +
+           "AND r.isActive = true " +
+           "AND r.relationshipStrength >= :minStrength " +
+           "ORDER BY r.relationshipStrength DESC")
+    List<Relationship> findRelationshipPathsFrom(@Param("startPersonId") Long startPersonId,
+                                                @Param("minStrength") Integer minStrength);
+
+    // Game-specific optimized queries
+    @Query("SELECT r FROM Relationship r WHERE " +
+           "r.isActive = true " +
+           "AND r.type IN :allowedTypes " +
+           "AND r.relationshipStrength >= :minStrength " +
+           "ORDER BY RANDOM()")
+    List<Relationship> findRandomRelationshipsForGame(@Param("allowedTypes") List<RelationshipType> allowedTypes,
+                                                     @Param("minStrength") Integer minStrength);
+
+    @Query(value = "SELECT r.* FROM relationships r " +
+                   "INNER JOIN persons p1 ON r.person1_id = p1.id " +
+                   "INNER JOIN persons p2 ON r.person2_id = p2.id " +
+                   "WHERE r.is_active = true " +
+                   "AND p1.is_active = true " +
+                   "AND p2.is_active = true " +
+                   "AND p1.relationship_count >= :minConnections " +
+                   "AND p2.relationship_count >= :minConnections " +
+                   "AND r.relationship_strength >= :minStrength " +
+                   "ORDER BY RANDOM() LIMIT :limit", nativeQuery = true)
+    List<Relationship> findGameCandidateRelationships(@Param("minConnections") Integer minConnections,
+                                                     @Param("minStrength") Integer minStrength,
+                                                     @Param("limit") Integer limit);
+
+    // Complex family relationship queries
+    @Query("SELECT r FROM Relationship r WHERE " +
+           "r.isActive = true " +
+           "AND ((r.person1.id = :personId AND r.type = :forwardType) OR " +
+           "     (r.person2.id = :personId AND r.type = :reverseType))")
+    List<Relationship> findDirectionalRelationships(@Param("personId") Long personId,
+                                                   @Param("forwardType") RelationshipType forwardType,
+                                                   @Param("reverseType") RelationshipType reverseType);
+
+    @Query("SELECT DISTINCT r FROM Relationship r " +
+           "WHERE r.isActive = true " +
+           "AND ((r.person1.id IN :personIds) OR (r.person2.id IN :personIds)) " +
+           "AND r.type IN :relationshipTypes")
+    List<Relationship> findRelationshipsInFamily(@Param("personIds") List<Long> personIds,
+                                                @Param("relationshipTypes") List<RelationshipType> relationshipTypes);
+
+    // Statistics and analytics queries
+    @Query("SELECT COUNT(r) FROM Relationship r WHERE (r.person1.id = :personId OR r.person2.id = :personId) AND r.isActive = true")
+    long countActiveByPersonId(@Param("personId") Long personId);
+
+    @Query("SELECT r.type, COUNT(r) FROM Relationship r WHERE r.isActive = true GROUP BY r.type ORDER BY COUNT(r) DESC")
+    List<Object[]> getRelationshipTypeStatistics();
+
+    @Query("SELECT AVG(r.relationshipStrength) FROM Relationship r WHERE r.isActive = true AND r.type = :type")
+    Double getAverageStrengthByType(@Param("type") RelationshipType type);
+
+    // Performance monitoring queries
+    @Query("SELECT r FROM Relationship r WHERE r.updatedAt < :cutoffDate AND r.isActive = true")
+    List<Relationship> findStaleRelationships(@Param("cutoffDate") LocalDateTime cutoffDate);
+
+    @Query(value = "SELECT r.type, COUNT(*) as count, AVG(r.relationship_strength) as avg_strength " +
+                   "FROM relationships r " +
+                   "WHERE r.is_active = true " +
+                   "GROUP BY r.type " +
+                   "ORDER BY count DESC", nativeQuery = true)
+    List<Object[]> getDetailedRelationshipStatistics();
+
+    // Batch operations for performance
+    @Modifying
+    @Transactional
+    @Query("UPDATE Relationship r SET r.isActive = false, r.endDate = CURRENT_DATE WHERE r.id = :relationshipId")
+    void softDeleteRelationship(@Param("relationshipId") Long relationshipId);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE Relationship r SET r.relationshipStrength = :strength WHERE r.id = :relationshipId")
+    void updateRelationshipStrength(@Param("relationshipId") Long relationshipId, @Param("strength") Integer strength);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE Relationship r SET r.updatedAt = CURRENT_TIMESTAMP WHERE r.id IN :relationshipIds")
+    void touchRelationships(@Param("relationshipIds") List<Long> relationshipIds);
+
+    // Existence and validation queries
+    @Query("SELECT COUNT(r) > 0 FROM Relationship r WHERE " +
+           "((r.person1.id = :person1Id AND r.person2.id = :person2Id) OR " +
+           " (r.person1.id = :person2Id AND r.person2.id = :person1Id)) " +
+           "AND r.type = :type AND r.isActive = true")
+    boolean existsActiveRelationship(@Param("person1Id") Long person1Id,
+                                   @Param("person2Id") Long person2Id,
+                                   @Param("type") RelationshipType type);
+
+    @Query("SELECT COUNT(r) FROM Relationship r WHERE " +
+           "(r.person1.id = :personId OR r.person2.id = :personId) " +
+           "AND r.type = :type AND r.isActive = true")
+    long countRelationshipsByType(@Param("personId") Long personId, @Param("type") RelationshipType type);
+
+    // Age-compatible relationship queries
+    @Query("SELECT r FROM Relationship r " +
+           "INNER JOIN r.person1 p1 " +
+           "INNER JOIN r.person2 p2 " +
+           "WHERE r.isActive = true " +
+           "AND ABS(p1.birthYear - p2.birthYear) <= :maxAgeDifference " +
+           "AND r.type = :relationshipType")
+    List<Relationship> findAgeCompatibleRelationships(@Param("relationshipType") RelationshipType relationshipType,
+                                                     @Param("maxAgeDifference") Integer maxAgeDifference);
+
+    // Turkish family relationship specific queries
+    @Query("SELECT r FROM Relationship r WHERE " +
+           "r.isActive = true " +
+           "AND r.type IN ('PARENT_CHILD', 'SIBLING', 'SPOUSE') " +
+           "AND ((r.person1.id = :personId) OR (r.person2.id = :personId))")
+    List<Relationship> findDirectFamilyRelationships(@Param("personId") Long personId);
+
+    @Query("SELECT r FROM Relationship r WHERE " +
+           "r.isActive = true " +
+           "AND r.type IN ('UNCLE_AUNT_NEPHEW_NIECE', 'COUSIN') " +
+           "AND ((r.person1.id = :personId) OR (r.person2.id = :personId))")
+    List<Relationship> findExtendedFamilyRelationships(@Param("personId") Long personId);
+
+    // Network analysis queries for complex relationship detection
+    @Query(value = "WITH RECURSIVE family_network AS (" +
+                   "    SELECT person1_id as person_id, person2_id as connected_to, 1 as depth " +
+                   "    FROM relationships " +
+                   "    WHERE person1_id = :startPersonId AND is_active = true " +
+                   "    UNION ALL " +
+                   "    SELECT person2_id as person_id, person1_id as connected_to, 1 as depth " +
+                   "    FROM relationships " +
+                   "    WHERE person2_id = :startPersonId AND is_active = true " +
+                   "    UNION ALL " +
+                   "    SELECT r.person1_id, r.person2_id, fn.depth + 1 " +
+                   "    FROM relationships r " +
+                   "    INNER JOIN family_network fn ON r.person1_id = fn.connected_to " +
+                   "    WHERE fn.depth < :maxDepth AND r.is_active = true " +
+                   "    UNION ALL " +
+                   "    SELECT r.person2_id, r.person1_id, fn.depth + 1 " +
+                   "    FROM relationships r " +
+                   "    INNER JOIN family_network fn ON r.person2_id = fn.connected_to " +
+                   "    WHERE fn.depth < :maxDepth AND r.is_active = true " +
+                   ") " +
+                   "SELECT DISTINCT connected_to, MIN(depth) as min_depth " +
+                   "FROM family_network " +
+                   "WHERE connected_to = :targetPersonId " +
+                   "GROUP BY connected_to", nativeQuery = true)
+    List<Object[]> findShortestPath(@Param("startPersonId") Long startPersonId,
+                                  @Param("targetPersonId") Long targetPersonId,
+                                  @Param("maxDepth") Integer maxDepth);
+
+    // Cleanup and maintenance queries
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM Relationship r WHERE r.isActive = false AND r.endDate < :cutoffDate")
+    void purgeOldInactiveRelationships(@Param("cutoffDate") LocalDateTime cutoffDate);
 } 

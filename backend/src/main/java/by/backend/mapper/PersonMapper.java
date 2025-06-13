@@ -19,7 +19,6 @@ import java.util.Optional;
  * Kişi verilerinin entity ve DTO dönüşümlerini sağlayan mapper.
  */
 @Mapper(componentModel = "spring")
-@Component
 public interface PersonMapper {
 
     /**

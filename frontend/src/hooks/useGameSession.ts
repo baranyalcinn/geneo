@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useGameStore } from '../store/gameStore';
 import * as gameService from '../services/gameService';
 import { Difficulty } from '../types/game';
@@ -22,10 +22,14 @@ export const useGameSession = () => {
   const [maxStreak, setMaxStreak] = useState(0);
   const [correctAnswers, setCorrectAnswers] = useState(0);
 
-  
+  // Performance için memoized refs
   const gameTimerRef = useRef<NodeJS.Timeout | null>(null);
   const questionTimerRef = useRef<NodeJS.Timeout | null>(null);
   const questionStartTimeRef = useRef<number>(0);
+  const mountedRef = useRef<boolean>(true);
+  
+  // Cleanup için refs
+  const cleanupRef = useRef<(() => void) | null>(null);
   
   // Refs for storing callback functions to avoid hoisting issues
   const nextQuestionRef = useRef<(() => void) | null>(null);
@@ -39,20 +43,66 @@ export const useGameSession = () => {
     setError,
   } = useGameStore();
 
+  // Memoized values for performance
+  const gameStats = useMemo(() => ({
+    currentScore,
+    currentStreak,
+    maxStreak,
+    correctAnswers,
+    questionsAnswered: questionCount,
+    accuracy: questionCount > 0 ? Math.round((correctAnswers / questionCount) * 100) : 0
+  }), [currentScore, currentStreak, maxStreak, correctAnswers, questionCount]);
+
+  const timeDisplays = useMemo(() => ({
+    gameTimeFormatted: formatTime(timeLeft),
+    questionTimeFormatted: formatTime(questionTimeLeft),
+    isGameTimeCritical: timeLeft <= 30,
+    isQuestionTimeCritical: questionTimeLeft <= 5
+  }), [timeLeft, questionTimeLeft]);
+
+  // Helper function for time formatting
+  const formatTime = useCallback((seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  }, []);
+
+  // Enhanced cleanup function
+  const cleanup = useCallback(() => {
+    if (gameTimerRef.current) {
+      clearInterval(gameTimerRef.current);
+      gameTimerRef.current = null;
+    }
+    if (questionTimerRef.current) {
+      clearInterval(questionTimerRef.current);
+      questionTimerRef.current = null;
+    }
+    
+    // Reset states
+    setIsGameActive(false);
+    setCanAnswer(false);
+    setIsPaused(false);
+  }, []);
+
+  // Component unmount cleanup
+  useEffect(() => {
+    mountedRef.current = true;
+    cleanupRef.current = cleanup;
+    
+    return () => {
+      mountedRef.current = false;
+      cleanup();
+    };
+  }, [cleanup]);
+
   const endGameSession = useCallback(async (reason: 'completed' | 'time' | 'manual') => {
+    if (!mountedRef.current) return;
+    
     try {
       console.log(`Oyun bitiriliyor: ${reason}`);
       
-      setIsGameActive(false);
-      setCanAnswer(false);
+      cleanup();
       setGameOver(true);
-      
-      if (gameTimerRef.current) {
-        clearInterval(gameTimerRef.current);
-      }
-      if (questionTimerRef.current) {
-        clearInterval(questionTimerRef.current);
-      }
       
       if (reason === 'time') {
         toast.error('⏰ Süre doldu! Oyun bitti.', { duration: 3000 });
@@ -73,20 +123,28 @@ export const useGameSession = () => {
           };
           
           await gameService.recordGameResult(scoreData, 'tr');
-          toast.success('🏆 Skorunuz kaydedildi!', { duration: 2000 });
+          if (mountedRef.current) {
+            toast.success('🏆 Skorunuz kaydedildi!', { duration: 2000 });
+          }
         } catch (error) {
           console.error('Skor kaydetme hatası:', error);
-          toast.error('Skor kaydedilemedi');
+          if (mountedRef.current) {
+            toast.error('Skor kaydedilemedi');
+          }
         }
       }
       
     } catch (error: any) {
       console.error('Oyun bitirme hatası:', error);
-      setError(error.message || 'Oyun bitirilemedi');
+      if (mountedRef.current) {
+        setError(error.message || 'Oyun bitirilemedi');
+      }
     }
-  }, [currentScore, playerName, currentDifficulty, correctAnswers, totalQuestions, maxStreak, setError]);
+  }, [currentScore, playerName, currentDifficulty, correctAnswers, totalQuestions, maxStreak, setError, cleanup]);
 
   const startQuestionTimer = useCallback((timeLimit: number = 20) => {
+    if (!mountedRef.current) return;
+    
     if (questionTimerRef.current) {
       clearInterval(questionTimerRef.current);
     }
@@ -96,6 +154,13 @@ export const useGameSession = () => {
     questionStartTimeRef.current = Date.now();
     
     questionTimerRef.current = setInterval(() => {
+      if (!mountedRef.current) {
+        if (questionTimerRef.current) {
+          clearInterval(questionTimerRef.current);
+        }
+        return;
+      }
+      
       setQuestionTimeLeft((prev) => {
         if (prev <= 1) {
           if (handleQuestionTimeoutRef.current) {
@@ -104,7 +169,7 @@ export const useGameSession = () => {
           return 0;
         }
         
-        // Sadece gerçekten az kaldığında uyarı ver
+        // Performance improvement: Less frequent toast notifications
         if (prev === 3) {
           toast('⏰ 3 saniye kaldı!', { duration: 1500, icon: '⚠️' });
         }

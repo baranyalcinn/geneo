@@ -45,7 +45,12 @@ public class FamilyGraphService {
     
     @PostConstruct
     public void initializeGraph() {
-        buildGraph();
+        try {
+            log.info("Initializing family graph...");
+            buildGraph();
+        } catch (Exception e) {
+            log.warn("Failed to initialize graph during startup: {}. Graph will be built on first use.", e.getMessage());
+        }
     }
     
     /**
@@ -99,6 +104,7 @@ public class FamilyGraphService {
      * Get neighbors of a person - O(1) lookup
      */
     public Set<PersonEdge> getNeighbors(Long personId) {
+        ensureGraphIsBuilt();
         return adjacencyList.getOrDefault(personId, Collections.emptySet());
     }
     
@@ -169,6 +175,17 @@ public class FamilyGraphService {
     }
     
     // Private helper methods
+    
+    private void ensureGraphIsBuilt() {
+        if (adjacencyList.isEmpty() && !isGraphBuilding) {
+            log.info("Graph is empty, building on first use...");
+            try {
+                buildGraph();
+            } catch (Exception e) {
+                log.error("Failed to build graph on demand: {}", e.getMessage(), e);
+            }
+        }
+    }
     
     private void buildAdjacencyList() {
         List<Relationship> allRelationships = relationshipRepository.findAllWithPersons();

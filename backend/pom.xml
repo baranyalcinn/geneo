@@ -20,6 +20,9 @@
 		<caffeine.version>3.1.8</caffeine.version>
 		<mapstruct.version>1.6.3</mapstruct.version>
 		<lombok.version>1.18.38</lombok.version>
+		<hikaricp.version>6.2.1</hikaricp.version>
+		<micrometer.version>1.14.2</micrometer.version>
+		<flyway.version>10.21.0</flyway.version>
 	</properties>
 
 	<dependencyManagement>
@@ -44,10 +47,32 @@
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
 		</dependency>
 
+		<!-- Enhanced PostgreSQL driver with performance optimizations -->
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
 			<version>${postgresql.version}</version>
+			<scope>runtime</scope>
+		</dependency>
+
+		<!-- HikariCP Connection Pool (included in Spring Boot but explicit version) -->
+		<dependency>
+			<groupId>com.zaxxer</groupId>
+			<artifactId>HikariCP</artifactId>
+			<version>${hikaricp.version}</version>
+		</dependency>
+
+		<!-- Database Migration with Flyway -->
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-core</artifactId>
+			<version>${flyway.version}</version>
+		</dependency>
+		
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
+			<version>${flyway.version}</version>
 			<scope>runtime</scope>
 		</dependency>
 
@@ -73,6 +98,7 @@
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
 
+		<!-- Caffeine Cache for high-performance caching -->
 		<dependency>
 			<groupId>com.github.ben-manes.caffeine</groupId>
 			<artifactId>caffeine</artifactId>
@@ -80,19 +106,91 @@
 		</dependency>
 
 		<dependency>
+			<groupId>org.ehcache</groupId>
+			<artifactId>ehcache</artifactId>
+			<version>3.10.8</version>
+		</dependency>
+
+		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-cache</artifactId>
 		</dependency>
 
+		<!-- MapStruct for efficient object mapping -->
 		<dependency>
 			<groupId>org.mapstruct</groupId>
 			<artifactId>mapstruct</artifactId>
 			<version>${mapstruct.version}</version>
 		</dependency>
 
+		<!-- Micrometer for metrics and monitoring -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-core</artifactId>
+			<version>${micrometer.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+			<version>${micrometer.version}</version>
+		</dependency>
+
+		<!-- JDBC Template for custom query optimization -->
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-jdbc</artifactId>
+		</dependency>
+
+		<!-- Hibernate performance optimization -->
+		<dependency>
+			<groupId>org.hibernate.orm</groupId>
+			<artifactId>hibernate-jcache</artifactId>
+		</dependency>
+
+		<!-- Query performance monitoring -->
+		<dependency>
+			<groupId>net.ttddyy</groupId>
+			<artifactId>datasource-proxy</artifactId>
+			<version>1.10</version>
+		</dependency>
+
+		<!-- JSON processing optimization -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.module</groupId>
+			<artifactId>jackson-module-jakarta-xmlbind-annotations</artifactId>
+		</dependency>
+
+		<!-- Database connection pool monitoring -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-jmx</artifactId>
+			<version>${micrometer.version}</version>
+		</dependency>
+
+		<!-- Async processing for better performance -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-aop</artifactId>
+		</dependency>
+
+		<!-- Testing dependencies -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Test containers for integration testing -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>postgresql</artifactId>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
@@ -129,6 +227,22 @@
 					</annotationProcessorPaths>
 				</configuration>
 			</plugin>
+
+			<!-- Flyway Plugin for Database Migrations -->
+			<plugin>
+				<groupId>org.flywaydb</groupId>
+				<artifactId>flyway-maven-plugin</artifactId>
+				<version>${flyway.version}</version>
+				<configuration>
+					<url>jdbc:postgresql://localhost:5432/FamilyTreeDB</url>
+					<user>postgres</user>
+					<password>12345</password>
+					<locations>
+						<location>classpath:db/migration</location>
+					</locations>
+				</configuration>
+			</plugin>
+
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>build-helper-maven-plugin</artifactId>
@@ -148,6 +262,7 @@
 					</execution>
 				</executions>
 			</plugin>
+
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
@@ -158,6 +273,16 @@
 							<artifactId>lombok</artifactId>
 						</exclude>
 					</excludes>
+				</configuration>
+			</plugin>
+
+			<!-- JMH Plugin for performance benchmarking -->
+			<plugin>
+				<groupId>org.openjdk.jmh</groupId>
+				<artifactId>jmh-maven-plugin</artifactId>
+				<version>1.37</version>
+				<configuration>
+					<skip>true</skip> <!-- Skip by default, enable when needed -->
 				</configuration>
 			</plugin>
 		</plugins>

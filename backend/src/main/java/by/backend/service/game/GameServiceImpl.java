@@ -30,6 +30,10 @@ public class GameServiceImpl implements GameService {
     private static final String ERROR_GENERATE_QUESTION_FAILED = "game.error.generate_question_failed";
     private static final String FEEDBACK_SAVE_ERROR_MSG = "Feedback could not be saved due to an internal error.";
     
+    // Önbellek için constants
+    private static final int CACHE_SIZE = 100;
+    private static final long CACHE_EXPIRY_MINUTES = 15;
+    
     private final HighScoreRepository highScoreRepository;
     private final MessageSource messageSource;
     private final GameProperties gameProperties;
@@ -37,48 +41,113 @@ public class GameServiceImpl implements GameService {
     private final EnhancedQuestionGenerationService enhancedQuestionGenerationService;
     private final AnswerValidatorService answerValidatorService;
     private final GameQuestionFeedbackRepository feedbackRepository;
+    
+    // Soru önbelleği
+    private final Map<String, GameQuestionDTO> questionCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Long> cacheTimestamps = new java.util.concurrent.ConcurrentHashMap<>();
 
     @Override
     @Transactional
     public InitialGameDataDTO startGame(String playerName, Difficulty difficulty, Locale locale) {
-        log.info("Starting game for player '{}' with difficulty '{}'", playerName, difficulty);
+        long startTime = System.currentTimeMillis();
+        log.info("Oyun başlatılıyor: Oyuncu='{}', Zorluk='{}'", playerName, difficulty);
 
-        // Önce gelişmiş soru üretim sistemini dene
-        GameQuestionDTO firstQuestion = enhancedQuestionGenerationService.generateEnhancedQuestion(difficulty, Collections.emptySet(), locale);
+        try {
+            // Gelişmiş soru üretim sistemini önce dene
+            GameQuestionDTO firstQuestion = generateQuestionWithCache(difficulty, locale);
 
-        // Eğer gelişmiş sistem başarısız olursa, standart sistemi kullan
-        if (firstQuestion == null) {
+            if (firstQuestion == null) {
+                log.warn("İlk soru üretilemedi, alternatif zorluk denenecek");
+                firstQuestion = findQuestionInOtherDifficulties(difficulty, locale);
+            }
+
+            if (firstQuestion == null) {
+                log.error("Hiçbir zorluğa uygun soru üretilemedi - Oyuncu: {}", playerName);
+                throw new GameException(getMessage(ERROR_GENERATE_QUESTION_FAILED, locale));
+            }
+
+            Difficulty actualDifficulty = firstQuestion.getDifficulty();
+            long gameDurationInSeconds = gameProperties.getGameDuration(actualDifficulty);
+            int totalQuestions = gameProperties.getQuestionsPerGame();
+
+            firstQuestion.setCorrectAnswer(null); // Güvenlik
+
+            long executionTime = System.currentTimeMillis() - startTime;
+            log.info("Oyun başarıyla başlatıldı: Oyuncu='{}', Zorluk='{}', Süre={}ms", 
+                    playerName, actualDifficulty, executionTime);
+
+            return InitialGameDataDTO.builder()
+                    .firstQuestion(firstQuestion)
+                    .gameDurationInSeconds((int) gameDurationInSeconds)
+                    .totalQuestions(totalQuestions)
+                    .playerName(playerName)
+                    .difficulty(actualDifficulty)
+                    .build();
+                    
+        } catch (Exception e) {
+            log.error("Oyun başlatma hatası: Oyuncu='{}', Zorluk='{}'", playerName, difficulty, e);
+            throw new GameException("Oyun başlatılamadı: " + e.getMessage());
+        }
+    }
+
+    private GameQuestionDTO generateQuestionWithCache(Difficulty difficulty, Locale locale) {
+        String cacheKey = difficulty.name() + "_" + locale.toLanguageTag();
+        
+        // Önbellekte kontrol et
+        if (isValidCacheEntry(cacheKey)) {
+            log.debug("Önbellekten soru alındı: {}", cacheKey);
+            return questionCache.get(cacheKey);
+        }
+        
+        // Yeni soru üret
+        GameQuestionDTO question = enhancedQuestionGenerationService.generateEnhancedQuestion(
+                difficulty, Collections.emptySet(), locale);
+        
+        if (question == null) {
             log.warn("Gelişmiş soru üretimi başarısız, standart sistem deneniyor...");
-            firstQuestion = questionGenerationService.generateQuestion(difficulty, Collections.emptySet(), locale);
-        }
-
-        if (firstQuestion == null) {
-            log.warn("startGame: {} zorluğunda soru üretilemedi, bir alt/üst zorluk deneniyor.", difficulty);
-            firstQuestion = findQuestionInOtherDifficulties(difficulty, locale);
+            question = questionGenerationService.generateQuestion(difficulty, Collections.emptySet(), locale);
         }
         
-        if (firstQuestion == null) {
-             log.error("startGame: İlk soru üretilemedi. Oyuncu: {}, İstenen Zorluk: {}", playerName, difficulty);
-             throw new GameException(getMessage(ERROR_GENERATE_QUESTION_FAILED, locale));
+        // Önbelleğe kaydet
+        if (question != null) {
+            cacheQuestion(cacheKey, question);
         }
-
-        Difficulty actualDifficulty = firstQuestion.getDifficulty();
-        log.info("Oyun {} zorluğunda başlatıldı (istenen: {})", actualDifficulty, difficulty);
-
-        long gameDurationInSeconds = gameProperties.getGameDuration(actualDifficulty);
-        int totalQuestions = gameProperties.getQuestionsPerGame();
-
-        log.info("New game started for player '{}', first question: {}", playerName, firstQuestion.getId());
         
-        firstQuestion.setCorrectAnswer(null);
-
-        return InitialGameDataDTO.builder()
-                .firstQuestion(firstQuestion)
-                .gameDurationInSeconds((int) gameDurationInSeconds)
-                .totalQuestions(totalQuestions)
-                .playerName(playerName)
-                .difficulty(actualDifficulty)
-                .build();
+        return question;
+    }
+    
+    private boolean isValidCacheEntry(String cacheKey) {
+        if (!questionCache.containsKey(cacheKey) || !cacheTimestamps.containsKey(cacheKey)) {
+            return false;
+        }
+        
+        long timestamp = cacheTimestamps.get(cacheKey);
+        long currentTime = System.currentTimeMillis();
+        long ageMinutes = (currentTime - timestamp) / (1000 * 60);
+        
+        return ageMinutes < CACHE_EXPIRY_MINUTES;
+    }
+    
+    private void cacheQuestion(String cacheKey, GameQuestionDTO question) {
+        // Önbellek boyutunu kontrol et
+        if (questionCache.size() >= CACHE_SIZE) {
+            clearOldestCacheEntry();
+        }
+        
+        questionCache.put(cacheKey, question);
+        cacheTimestamps.put(cacheKey, System.currentTimeMillis());
+    }
+    
+    private void clearOldestCacheEntry() {
+        String oldestKey = cacheTimestamps.entrySet().stream()
+                .min(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
+                
+        if (oldestKey != null) {
+            questionCache.remove(oldestKey);
+            cacheTimestamps.remove(oldestKey);
+        }
     }
 
     private GameQuestionDTO findQuestionInOtherDifficulties(Difficulty originalDifficulty, Locale locale) {

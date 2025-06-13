@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { subscribeWithSelector } from 'zustand/middleware';
 import { devtools, persist } from 'zustand/middleware';
 import { 
   GameQuestion, 
@@ -6,175 +7,274 @@ import {
   Difficulty, 
   AnswerResponse, 
   RelationshipStep,
-  PersonInfo 
+  PersonInfo,
+  HighScores
 } from '../types/game';
 
-export interface GameState {
-  // Current game state
+interface GameState {
+  // Core game data
   currentQuestion: GameQuestion | null;
-  selectedAnswer: string;
-  showResult: boolean;
-  isCorrect: boolean;
-  isLoading: boolean;
-  error: string | null;
-  
-  // UI state
-  showHint: boolean;
-  showScores: boolean;
-  isPathVisible: boolean;
+  score: number;
+  streak: number;
+  maxStreak: number;
+  questionsAnswered: number;
+  correctAnswers: number;
+  difficulty: Difficulty;
+  playerName: string;
   
   // Game flow
-  gameStarted: boolean;
-  gameOver: boolean;
-  finalResult: GameResult | null;
-  lastAnswerResponse: AnswerResponse | null;
-  currentRelationshipPath: RelationshipStep[] | undefined;
+  isGameActive: boolean;
+  isLoading: boolean;
+  error: string | null;
+  gameStartTime: number | null;
   
-  // Player preferences
-  playerName: string;
-  selectedDifficulty: Difficulty;
-  language: string;
+  // High scores
+  highScores: HighScores;
+  
+  // Performance tracking
+  performanceMetrics: {
+    lastQuestionTime: number;
+    averageResponseTime: number;
+    fastestResponse: number;
+    slowestResponse: number;
+    totalResponseTime: number;
+  };
+  
+  // UI state
+  showHints: boolean;
+  selectedLanguage: string;
 }
 
-export interface GameActions {
-  // Game flow actions
-  startGame: () => void;
+interface GameActions {
+  // Core actions
   setCurrentQuestion: (question: GameQuestion | null) => void;
-  selectAnswer: (answer: string) => void;
-  nextQuestion: () => void;
-  restartGame: () => void;
+  setScore: (score: number) => void;
+  setStreak: (streak: number) => void;
+  setMaxStreak: (maxStreak: number) => void;
+  setQuestionsAnswered: (count: number) => void;
+  setCorrectAnswers: (count: number) => void;
+  setDifficulty: (difficulty: Difficulty) => void;
+  setPlayerName: (name: string) => void;
+  
+  // Game flow actions
+  setIsGameActive: (active: boolean) => void;
+  setLoading: (loading: boolean) => void;
+  setError: (error: string | null) => void;
+  startGame: (playerName: string, difficulty: Difficulty) => void;
+  endGame: () => void;
+  
+  // High scores
+  setHighScores: (scores: HighScores) => void;
+  
+  // Performance tracking
+  recordResponseTime: (responseTime: number) => void;
+  resetPerformanceMetrics: () => void;
   
   // UI actions
-  setShowResult: (show: boolean) => void;
-  setShowHint: (show: boolean) => void;
-  setShowScores: (show: boolean) => void;
-  setPathVisible: (visible: boolean) => void;
-  setError: (error: string | null) => void;
-  setLoading: (loading: boolean) => void;
+  toggleHints: () => void;
+  setLanguage: (lang: string) => void;
   
-  // Player preferences
-  setPlayerName: (name: string) => void;
-  setDifficulty: (difficulty: Difficulty) => void;
-  setLanguage: (language: string) => void;
-  
-  // Advanced actions
-  setLastAnswerResponse: (response: AnswerResponse | null) => void;
-  setCurrentRelationshipPath: (path: RelationshipStep[] | undefined) => void;
-  setFinalResult: (result: GameResult | null) => void;
+  // Utility actions
+  resetGame: () => void;
+  getGameStats: () => GameStats;
+}
+
+interface GameStats {
+  accuracy: number;
+  averageResponseTime: number;
+  gameProgress: number;
+  performanceRating: 'Excellent' | 'Good' | 'Average' | 'Needs Improvement';
 }
 
 type GameStore = GameState & GameActions;
 
 const initialState: GameState = {
   currentQuestion: null,
-  selectedAnswer: '',
-  showResult: false,
-  isCorrect: false,
+  score: 0,
+  streak: 0,
+  maxStreak: 0,
+  questionsAnswered: 0,
+  correctAnswers: 0,
+  difficulty: Difficulty.MEDIUM,
+  playerName: '',
+  
+  isGameActive: false,
   isLoading: false,
   error: null,
-  showHint: false,
-  showScores: false,
-  isPathVisible: false,
-  gameStarted: false,
-  gameOver: false,
-  finalResult: null,
-  lastAnswerResponse: null,
-  currentRelationshipPath: undefined,
-  playerName: localStorage.getItem('playerName') || '',
-  selectedDifficulty: Difficulty.MEDIUM,
-  language: localStorage.getItem('i18nextLng') || 'tr',
+  gameStartTime: null,
+  
+  highScores: {
+    [Difficulty.EASY]: [],
+    [Difficulty.MEDIUM]: [],
+    [Difficulty.HARD]: [],
+  },
+  
+  performanceMetrics: {
+    lastQuestionTime: 0,
+    averageResponseTime: 0,
+    fastestResponse: Number.MAX_VALUE,
+    slowestResponse: 0,
+    totalResponseTime: 0,
+  },
+  
+  showHints: false,
+  selectedLanguage: 'tr',
 };
 
 export const useGameStore = create<GameStore>()(
   devtools(
     persist(
-      (set, get) => ({
+      subscribeWithSelector((set, get) => ({
         ...initialState,
         
+        // Core actions
+        setCurrentQuestion: (question) => set({ currentQuestion: question }),
+        setScore: (score) => set({ score }),
+        setStreak: (streak) => {
+          const currentMaxStreak = get().maxStreak;
+          set({ 
+            streak,
+            maxStreak: Math.max(streak, currentMaxStreak)
+          });
+        },
+        setMaxStreak: (maxStreak) => set({ maxStreak }),
+        setQuestionsAnswered: (count) => set({ questionsAnswered: count }),
+        setCorrectAnswers: (count) => set({ correctAnswers: count }),
+        setDifficulty: (difficulty) => set({ difficulty }),
+        setPlayerName: (name) => set({ playerName: name.trim() }),
+        
         // Game flow actions
-        startGame: () => {
+        setIsGameActive: (active) => set({ isGameActive: active }),
+        setLoading: (loading) => set({ isLoading: loading }),
+        setError: (error) => set({ error }),
+        
+        startGame: (playerName, difficulty) => {
           set({ 
-            gameStarted: true, 
-            gameOver: false, 
+            playerName: playerName.trim(),
+            difficulty,
+            isGameActive: true,
+            gameStartTime: Date.now(),
+            score: 0,
+            streak: 0,
+            maxStreak: 0,
+            questionsAnswered: 0,
+            correctAnswers: 0,
             error: null,
-            showResult: false,
-            selectedAnswer: '',
-            currentQuestion: null
+            performanceMetrics: {
+              lastQuestionTime: Date.now(),
+              averageResponseTime: 0,
+              fastestResponse: Number.MAX_VALUE,
+              slowestResponse: 0,
+              totalResponseTime: 0,
+            },
           });
         },
         
-        setCurrentQuestion: (question: GameQuestion | null) => {
-          set({ currentQuestion: question });
-        },
-        
-        selectAnswer: (answer: string) => {
-          set({ selectedAnswer: answer });
-        },
-        
-        nextQuestion: () => {
-          set({ 
-            showResult: false, 
-            selectedAnswer: '', 
-            lastAnswerResponse: null,
-            currentRelationshipPath: undefined,
-            showHint: false 
-          });
-        },
-        
-        restartGame: () => {
+        endGame: () => {
           set({
-            ...initialState,
-            playerName: get().playerName,
-            selectedDifficulty: get().selectedDifficulty,
-            language: get().language,
+            isGameActive: false,
+            currentQuestion: null,
+            gameStartTime: null,
+          });
+        },
+        
+        // High scores
+        setHighScores: (scores) => set({ highScores: scores }),
+        
+        // Performance tracking
+        recordResponseTime: (responseTime) => {
+          const metrics = get().performanceMetrics;
+          const questionsAnswered = get().questionsAnswered;
+          
+          const newTotalTime = metrics.totalResponseTime + responseTime;
+          const newAverageTime = questionsAnswered > 0 ? newTotalTime / questionsAnswered : 0;
+          
+          set({ 
+            performanceMetrics: {
+              lastQuestionTime: Date.now(),
+              averageResponseTime: newAverageTime,
+              fastestResponse: Math.min(metrics.fastestResponse, responseTime),
+              slowestResponse: Math.max(metrics.slowestResponse, responseTime),
+              totalResponseTime: newTotalTime,
+            },
+          });
+        },
+        
+        resetPerformanceMetrics: () => {
+          set({
+            performanceMetrics: {
+              lastQuestionTime: 0,
+              averageResponseTime: 0,
+              fastestResponse: Number.MAX_VALUE,
+              slowestResponse: 0,
+              totalResponseTime: 0,
+            },
           });
         },
         
         // UI actions
-        setShowResult: (show: boolean) => set({ showResult: show }),
-        setShowHint: (show: boolean) => set({ showHint: show }),
-        setShowScores: (show: boolean) => set({ showScores: show }),
-        setPathVisible: (visible: boolean) => set({ isPathVisible: visible }),
-        setError: (error: string | null) => set({ error }),
-        setLoading: (loading: boolean) => set({ isLoading: loading }),
+        toggleHints: () => set((state) => ({ showHints: !state.showHints })),
+        setLanguage: (lang) => set({ selectedLanguage: lang }),
         
-        // Player preferences
-        setPlayerName: (name: string) => {
-          localStorage.setItem('playerName', name);
-          set({ playerName: name });
+        // Utility actions
+        resetGame: () => {
+          set({
+            ...initialState,
+            selectedLanguage: get().selectedLanguage, // Preserve language preference
+            highScores: get().highScores, // Preserve high scores
+          });
         },
         
-        setDifficulty: (difficulty: Difficulty) => {
-          set({ selectedDifficulty: difficulty });
+        getGameStats: () => {
+          const state = get();
+          const accuracy = state.questionsAnswered > 0 
+            ? Math.round((state.correctAnswers / state.questionsAnswered) * 100) 
+            : 0;
+          
+          const gameProgress = state.questionsAnswered / 10; // Assuming 10 questions per game
+          
+          let performanceRating: GameStats['performanceRating'] = 'Needs Improvement';
+          if (accuracy >= 90 && state.performanceMetrics.averageResponseTime < 10) {
+            performanceRating = 'Excellent';
+          } else if (accuracy >= 75 && state.performanceMetrics.averageResponseTime < 15) {
+            performanceRating = 'Good';
+          } else if (accuracy >= 60) {
+            performanceRating = 'Average';
+          }
+          
+          return {
+            accuracy,
+            averageResponseTime: state.performanceMetrics.averageResponseTime,
+            gameProgress,
+            performanceRating,
+          };
         },
-        
-        setLanguage: (language: string) => {
-          localStorage.setItem('i18nextLng', language);
-          set({ language });
-        },
-        
-        // Advanced actions
-        setLastAnswerResponse: (response: AnswerResponse | null) => {
-          set({ lastAnswerResponse: response });
-        },
-        
-        setCurrentRelationshipPath: (path: RelationshipStep[] | undefined) => {
-          set({ currentRelationshipPath: path });
-        },
-        
-        setFinalResult: (result: GameResult | null) => {
-          set({ finalResult: result });
-        },
-      }),
+      })),
       {
-        name: 'family-tree-game-store',
+        name: 'family-game-store',
         partialize: (state) => ({
-          playerName: state.playerName,
-          selectedDifficulty: state.selectedDifficulty,
-          language: state.language,
+          highScores: state.highScores,
+          selectedLanguage: state.selectedLanguage,
+          showHints: state.showHints,
         }),
       }
     ),
-    { name: 'GameStore' }
+    {
+      name: 'family-game-store',
+    }
   )
-); 
+);
+
+// Selectors for optimized component updates
+export const selectGameState = (state: GameStore) => ({
+  currentQuestion: state.currentQuestion,
+  score: state.score,
+  streak: state.streak,
+  isGameActive: state.isGameActive,
+  isLoading: state.isLoading,
+  error: state.error,
+});
+
+export const selectGameStats = (state: GameStore) => state.getGameStats();
+
+export const selectPerformanceMetrics = (state: GameStore) => state.performanceMetrics; 
