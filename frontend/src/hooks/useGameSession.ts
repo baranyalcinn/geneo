@@ -219,7 +219,7 @@ export const useGameSession = () => {
       setCurrentStreak(0);
       setMaxStreak(0);
       setCorrectAnswers(0);
-      setAskedQuestions([initialData.firstQuestion.id]);
+
       
       startGameTimer();
       
@@ -261,20 +261,8 @@ export const useGameSession = () => {
       setCurrentStreak(prev => prev + 1);
       setMaxStreak(prev => Math.max(prev, currentStreak + 1));
       setCorrectAnswers(prev => prev + 1);
-      
-      const messages = [
-        '🎉 Doğru!',
-        '✅ Harika!',
-        '🌟 Mükemmel!',
-        '👏 Süper!',
-        '🔥 Bravo!'
-      ];
-      toast.success(messages[Math.floor(Math.random() * messages.length)], {
-        duration: 2000
-      });
     } else {
       setCurrentStreak(0);
-      toast.error('❌ Yanlış cevap!', { duration: 2000 });
     }
     
     // Soru sayısını artır

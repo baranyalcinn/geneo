@@ -8,10 +8,10 @@ import by.backend.model.dto.RecordScoreRequestDTO;
 import by.backend.model.dto.GameResultDTO;
 import by.backend.model.dto.StartGameRequestDTO;
 import by.backend.model.dto.GameQuestionDTO;
-import by.backend.model.dto.GameAnalysisDTO;
+
 import by.backend.model.enums.Difficulty;
 import by.backend.service.game.GameService;
-import by.backend.service.game.GameAnalysisService;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -71,11 +71,9 @@ public class GameController {
     private static final String NOT_AVAILABLE = "N/A";
     
     private final GameService gameService;
-    final GameAnalysisService gameAnalysisService;
 
-    public GameController(GameService gameService, GameAnalysisService gameAnalysisService) {
+    public GameController(GameService gameService) {
         this.gameService = gameService;
-        this.gameAnalysisService = gameAnalysisService;
     }
 
     @PostMapping("/start")

@@ -34,6 +34,7 @@ public class GameServiceImpl implements GameService {
     private final MessageSource messageSource;
     private final GameProperties gameProperties;
     private final QuestionGenerationService questionGenerationService;
+    private final EnhancedQuestionGenerationService enhancedQuestionGenerationService;
     private final AnswerValidatorService answerValidatorService;
     private final GameQuestionFeedbackRepository feedbackRepository;
 
@@ -42,7 +43,14 @@ public class GameServiceImpl implements GameService {
     public InitialGameDataDTO startGame(String playerName, Difficulty difficulty, Locale locale) {
         log.info("Starting game for player '{}' with difficulty '{}'", playerName, difficulty);
 
-        GameQuestionDTO firstQuestion = questionGenerationService.generateQuestion(difficulty, Collections.emptySet(), locale);
+        // Önce gelişmiş soru üretim sistemini dene
+        GameQuestionDTO firstQuestion = enhancedQuestionGenerationService.generateEnhancedQuestion(difficulty, Collections.emptySet(), locale);
+
+        // Eğer gelişmiş sistem başarısız olursa, standart sistemi kullan
+        if (firstQuestion == null) {
+            log.warn("Gelişmiş soru üretimi başarısız, standart sistem deneniyor...");
+            firstQuestion = questionGenerationService.generateQuestion(difficulty, Collections.emptySet(), locale);
+        }
 
         if (firstQuestion == null) {
             log.warn("startGame: {} zorluğunda soru üretilemedi, bir alt/üst zorluk deneniyor.", difficulty);
@@ -105,12 +113,21 @@ public class GameServiceImpl implements GameService {
             pointsEarned = calculateSimplePoints(answerDetails.getDifficulty(), answerDetails.getTimeTakenInSeconds());
         }
 
-        // Yeni soru üret (filtreleme olmadan, random)
-        GameQuestionDTO nextQuestion = questionGenerationService.generateQuestion(
+        // Yeni soru üret - önce gelişmiş sistemi dene
+        GameQuestionDTO nextQuestion = enhancedQuestionGenerationService.generateEnhancedQuestion(
             answerDetails.getDifficulty(), 
             Collections.emptySet(), 
             locale
         );
+        
+        // Eğer başarısız olursa standart sistemi kullan
+        if (nextQuestion == null) {
+            nextQuestion = questionGenerationService.generateQuestion(
+                answerDetails.getDifficulty(), 
+                Collections.emptySet(), 
+                locale
+            );
+        }
         
         // 10 soru sonunda oyunu bitir
         boolean gameOver = (nextQuestion == null) || (answerDetails.getQuestionsAnswered() >= gameProperties.getQuestionsPerGame());
@@ -187,19 +204,29 @@ public class GameServiceImpl implements GameService {
 
     @Override
     public Map<Difficulty, List<GameResultDTO>> getHighScores() {
-        List<HighScore> allHighScores = highScoreRepository.findTop50ByOrderByScoreDesc();
-        return allHighScores.stream()
-                .map(this::convertToGameResultDTO)
-                .collect(Collectors.groupingBy(
-                        GameResultDTO::getDifficulty,
-                        () -> new EnumMap<>(Difficulty.class),
-                        Collectors.toList()
-                ));
+        Map<Difficulty, List<GameResultDTO>> highScoresByDifficulty = new EnumMap<>(Difficulty.class);
+        
+        for (Difficulty difficulty : Difficulty.values()) {
+            List<HighScore> difficultyScores = highScoreRepository.findTop10ByDifficultyOrderByScoreDesc(difficulty);
+            List<GameResultDTO> resultDTOs = difficultyScores.stream()
+                    .map(this::convertToGameResultDTO)
+                    .collect(Collectors.toList());
+            highScoresByDifficulty.put(difficulty, resultDTOs);
+        }
+        
+        return highScoresByDifficulty;
     }
 
     @Override
     public GameQuestionDTO generateQuestion(Difficulty difficulty, Locale locale) {
-        GameQuestionDTO question = questionGenerationService.generateQuestion(difficulty, Collections.emptySet(), locale);
+        // Önce gelişmiş sistemi dene
+        GameQuestionDTO question = enhancedQuestionGenerationService.generateEnhancedQuestion(difficulty, Collections.emptySet(), locale);
+        
+        // Eğer başarısız olursa standart sistemi kullan
+        if (question == null) {
+            question = questionGenerationService.generateQuestion(difficulty, Collections.emptySet(), locale);
+        }
+        
         if (question == null) {
             throw new GameException(getMessage(ERROR_GENERATE_QUESTION_FAILED, locale));
         }

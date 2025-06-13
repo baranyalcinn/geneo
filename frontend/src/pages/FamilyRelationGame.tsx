@@ -197,7 +197,6 @@ const PersonInfoDisplay = ({ personName, personInfo, isTarget = false }: PersonI
 type ExtendedGameAnswer = Partial<GameAnswer> & {
   playerName: string;
   difficulty: Difficulty;
-  askedQuestionSignaturesInThisGame: string[];
   currentScore: number;
   currentStreak: number;
   timeTakenInSeconds: number;
@@ -427,42 +426,25 @@ const FamilyRelationGame = () => {
   };
 
   const checkAnswer = async (answer: string) => {
-    if (!currentQuestion) {
-      setError(t('errors.no_current_question'));
-      console.error("checkAnswer, mevcut bir soru olmadan çağrıldı.");
-      return;
-    }
+    if (!currentQuestion || isLoading || selectedAnswer || !canAnswer) return;
 
-    if (!canAnswer) {
-      console.log("Cevap verilemez durumda");
-      return;
-    }
-
-    // Session kontrolü ekle
-    if (!sessionPlayerName || gameOver) {
-      console.warn("Session bulunamadı veya oyun bitti, cevap gönderilmiyor.");
-      setError(t('errors.session_expired'));
-      return;
-    }
-    
+    setLoading(true);
     setSelectedAnswer(answer);
-    
+
     try {
-      setLoading(true);
-      
       // Backend'e cevabı gönder
       const gameAnswer = {
-        sessionId: sessionPlayerName,
         questionId: currentQuestion.id,
         answer: answer,
-        timeTakenInSeconds: Math.max(1, 20 - questionTimeLeft), // Minimum 1 saniye
+        timeTakenInSeconds: Math.max(1, 20 - questionTimeLeft),
         playerName: sessionPlayerName,
         difficulty: sessionDifficulty,
-        askedQuestionSignaturesInThisGame: askedQuestions,
         currentScore: currentScore,
-        currentStreak: currentStreak
+        currentStreak: currentStreak,
+        questionsAnswered: questionCount,
+        correctAnswersCount: correctAnswers
       };
-      
+
       console.log("Cevap gönderiliyor:", gameAnswer);
       
       const response = await submitAnswer(gameAnswer, i18n.language);
@@ -470,38 +452,6 @@ const FamilyRelationGame = () => {
       setIsCorrect(response.correctAnswer);
       setLastAnswerResponse(response);
       setShowResult(true);
-      
-      // useGameSession'dan answerQuestion çağır ve sonraki soruyu dahil et
-      answerQuestion(answer, response.correctAnswer, response.pointsEarned);
-      
-      // Sonraki soruyu ayarla
-      if (response.nextQuestion) {
-        setAskedQuestions(prev => [...prev, response.nextQuestion!.id]);
-      }
-      
-      // Relationship path'i güncelle
-      if (response.relationshipPath) {
-        setCurrentRelationshipPath(response.relationshipPath);
-      }
-      
-      // Eğer oyun bittiyse final result'ı ayarla
-      if (response.gameOver) {
-        console.log("Oyun bitti, final result ayarlanıyor");
-        setFinalResult({
-          playerName: sessionPlayerName,
-          score: response.updatedScore,
-          difficulty: sessionDifficulty,
-          correctAnswers: correctAnswers + (response.correctAnswer ? 1 : 0),
-          totalQuestions: totalQuestions,
-          maxStreak: maxStreak,
-          date: new Date().toISOString().split('T')[0]
-        });
-        
-        // Oyun bittiğinde session'ı temizle
-        setTimeout(() => {
-          endGameSession('completed');
-        }, 3000);
-      }
       
     } catch (error: any) {
       console.error('Cevap kontrol hatası:', error);
@@ -520,6 +470,59 @@ const FamilyRelationGame = () => {
       setLoading(false);
     }
   };
+
+  // Cevap sonrası state güncellemelerini ayrı useEffect'te yap
+  useEffect(() => {
+    if (lastAnswerResponse && selectedAnswer) {
+      // useGameSession'dan answerQuestion çağır
+      answerQuestion(selectedAnswer, lastAnswerResponse.correctAnswer, lastAnswerResponse.pointsEarned);
+      
+      // Toast mesajlarını göster
+      if (lastAnswerResponse.correctAnswer) {
+        const messages = [
+          '🎉 Doğru!',
+          '✅ Harika!',
+          '🌟 Mükemmel!',
+          '👏 Süper!',
+          '🔥 Bravo!'
+        ];
+        toast.success(messages[Math.floor(Math.random() * messages.length)], {
+          duration: 2000
+        });
+      } else {
+        toast.error('❌ Yanlış cevap!', { duration: 2000 });
+      }
+      
+      // Sonraki soruyu ayarla
+      if (lastAnswerResponse.nextQuestion) {
+        setCurrentQuestion(lastAnswerResponse.nextQuestion);
+      }
+      
+      // Relationship path'i güncelle
+      if (lastAnswerResponse.relationshipPath) {
+        setCurrentRelationshipPath(lastAnswerResponse.relationshipPath);
+      }
+      
+      // Eğer oyun bittiyse final result'ı ayarla
+      if (lastAnswerResponse.gameOver) {
+        console.log("Oyun bitti, final result ayarlanıyor");
+        setFinalResult({
+          playerName: sessionPlayerName,
+          score: lastAnswerResponse.updatedScore,
+          difficulty: sessionDifficulty,
+          correctAnswers: correctAnswers + (lastAnswerResponse.correctAnswer ? 1 : 0),
+          totalQuestions: totalQuestions,
+          maxStreak: maxStreak,
+          date: new Date().toISOString().split('T')[0]
+        });
+        
+        // Oyun bittiğinde session'ı temizle
+        setTimeout(() => {
+          endGameSession('completed');
+        }, 3000);
+      }
+    }
+  }, [lastAnswerResponse, selectedAnswer, answerQuestion, sessionPlayerName, sessionDifficulty, correctAnswers, totalQuestions, maxStreak, endGameSession]);
 
   const handleFeedback = async (feedback: 'good' | 'bad') => {
     if (!currentQuestion || !lastAnswerResponse) return;

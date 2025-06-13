@@ -57,19 +57,15 @@ export interface InitialGameData {
   totalQuestions: number;
 }
 
-
-
 export interface GameAnswer {
   questionId: string;
   answer: string;
-  sessionId: string;
   timeTakenInSeconds?: number;
   difficulty?: Difficulty;
   playerName?: string;
-  askedQuestionSignaturesInThisGame?: string[];
   currentScore?: number;
   currentStreak?: number;
-  gameQuestionCount?: number;
+  questionsAnswered?: number;
   correctAnswersCount?: number;
 }
 
