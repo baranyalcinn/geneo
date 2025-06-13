@@ -40,11 +40,21 @@ export interface RelationshipStep {
  * @param lang The selected language code (e.g., 'tr', 'en').
  * @returns A promise that resolves to the initial game data.
  */
-export const startGame = async (playerName: string, difficulty: Difficulty, lang: string): Promise<InitialGameData> => {
+export const startGame = async (playerName: string, difficulty: Difficulty, lang: string = 'tr'): Promise<InitialGameData> => {
   const requestBody: StartGameRequest = { playerName, difficulty };
   return apiService.post<InitialGameData>('game/start', requestBody, { 
     params: { lang } 
   });
+};
+
+/**
+ * Starts a new game session without language parameter (uses default 'tr').
+ * @param playerName The name of the player.
+ * @param difficulty The selected game difficulty.
+ * @returns A promise that resolves to the initial game data.
+ */
+export const startGameSimple = async (playerName: string, difficulty: Difficulty): Promise<InitialGameData> => {
+  return startGame(playerName, difficulty, 'tr');
 };
 
 /**

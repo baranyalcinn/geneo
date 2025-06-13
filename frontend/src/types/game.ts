@@ -105,6 +105,7 @@ export interface GameResult {
   correctAnswers: number;
   totalQuestions: number;
   maxStreak: number;
+  accuracy?: number;
   date?: string;
   gameOver?: boolean;
   badges?: string[];

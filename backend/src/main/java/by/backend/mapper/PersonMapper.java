@@ -10,6 +10,7 @@ import org.mapstruct.Mappings;
 import org.mapstruct.MappingTarget;
 import org.mapstruct.Named;
 import by.backend.model.enums.Gender;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Optional;
@@ -18,6 +19,7 @@ import java.util.Optional;
  * Kişi verilerinin entity ve DTO dönüşümlerini sağlayan mapper.
  */
 @Mapper(componentModel = "spring")
+@Component
 public interface PersonMapper {
 
     /**

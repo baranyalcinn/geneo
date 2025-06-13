@@ -840,33 +840,30 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
     }
     
     private boolean isEasyLevelRelationship(String messageKey, String category) {
-        // EASY seviyeyi daha geniş tutarak karmaşık ilişkilerin de sorulabilmesini sağlayalım
+        // EASY seviyeyi daha geniş tutarak tüm temel ilişkileri kabul edelim
         return CATEGORY_DIRECT.equals(category) || 
                CATEGORY_SIBLINGS.equals(category) ||
-               messageKey.contains("spouse") ||
                CATEGORY_GRANDPARENT.equals(category) || 
-               CATEGORY_GRANDCHILD.equals(category);
-    }
-    
-    private boolean isMediumLevelRelationship(String messageKey, String category) {
-        return isEasyLevelRelationship(messageKey, category) ||
+               CATEGORY_GRANDCHILD.equals(category) ||
                CATEGORY_AUNT_UNCLE.equals(category) || 
                CATEGORY_NEPHEW_NIECE.equals(category) ||
-               (CATEGORY_COUSIN.equals(category) && !messageKey.contains("second") && !messageKey.contains("third")) ||
-               CATEGORY_INLAW.equals(category) ||
-               CATEGORY_STEP.equals(category);
-    }
-
-    private boolean isHardLevelRelationship(String messageKey, String category) {
-        return isMediumLevelRelationship(messageKey, category) ||
-               messageKey.contains("great") ||
-               messageKey.contains("second") ||
-               messageKey.contains("third") ||
-               messageKey.contains("removed") ||
+               messageKey.contains("spouse") ||
+               CATEGORY_COUSIN.equals(category) ||
                CATEGORY_INLAW.equals(category) ||
                CATEGORY_STEP.equals(category) ||
                CATEGORY_DISTANT.equals(category) ||
-               hasTurkishComplexTerms(messageKey);
+               CATEGORY_OTHER.equals(category) ||
+               true; // Geçici olarak tüm ilişkileri kabul et
+    }
+    
+    private boolean isMediumLevelRelationship(String messageKey, String category) {
+        // MEDIUM seviye için de tüm ilişkileri kabul et
+        return true;
+    }
+
+    private boolean isHardLevelRelationship(String messageKey, String category) {
+        // HARD seviye için de tüm ilişkileri kabul et
+        return true;
     }
     
     /**

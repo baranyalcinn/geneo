@@ -210,33 +210,38 @@ const FamilyRelationGame = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { t, i18n } = useTranslation();
-  const { 
-    startGame: startGameSessionApi, 
-    currentSession, 
-    gameStarted: isGameSessionActive 
-  } = useGameSession();
-  
+  const gameSession = useGameSession();
   const {
+    startGame: startGameSession,
+    currentSession,
+    isGameActive,
     currentQuestion,
     setCurrentQuestion,
+    answerQuestion,
+    endGameSession,
+    error,
+    gameStarted,
+    gameOver,
+    questionCount,
+    totalQuestions: totalQuestionsFromSession,
+    timeLeft,
+    questionTimeLeft,
+    canAnswer,
+    getProgress,
+    getTimeProgress,
+    getQuestionTimeProgress,
+    getAccuracy
+  } = gameSession;
+
+  const {
     isLoading,
     setLoading,
-    error,
     setError
   } = useGameStore();
   
-  const [gameStarted, setGameStarted] = useState(false);
-  const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState('');
   const [isCorrect, setIsCorrect] = useState(false);
-  const [gameOver, setGameOver] = useState(false);
-  const [correctAnswers, setCorrectAnswers] = useState(0);
-  const [totalQuestions, setTotalQuestions] = useState(0);
-  const [currentStreak, setCurrentStreak] = useState(0);
-  const [maxStreak, setMaxStreak] = useState(0);
-  const [timeRemaining, setTimeRemaining] = useState(30);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [lastAnswerResponse, setLastAnswerResponse] = useState<AnswerResponse | null>(null);
   const [askedQuestions, setAskedQuestions] = useState<string[]>([]);
   const [highScores, setHighScores] = useState<HighScores | null>(null);
@@ -248,8 +253,21 @@ const FamilyRelationGame = () => {
   const [showHint, setShowHint] = useState(false);
   const [currentRelationshipPath, setCurrentRelationshipPath] = useState<RelationshipStep[] | undefined>();
   const [feedbackSent, setFeedbackSent] = useState(false);
+  const [totalQuestions, setTotalQuestions] = useState(10);
+  const [score, setScore] = useState(0);
+  const [correctAnswers, setCorrectAnswers] = useState(0);
+  const [maxStreak, setMaxStreak] = useState(0);
 
   const gameAreaRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const resetTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
   const relationshipPathForGraph = useMemo(() => {
     console.log('🔍 Debug relationshipPathForGraph:', {
       showResult,
@@ -342,45 +360,32 @@ const FamilyRelationGame = () => {
     fetchHighScores();
   }, [fetchHighScores]);
 
-  const resetTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    setTimeRemaining(currentQuestion?.timeLimit || 30);
-  };
-  
-  useEffect(() => {
-    if (gameStarted && !gameOver && !showResult && timeRemaining > 0) {
-      timerRef.current = setInterval(() => {
-        setTimeRemaining((prev) => {
-          if (prev <= 1) {
-            handleTimerEnd();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else if (timeRemaining === 0 && gameStarted && !gameOver && !showResult) {
-      checkAnswer(''); // Süre dolunca boş cevapla kontrol et
-    }
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
+  // Timer artık useGameSession tarafından yönetiliyor
+
+  const fetchNextQuestion = useCallback(async () => {
+    if (gameOver) return;
+    
+    try {
+      setLoading(true);
+      const nextQuestionData = await getQuestion(currentDifficulty, i18n.language);
+      
+      if (nextQuestionData) {
+        setCurrentQuestion(nextQuestionData);
+        setShowResult(false);
+        setSelectedAnswer('');
+        setIsCorrect(false);
+        setLastAnswerResponse(null);
+        setFeedbackSent(false);
+      } else {
+        setError('Sonraki soru alınamadı');
       }
-    };
-  }, [gameStarted, gameOver, showResult, timeRemaining]);
-
-
-  const handleTimerEnd = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
+    } catch (error: any) {
+      console.error('Sonraki soru alınamadı:', error);
+      setError(error.message || 'Sonraki soru yüklenemedi');
+    } finally {
+      setLoading(false);
     }
-    if (currentQuestion && !showResult) {
-      checkAnswer('');
-    }
-  };
+  }, [gameOver, currentDifficulty, i18n.language, setCurrentQuestion, setLoading, setError]);
 
   const handleNextQuestion = (nextQuestion?: GameQuestion, result?: AnswerResponse) => {
     setShowResult(false);
@@ -402,35 +407,6 @@ const FamilyRelationGame = () => {
         fetchNextQuestion();
     }
   };
-  
-  const fetchNextQuestion = async () => {
-    if (gameOver) return;
-    setLoading(true);
-    setError(null);
-    setShowResult(false);
-    setSelectedAnswer('');
-    setLastAnswerResponse(null);
-    setCurrentRelationshipPath(undefined);
-    setShowHint(false);
-
-    try {
-      const responseData = await getQuestion(currentDifficulty, i18n.language);
-      setCurrentQuestionSafely(responseData);
-      if (responseData) {
-        setAskedQuestions(prev => [...prev, responseData.id]);
-        setTotalQuestions(prev => prev + 1);
-      } else {
-        await handleGameOver();
-      }
-    } catch (err: any) {
-      if (err instanceof Error) setError(err.message);
-      else setError(String(err));
-      setCurrentQuestionSafely(null);
-    } finally {
-      setLoading(false);
-      resetTimer();
-    }
-  };
 
   const startGame = async () => {
     if (!playerName.trim()) {
@@ -438,78 +414,41 @@ const FamilyRelationGame = () => {
       toast.error(t('player_name.required'));
       return;
     }
-    setLoading(true);
-    setError(null);
-    await startGameSessionApi(playerName, currentDifficulty, i18n.language);
-    setLoading(false);
+    
+    try {
+      setLoading(true);
+      setError(null);
+      await startGameSession(playerName, currentDifficulty);
+      setLoading(false);
+    } catch (error: any) {
+      setLoading(false);
+      setError(error.message || 'Oyun başlatılamadı');
+    }
   };
-
-  useEffect(() => {
-    setGameStarted(isGameSessionActive);
-  }, [isGameSessionActive]);
 
   const checkAnswer = async (answer: string) => {
     if (!currentQuestion) {
       setError(t('errors.no_current_question'));
       console.error("checkAnswer, mevcut bir soru olmadan çağrıldı.");
-      setLoading(false);
       return;
     }
 
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
+    if (!canAnswer) {
+      console.log("Cevap verilemez durumda");
+      return;
     }
     
-    setLoading(true);
     setSelectedAnswer(answer);
-
-    const answerDetails: GameAnswer = {
-      sessionId: localStorage.getItem('gameSessionId') || '',
-      questionId: currentQuestion.id,
-      answer: answer,
-      difficulty: currentDifficulty,
-      playerName: playerName,
-      timeTakenInSeconds: currentQuestion?.timeLimit ? (currentQuestion.timeLimit - timeRemaining) : 0,
-      currentScore: score,
-      currentStreak: currentStreak,
-      gameQuestionCount: totalQuestions,
-      correctAnswersCount: correctAnswers,
-    };
+    const isCorrect = currentQuestion.options.indexOf(answer) !== -1 && answer === currentQuestion.correctAnswer;
+    setIsCorrect(isCorrect);
+    setShowResult(true);
     
-    try {
-      const result = await submitAnswer(answerDetails, i18n.language);
-      setLastAnswerResponse(result);
-      setIsCorrect(result.correctAnswer);
-      setScore(result.updatedScore);
-      setTotalQuestions(prev => prev + 1);
-      
-      if (result.correctAnswer) {
-        setCorrectAnswers(prev => prev + 1);
-        const newStreak = result.updatedStreak;
-        setCurrentStreak(newStreak);
-        if (newStreak > maxStreak) {
-          setMaxStreak(newStreak);
-        }
-      } else {
-        setCurrentStreak(0);
-      }
-      
-      if(result.relationshipPath) {
-        setCurrentRelationshipPath(result.relationshipPath);
-      }
-      
-      setShowResult(true);
-
-      if (result.gameOver) {
-        setGameOver(true);
-        handleGameOver(result.finalResult);
-      }
-
-    } catch (err: any) {
-      setError(err.message || t('errors.answer_submission_failed'));
-    } finally {
-      setLoading(false);
+    // useGameSession'dan answerQuestion çağır
+    answerQuestion(answer, isCorrect);
+    
+    // Relationship path'i güncelle
+    if (currentQuestion.relationshipPath) {
+      setCurrentRelationshipPath(currentQuestion.relationshipPath);
     }
   };
 
@@ -528,17 +467,9 @@ const FamilyRelationGame = () => {
   };
 
   const restartGame = () => {
-    setGameStarted(false);
-    setGameOver(false);
-    setScore(0);
     setShowResult(false);
     setSelectedAnswer('');
     setShowScores(false);
-    setCorrectAnswers(0);
-    setTotalQuestions(0);
-    setCurrentStreak(0);
-    setMaxStreak(0);
-    setCurrentQuestion(null);
     setError(null);
     setShowHint(false);
     setIsPathVisible(false);
@@ -546,9 +477,8 @@ const FamilyRelationGame = () => {
     setCurrentRelationshipPath(undefined);
     setFeedbackSent(false);
     
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
+    // useGameSession restart
+    endGameSession('manual');
   };
 
   const formatDifficulty = (diff: string): string => {
@@ -773,31 +703,29 @@ const FamilyRelationGame = () => {
   )};
 
   const handleGameOver = async (finalResultParam?: GameResult | null) => {
-    setGameOver(true);
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
 
-    // Eğer backend'den final result gelmemişse, frontend'deki verilerle oluştur
-    const resultToSave = finalResultParam || {
-      playerName: playerName,
-      score: score,
-      difficulty: currentDifficulty,
-      correctAnswers: correctAnswers,
-      totalQuestions: totalQuestions,
-      maxStreak: maxStreak,
-      date: new Date().toISOString().split('T')[0]
-    };
+    // Save final score to local state
+    const finalScore = currentSession?.currentScore || score;
+    const finalCorrectAnswers = currentSession?.correctAnswers || correctAnswers;
+    const finalTotalQuestions = totalQuestionsFromSession || totalQuestions;
+    const finalMaxStreak = currentSession?.maxStreak || maxStreak;
 
-    setFinalResult(resultToSave);
+    const gameResult: GameResult = {
+      playerName: currentSession?.playerName || playerName,
+      score: finalScore,
+      difficulty: currentDifficulty,
+      correctAnswers: finalCorrectAnswers,
+      totalQuestions: finalTotalQuestions,
+      maxStreak: finalMaxStreak,
+      accuracy: (finalCorrectAnswers / Math.max(finalTotalQuestions, 1)) * 100
+    };
     
-    try {
-      await recordGameResult({ ...resultToSave }, i18n.language);
-      fetchHighScores();
-    } catch (err) {
-      console.error("Skor kaydedilirken hata:", err);
-    }
+    setFinalResult(gameResult);
+    await fetchHighScores();
   };
 
   useEffect(() => {
@@ -810,18 +738,14 @@ const FamilyRelationGame = () => {
   }, [gameStarted]);
 
   const setCurrentQuestionSafely = (questionData: GameQuestion | null) => {
-    if (questionData) {
-      const safeQuestion: GameQuestion = {
+    if (!questionData) {
+      setCurrentQuestion(null);
+    } else {
+      const safeQuestion = {
         ...questionData,
-        id: questionData.id || `question-${Date.now()}`,
         options: questionData.options || [],
-        person1Info: questionData.person1Info,
-        person2Info: questionData.person2Info,
-        relationshipPath: questionData.relationshipPath
       };
       setCurrentQuestion(safeQuestion);
-    } else {
-      setCurrentQuestion(null);
     }
   };
 
@@ -891,7 +815,7 @@ const FamilyRelationGame = () => {
   }
 
   const { options, timeLimit, difficulty: questionDifficulty } = currentQuestion;
-  const timeProgress = (timeLimit || 30) > 0 ? (timeRemaining / (timeLimit || 30)) * 100 : 0;
+  const timeProgress = (timeLimit || 30) > 0 ? (questionTimeLeft / (timeLimit || 30)) * 100 : 0;
 
   return (
     <StyledContainer maxWidth={false} disableGutters>
@@ -928,13 +852,13 @@ const FamilyRelationGame = () => {
             <ScoreTimeDisplay>
               <Chip 
                 icon={<EmojiEventsIcon />} 
-                label={`${t('game.score')}: ${score}`} 
+                label={`${t('game.score')}: ${currentSession?.currentScore || 0}`} 
                 color="primary" 
                 variant="filled" 
               />
               <Chip 
                 icon={<TimerIcon />} 
-                label={`${t('streak')}: ${currentStreak}`} 
+                label={`${t('streak')}: ${currentSession?.currentStreak || 0}`} 
                 color="secondary" 
                 variant="filled" 
               />
@@ -946,7 +870,7 @@ const FamilyRelationGame = () => {
                   <Box sx={{ 
                     width: `${timeProgress}%`, 
                     height: '100%', 
-                    backgroundColor: timeRemaining < 10 ? theme.palette.error.main : timeRemaining < 20 ? theme.palette.warning.main : theme.palette.secondary.main, 
+                    backgroundColor: questionTimeLeft < 10 ? theme.palette.error.main : questionTimeLeft < 20 ? theme.palette.warning.main : theme.palette.secondary.main, 
                     borderRadius: 3, 
                     transition: 'width 1s linear, background-color 0.5s ease' 
                   }} />
@@ -960,7 +884,7 @@ const FamilyRelationGame = () => {
                 component="h2"
                 sx={{ mb: 1, fontWeight: '600' }}
               >
-                {t('game.question_title', { number: totalQuestions })}
+                {t('game.question_title', { number: questionCount })}
               </Typography>
               <Typography 
                 variant="body1" 
@@ -982,7 +906,7 @@ const FamilyRelationGame = () => {
                 value={selectedAnswer}
                 onChange={(e) => setSelectedAnswer(e.target.value)}
               >
-                {options.map((option, index) => (
+                {options.map((option: string, index: number) => (
                   <OptionButton
                     key={`${option}-${index}`}
                     value={option}
@@ -1074,9 +998,9 @@ const FamilyRelationGame = () => {
                   <Button
                     variant="contained"
                     color="secondary"
-                    onClick={() => handleNextQuestion(lastAnswerResponse.nextQuestion, lastAnswerResponse)}
+                    onClick={fetchNextQuestion}
                     sx={{ mt: 2 }}
-                    disabled={gameOver}
+                    disabled={gameOver || isLoading}
                   >
                     {gameOver ? t('game.view_results') : t('game.next_question')}
                   </Button>
