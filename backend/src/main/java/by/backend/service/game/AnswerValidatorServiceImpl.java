@@ -38,14 +38,28 @@ public class AnswerValidatorServiceImpl implements AnswerValidatorService {
     @Override
     public AnswerValidationResult validateAnswer(String questionId, String userAnswer, Locale locale) {
         try {
-            String[] ids = questionId.split("_");
-            if (ids.length != 2) {
-                throw new GameException("Invalid Question ID format: " + questionId);
+            // Enhanced ve normal question ID formatlarını destekle
+            long person1Id;
+            long person2Id;
+            
+            if (questionId.startsWith("enhanced_")) {
+                // Enhanced format: "enhanced_person1Id_person2Id_timestamp"
+                String[] parts = questionId.split("_");
+                if (parts.length != 4) {
+                    throw new GameException("Invalid Enhanced Question ID format: " + questionId);
+                }
+                person1Id = Long.parseLong(parts[1]);
+                person2Id = Long.parseLong(parts[2]);
+            } else {
+                // Normal format: "person1Id_person2Id"
+                String[] ids = questionId.split("_");
+                if (ids.length != 2) {
+                    throw new GameException("Invalid Question ID format: " + questionId);
+                }
+                person1Id = Long.parseLong(ids[0]);
+                person2Id = Long.parseLong(ids[1]);
             }
 
-            long person1Id = Long.parseLong(ids[0]);
-            long person2Id = Long.parseLong(ids[1]);
-            
             Person p1 = personRepository.findById(person1Id)
                     .orElseThrow(() -> new GameException("Person 1 not found with id: " + person1Id));
             Person p2 = personRepository.findById(person2Id)

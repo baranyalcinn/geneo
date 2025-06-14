@@ -1,85 +1,85 @@
 package by.backend.model.enums;
 
+import lombok.Getter;
+
 /**
  * Türk aile yapısına uygun detaylı aile ilişki türleri
  * Cinsiyet ve generasyon bilgilerini içerir
  */
+@Getter
 public enum TurkishFamilyRelationType {
     // Ana-Baba (Ebeveynler)
-    ANNE("Anne", Gender.KADIN, FamilyGeneration.PARENT, true),
-    BABA("Baba", Gender.ERKEK, FamilyGeneration.PARENT, true),
+    ANNE("Annesi", Gender.FEMALE, FamilyGeneration.PARENT, true),
+    BABA("Babası", Gender.MALE, FamilyGeneration.PARENT, true),
     
     // Çocuklar
-    KIZ_COCUK("Kız Çocuk", Gender.KADIN, FamilyGeneration.CHILD, true),
-    ERKEK_COCUK("Erkek Çocuk", Gender.ERKEK, FamilyGeneration.CHILD, true),
+    KIZ_COCUK("Kızı", Gender.FEMALE, FamilyGeneration.CHILD, true),
+    ERKEK_COCUK("Oğlu", Gender.MALE, FamilyGeneration.CHILD, true),
     
     // Kardeşler
-    KIZ_KARDES("Kız Kardeş", Gender.KADIN, FamilyGeneration.SAME, true),
-    ERKEK_KARDES("Erkek Kardeş", Gender.ERKEK, FamilyGeneration.SAME, true),
+    KIZ_KARDES("Kız Kardeşi", Gender.FEMALE, FamilyGeneration.SAME, true),
+    ERKEK_KARDES("Erkek Kardeşi", Gender.MALE, FamilyGeneration.SAME, true),
     
     // Büyükanne-Büyükbaba
-    BUYUKANNE("Büyükanne", Gender.KADIN, FamilyGeneration.GRANDPARENT, true),
-    BUYUKBABA("Büyükbaba", Gender.ERKEK, FamilyGeneration.GRANDPARENT, true),
-    NENE("Nene", Gender.KADIN, FamilyGeneration.GRANDPARENT, true),
-    DEDE("Dede", Gender.ERKEK, FamilyGeneration.GRANDPARENT, true),
+    BUYUKANNE("Büyükannesi", Gender.FEMALE, FamilyGeneration.GRANDPARENT, true),
+    BUYUKBABA("Büyükbabası", Gender.MALE, FamilyGeneration.GRANDPARENT, true),
+    NENE("Nenesi", Gender.FEMALE, FamilyGeneration.GRANDPARENT, true),
+    DEDE("Dedesi", Gender.MALE, FamilyGeneration.GRANDPARENT, true),
     
     // Torunlar
-    KIZ_TORUN("Kız Torun", Gender.KADIN, FamilyGeneration.GRANDCHILD, true),
-    ERKEK_TORUN("Erkek Torun", Gender.ERKEK, FamilyGeneration.GRANDCHILD, true),
+    KIZ_TORUN("Kız Torunu", Gender.FEMALE, FamilyGeneration.GRANDCHILD, true),
+    ERKEK_TORUN("Erkek Torunu", Gender.MALE, FamilyGeneration.GRANDCHILD, true),
     
-    // Anne Tarafı Akrabalar
-    DAYI("Dayı", Gender.ERKEK, FamilyGeneration.PARENT, false, RelationshipSide.MATERNAL),
-    TEYZE("Teyze", Gender.KADIN, FamilyGeneration.PARENT, false, RelationshipSide.MATERNAL),
+    // Dayı-Teyze (Anne tarafı)
+    DAYI("Dayısı", Gender.MALE, FamilyGeneration.PARENT, false, RelationshipSide.MATERNAL),
+    TEYZE("Teyzesi", Gender.FEMALE, FamilyGeneration.PARENT, false, RelationshipSide.MATERNAL),
     
-    // Baba Tarafı Akrabalar  
-    AMCA("Amca", Gender.ERKEK, FamilyGeneration.PARENT, false, RelationshipSide.PATERNAL),
-    HALA("Hala", Gender.KADIN, FamilyGeneration.PARENT, false, RelationshipSide.PATERNAL),
+    // Amca-Hala (Baba tarafı)
+    AMCA("Amcası", Gender.MALE, FamilyGeneration.PARENT, false, RelationshipSide.PATERNAL),
+    HALA("Halası", Gender.FEMALE, FamilyGeneration.PARENT, false, RelationshipSide.PATERNAL),
     
     // Yeğenler
-    YEGEN_KIZ("Yeğen (Kız)", Gender.KADIN, FamilyGeneration.CHILD, false),
-    YEGEN_ERKEK("Yeğen (Erkek)", Gender.ERKEK, FamilyGeneration.CHILD, false),
+    YEGEN_KIZ("Kız Yeğeni", Gender.FEMALE, FamilyGeneration.CHILD, false),
+    YEGEN_ERKEK("Erkek Yeğeni", Gender.MALE, FamilyGeneration.CHILD, false),
     
     // Kuzenler
-    KUZEN_KIZ("Kuzen (Kız)", Gender.KADIN, FamilyGeneration.SAME, false),
-    KUZEN_ERKEK("Kuzen (Erkek)", Gender.ERKEK, FamilyGeneration.SAME, false),
+    KUZEN_KIZ("Kız Kuzeni", Gender.FEMALE, FamilyGeneration.SAME, false),
+    KUZEN_ERKEK("Erkek Kuzeni", Gender.MALE, FamilyGeneration.SAME, false),
     
-    // Evlilik İlişkileri
-    ES_KADIN("Eş (Kadın)", Gender.KADIN, FamilyGeneration.SAME, true),
-    ES_ERKEK("Eş (Erkek)", Gender.ERKEK, FamilyGeneration.SAME, true),
-    GELIN("Gelin", Gender.KADIN, FamilyGeneration.SAME, false),
-    DAMAT("Damat", Gender.ERKEK, FamilyGeneration.SAME, false),
+    // Eşler
+    ES_KADIN("Eşi", Gender.FEMALE, FamilyGeneration.SAME, true),
+    ES_ERKEK("Eşi", Gender.MALE, FamilyGeneration.SAME, true),
+    GELIN("Gelini", Gender.FEMALE, FamilyGeneration.SAME, false),
+    DAMAT("Damadı", Gender.MALE, FamilyGeneration.SAME, false),
     
-    // Kayın İlişkileri
-    KAYNANA("Kaynana", Gender.KADIN, FamilyGeneration.PARENT, false),
-    KAYNATA("Kaynata", Gender.ERKEK, FamilyGeneration.PARENT, false),
-    KAYIN_BIRADER("Kayınbirader", Gender.ERKEK, FamilyGeneration.SAME, false),
-    BALDIZ("Baldız", Gender.KADIN, FamilyGeneration.SAME, false),
-    GORUMCE("Görümce", Gender.KADIN, FamilyGeneration.SAME, false),
-    ENISTE("Enişte", Gender.ERKEK, FamilyGeneration.SAME, false);
+    // Kayın ailesi
+    KAYNANA("Kaynanası", Gender.FEMALE, FamilyGeneration.PARENT, false),
+    KAYNATA("Kaynatası", Gender.MALE, FamilyGeneration.PARENT, false),
+    KAYIN_BIRADER("Kayınbiraderi", Gender.MALE, FamilyGeneration.SAME, false),
+    BALDIZ("Baldızı", Gender.FEMALE, FamilyGeneration.SAME, false),
+    GORUMCE("Görümcesi", Gender.FEMALE, FamilyGeneration.SAME, false),
+    ENISTE("Eniştesi", Gender.MALE, FamilyGeneration.SAME, false);
 
     private final String turkishName;
-    private final Gender requiredGender;
+    private final Gender gender;
     private final FamilyGeneration generation;
     private final boolean isDirectFamily;
     private final RelationshipSide side;
 
-    TurkishFamilyRelationType(String turkishName, Gender requiredGender, 
-                            FamilyGeneration generation, boolean isDirectFamily) {
-        this(turkishName, requiredGender, generation, isDirectFamily, RelationshipSide.BOTH);
+    TurkishFamilyRelationType(String turkishName, Gender gender, FamilyGeneration generation, boolean isDirectFamily) {
+        this(turkishName, gender, generation, isDirectFamily, RelationshipSide.BOTH);
     }
 
-    TurkishFamilyRelationType(String turkishName, Gender requiredGender, 
-                            FamilyGeneration generation, boolean isDirectFamily, 
-                            RelationshipSide side) {
+    TurkishFamilyRelationType(String turkishName, Gender gender, FamilyGeneration generation, boolean isDirectFamily, RelationshipSide side) {
         this.turkishName = turkishName;
-        this.requiredGender = requiredGender;
+        this.gender = gender;
         this.generation = generation;
         this.isDirectFamily = isDirectFamily;
         this.side = side;
     }
 
     public String getTurkishName() { return turkishName; }
-    public Gender getRequiredGender() { return requiredGender; }
+    public Gender getGender() { return gender; }
     public FamilyGeneration getGeneration() { return generation; }
     public boolean isDirectFamily() { return isDirectFamily; }
     public RelationshipSide getSide() { return side; }
@@ -89,7 +89,7 @@ public enum TurkishFamilyRelationType {
      */
     public static TurkishFamilyRelationType[] getByGender(Gender gender) {
         return java.util.Arrays.stream(values())
-                .filter(type -> type.requiredGender == gender)
+                .filter(type -> type.gender == gender)
                 .toArray(TurkishFamilyRelationType[]::new);
     }
 

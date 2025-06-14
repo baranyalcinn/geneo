@@ -201,25 +201,25 @@ public class EnhancedQuestionGenerationService {
 
         // MessageKey'e göre Türkçe ilişki türü mapping
         return switch (messageKey) {
-            case "relationship.parent" -> p2Gender == Gender.KADIN ? 
+            case "relationship.parent" -> p2Gender == Gender.FEMALE ?
                     TurkishFamilyRelationType.ANNE : TurkishFamilyRelationType.BABA;
-            case "relationship.child" -> p2Gender == Gender.KADIN ? 
+            case "relationship.child" -> p2Gender == Gender.FEMALE ?
                     TurkishFamilyRelationType.KIZ_COCUK : TurkishFamilyRelationType.ERKEK_COCUK;
-            case "relationship.sibling" -> p2Gender == Gender.KADIN ? 
+            case "relationship.sibling" -> p2Gender == Gender.FEMALE ?
                     TurkishFamilyRelationType.KIZ_KARDES : TurkishFamilyRelationType.ERKEK_KARDES;
-            case "relationship.spouse" -> p2Gender == Gender.KADIN ? 
+            case "relationship.spouse" -> p2Gender == Gender.FEMALE ?
                     TurkishFamilyRelationType.ES_KADIN : TurkishFamilyRelationType.ES_ERKEK;
             case "relationship.maternal_uncle" -> TurkishFamilyRelationType.DAYI;
             case "relationship.maternal_aunt" -> TurkishFamilyRelationType.TEYZE;
             case "relationship.paternal_uncle" -> TurkishFamilyRelationType.AMCA;
             case "relationship.paternal_aunt" -> TurkishFamilyRelationType.HALA;
-            case "relationship.grandparent" -> p2Gender == Gender.KADIN ? 
+            case "relationship.grandparent" -> p2Gender == Gender.FEMALE ?
                     TurkishFamilyRelationType.BUYUKANNE : TurkishFamilyRelationType.BUYUKBABA;
-            case "relationship.grandchild" -> p2Gender == Gender.KADIN ? 
+            case "relationship.grandchild" -> p2Gender == Gender.FEMALE ?
                     TurkishFamilyRelationType.KIZ_TORUN : TurkishFamilyRelationType.ERKEK_TORUN;
             case "relationship.nephew" -> TurkishFamilyRelationType.YEGEN_ERKEK;
             case "relationship.niece" -> TurkishFamilyRelationType.YEGEN_KIZ;
-            case "relationship.cousin" -> p2Gender == Gender.KADIN ? 
+            case "relationship.cousin" -> p2Gender == Gender.FEMALE ?
                     TurkishFamilyRelationType.KUZEN_KIZ : TurkishFamilyRelationType.KUZEN_ERKEK;
             default -> null;
         };
@@ -277,7 +277,7 @@ public class EnhancedQuestionGenerationService {
         
         // Cinsiyet uyumlu yanıltıcı seçenekler
         List<TurkishFamilyRelationType> sameGenderTypes = Arrays.stream(TurkishFamilyRelationType.values())
-                .filter(type -> type.getRequiredGender() == targetGender)
+                .filter(type -> type.getGender() == targetGender)
                 .filter(type -> type != correctRelation)
                 .collect(Collectors.toList());
 

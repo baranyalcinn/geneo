@@ -198,7 +198,7 @@ type ExtendedGameAnswer = Partial<GameAnswer> & {
   difficulty: Difficulty;
   currentScore: number;
   currentStreak: number;
-  timeTakenInSeconds: number;
+  timeTakenInSeconds: number; // Backend long bekliyor, tam sayı gönder
   questionId: string;
   answer: string;
 };
@@ -500,21 +500,23 @@ const FamilyRelationGame = () => {
   const checkAnswer = useCallback(async (answer: string) => {
     if (!canAnswer || !currentQuestion || isLoading) return;
     
-    const timeTaken = (Date.now() - questionStartTime.current) / 1000;
+    const timeTaken = Math.round((Date.now() - questionStartTime.current) / 1000);
     setIsLoading(true);
     
     try {
       const answerDetails: ExtendedGameAnswer = {
         questionId: currentQuestion.id,
-        answer: answer,
+        answer: answer || '',
         timeTakenInSeconds: timeTaken,
-        difficulty: currentDifficulty,
-        playerName: playerName,
-        currentScore: currentScore,
-        currentStreak: currentStreak,
-        questionsAnswered: questionCount,
-        correctAnswersCount: correctAnswers
+        difficulty: currentDifficulty || Difficulty.MEDIUM,
+        playerName: playerName || 'Anonymous',
+        currentScore: currentScore || 0,
+        currentStreak: currentStreak || 0,
+        questionsAnswered: questionCount || 0,
+        correctAnswersCount: correctAnswers || 0
       };
+
+      console.log('📤 Frontend gönderen veriler:', answerDetails);
 
       const response = await submitAnswer(answerDetails, 'tr');
       
@@ -574,10 +576,6 @@ const FamilyRelationGame = () => {
     }
   }, [canAnswer, currentQuestion, isLoading, currentDifficulty, playerName, 
       currentScore, currentStreak, questionCount, correctAnswers]);
-
-
-
-
 
   // Memoized hint calculation
   const hintData = useMemo(() => {

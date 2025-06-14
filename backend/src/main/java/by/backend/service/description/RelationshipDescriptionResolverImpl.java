@@ -7,6 +7,7 @@ import by.backend.model.dto.RelationshipDescriptionResult;
 import by.backend.model.dto.RelationshipStepDTO;
 import by.backend.model.entity.Person;
 import by.backend.model.entity.Relationship;
+import by.backend.model.enums.Gender;
 import by.backend.model.enums.RelationshipStatus;
 import by.backend.model.enums.RelationshipType;
 import by.backend.repository.RelationshipRepository;
@@ -137,6 +138,8 @@ public class RelationshipDescriptionResolverImpl implements RelationshipDescript
         if (path.isEmpty()) return "relationship.not_found";
         if (path.size() == 1) return handleDirectRelationship(path.get(0), startPerson);
         if (path.size() == 2) return handleTwoStepRelationship(path, startPerson, endPerson);
+        if (path.size() == 3) return handleThreeStepRelationship(path, startPerson, endPerson);
+        if (path.size() >= 4) return handleComplexRelationship(path, startPerson, endPerson);
         
         log.warn("Path logic not implemented for path size {}. Falling back to distant relative.", path.size());
         return DISTANT_RELATIVE_KEY;
@@ -152,15 +155,172 @@ public class RelationshipDescriptionResolverImpl implements RelationshipDescript
         Relationship firstStep = path.get(0);
         Relationship lastStep = path.get(1);
         
+        // Büyükanne/Büyükbaba ilişkileri
         if (firstStep.getType() == RelationshipType.PARENT_CHILD && lastStep.getType() == RelationshipType.PARENT_CHILD) {
             return handleGrandRelationship(firstStep, lastStep, startPerson, endPerson);
         }
         
+        // Amca/Teyze/Dayı/Hala ilişkileri
         if (firstStep.getType() == RelationshipType.PARENT_CHILD && lastStep.getType() == RelationshipType.SIBLING) {
             return handleUncleAuntRelationship(firstStep, startPerson, endPerson);
         }
         
+        // Yeğen ilişkileri (Kardeş -> Çocuk)
+        if (firstStep.getType() == RelationshipType.SIBLING && lastStep.getType() == RelationshipType.PARENT_CHILD) {
+            return handleNephewNieceRelationship(startPerson, endPerson);
+        }
+        
+        // Kardeş ilişkileri (Ebeveyn -> Çocuk -> Ebeveyn -> Çocuk)
+        if (firstStep.getType() == RelationshipType.PARENT_CHILD && lastStep.getType() == RelationshipType.PARENT_CHILD) {
+            // Ortak ebeveyn üzerinden kardeş ilişkisi
+            Person middlePerson = getMiddlePerson(firstStep, lastStep, startPerson);
+            if (middlePerson != null) {
+                return getSiblingKey(endPerson.getGender().name());
+            }
+        }
+        
+        // Kayın ilişkileri
+        if (firstStep.getType() == RelationshipType.SPOUSE && lastStep.getType() == RelationshipType.PARENT_CHILD) {
+            return getInLawParentKey(endPerson.getGender().name());
+        }
+        
+        if (firstStep.getType() == RelationshipType.PARENT_CHILD && lastStep.getType() == RelationshipType.SPOUSE) {
+            return getInLawChildKey(endPerson.getGender().name());
+        }
+        
         return DISTANT_RELATIVE_KEY;
+    }
+
+    private String handleThreeStepRelationship(List<Relationship> path, Person startPerson, Person endPerson) {
+        // 3 adımlı ilişkiler: kuzenler, büyük amcalar/teyzeler, kayın akrabaları
+        Relationship firstStep = path.get(0);
+        Relationship secondStep = path.get(1);
+        Relationship thirdStep = path.get(2);
+        
+        // Kuzen ilişkilerini kontrol et - SPESIFIK
+        if (isCousinRelationshipPath(path, startPerson)) {
+            return getSpecificCousinKey(path, startPerson, endPerson);
+        }
+        
+        // Büyük amca/teyze ilişkileri - babanın/annenin amcası/teyzesi
+        if (isGrandUncleAuntPath(path, startPerson)) {
+            return getSpecificGrandUncleAuntKey(path, startPerson, endPerson);
+        }
+        
+        // Kayın akraba ilişkilerini kontrol et - SPESIFIK
+        if (isInLawRelationshipPath(path, startPerson)) {
+            return getSpecificInLawKey(path, startPerson, endPerson);
+        }
+        
+        // Büyük ebeveyn ilişkileri - büyükbabanın babası/annesi
+        if (isGreatGrandparentPath(path, startPerson)) {
+            return getGreatGrandparentKey(endPerson.getGender().name());
+        }
+        
+        return "relationship.complex.third_degree";
+    }
+    
+    private String handleComplexRelationship(List<Relationship> path, Person startPerson, Person endPerson) {
+        // 4+ adımlı karmaşık ilişkiler
+        
+        // Çok uzak kuzen ilişkileri
+        if (isDistantCousinPath(path)) {
+            return "relationship.distant.cousin_removed";
+        }
+        
+        // Karmaşık kayın ilişkileri (bacanak/elti gibi)
+        if (isVeryComplexInLawPath(path, startPerson, endPerson)) {
+            return getVeryComplexInLawKey(path, startPerson, endPerson);
+        }
+        
+        // Üvey aile ilişkileri
+        if (isStepFamilyPath(path)) {
+            return getStepFamilyKey(endPerson.getGender().name());
+        }
+        
+        return "relationship.complex.distant";
+    }
+    
+    private boolean isCousinRelationshipPath(List<Relationship> path, Person startPerson) {
+        // Parent -> Sibling -> Child -> Child paterni
+        return path.size() >= 3 &&
+               path.get(0).getType() == RelationshipType.PARENT_CHILD &&
+               path.get(1).getType() == RelationshipType.SIBLING &&
+               path.get(2).getType() == RelationshipType.PARENT_CHILD;
+    }
+    
+    private boolean isInLawRelationshipPath(List<Relationship> path, Person startPerson) {
+        // Spouse -> ... paterni
+        return path.stream().anyMatch(rel -> rel.getType() == RelationshipType.SPOUSE);
+    }
+    
+    private boolean isGrandUncleAuntPath(List<Relationship> path, Person startPerson) {
+        // Parent -> Parent -> Sibling paterni (büyükbaba/büyükanne -> kardeşi)
+        return path.size() >= 3 &&
+               path.get(0).getType() == RelationshipType.PARENT_CHILD &&
+               path.get(1).getType() == RelationshipType.PARENT_CHILD &&
+               path.get(2).getType() == RelationshipType.SIBLING;
+    }
+    
+    private boolean isDistantCousinPath(List<Relationship> path) {
+        // Uzun kuzen yolları
+        return path.size() >= 4 && path.stream().anyMatch(rel -> rel.getType() == RelationshipType.SIBLING);
+    }
+    
+    private boolean isVeryComplexInLawPath(List<Relationship> path, Person startPerson, Person endPerson) {
+        // Eş -> Kardeş -> Eş paterni (bacanak/elti)
+        long spouseCount = path.stream().filter(rel -> rel.getType() == RelationshipType.SPOUSE).count();
+        long siblingCount = path.stream().filter(rel -> rel.getType() == RelationshipType.SIBLING).count();
+        return spouseCount >= 2 && siblingCount >= 1;
+    }
+    
+    private boolean isStepFamilyPath(List<Relationship> path) {
+        // Üvey aile yolları - gelecekte implement edilecek
+        return false;
+    }
+    
+    private String getCousinKey(String gender) {
+        if (GENDER_MALE.equalsIgnoreCase(gender)) return "relationship.cousin.male";
+        if (GENDER_FEMALE.equalsIgnoreCase(gender)) return "relationship.cousin.female";
+        return "relationship.cousin";
+    }
+    
+    private String getInLawKey(List<Relationship> path, Person endPerson) {
+        String gender = endPerson.getGender().name();
+        
+        // Detaylı kayın ilişkisi analizi
+        if (path.size() == 3) {
+            if (GENDER_MALE.equalsIgnoreCase(gender)) {
+                return "relationship.inlaw.brother";
+            } else {
+                return "relationship.inlaw.sister_of_wife";
+            }
+        }
+        
+        return "relationship.inlaw.general";
+    }
+    
+    private String getGrandUncleAuntKey(String gender) {
+        if (GENDER_MALE.equalsIgnoreCase(gender)) return "relationship.grand_uncle";
+        if (GENDER_FEMALE.equalsIgnoreCase(gender)) return "relationship.grand_aunt";
+        return "relationship.grand_uncle_aunt";
+    }
+    
+    private String getVeryComplexInLawKey(List<Relationship> path, Person startPerson, Person endPerson) {
+        String gender = endPerson.getGender().name();
+        
+        // Bacanak/Elti analizi
+        if (GENDER_MALE.equalsIgnoreCase(gender)) {
+            return "relationship.bacanak";
+        } else {
+            return "relationship.elti";
+        }
+    }
+    
+    private String getStepFamilyKey(String gender) {
+        if (GENDER_MALE.equalsIgnoreCase(gender)) return "relationship.step.male";
+        if (GENDER_FEMALE.equalsIgnoreCase(gender)) return "relationship.step.female";
+        return "relationship.step.general";
     }
 
     private String handleGrandRelationship(Relationship firstStep, Relationship lastStep, Person startPerson, Person endPerson) {
@@ -204,6 +364,59 @@ public class RelationshipDescriptionResolverImpl implements RelationshipDescript
         return DISTANT_RELATIVE_KEY;
     }
 
+    private String handleNephewNieceRelationship(Person startPerson, Person endPerson) {
+        if (endPerson.getGender() == Gender.MALE) {
+            return "relationship.nephew";
+        } else {
+            return "relationship.niece";
+        }
+    }
+
+    private String getSiblingKey(String gender) {
+        if (GENDER_MALE.equals(gender)) {
+            return "relationship.sibling.brother";
+        } else {
+            return "relationship.sibling.sister";
+        }
+    }
+
+    private String getInLawParentKey(String gender) {
+        if (GENDER_MALE.equals(gender)) {
+            return "relationship.inlaw.father";
+        } else {
+            return "relationship.inlaw.mother";
+        }
+    }
+
+    private String getInLawChildKey(String gender) {
+        if (GENDER_MALE.equals(gender)) {
+            return "relationship.inlaw.son";
+        } else {
+            return "relationship.inlaw.daughter";
+        }
+    }
+
+    private Person getMiddlePerson(Relationship firstStep, Relationship lastStep, Person startPerson) {
+        // İki relationship arasındaki ortak kişiyi bul
+        if (firstStep.getPerson1().getId().equals(startPerson.getId())) {
+            // startPerson -> middlePerson -> endPerson
+            if (firstStep.getPerson2().getId().equals(lastStep.getPerson1().getId())) {
+                return firstStep.getPerson2();
+            }
+            if (firstStep.getPerson2().getId().equals(lastStep.getPerson2().getId())) {
+                return firstStep.getPerson2();
+            }
+        } else if (firstStep.getPerson2().getId().equals(startPerson.getId())) {
+            // startPerson -> middlePerson -> endPerson
+            if (firstStep.getPerson1().getId().equals(lastStep.getPerson1().getId())) {
+                return firstStep.getPerson1();
+            }
+            if (firstStep.getPerson1().getId().equals(lastStep.getPerson2().getId())) {
+                return firstStep.getPerson1();
+            }
+        }
+        return null;
+    }
 
     private Optional<RelationshipDescriptionResult> findDirectRelationshipOptimized(Person person1, Person person2, Locale locale) {
         List<Relationship> allDirectRelationships = relationshipRepository.findDirectRelationshipsBidirectional(
@@ -218,16 +431,9 @@ public class RelationshipDescriptionResolverImpl implements RelationshipDescript
 
         List<RelationshipStepDTO> pathDTO = relationshipPathFinder.convertPathToDTO(List.of(relationship), person1, person2, locale);
 
-        boolean isForward = relationship.getPerson1().getId().equals(person1.getId());
-        String messageKey, localizedDescription;
-
-        if (isForward) {
-            messageKey = getForwardRelationshipKey(relationship.getType(), person2.getGender().name());
-            localizedDescription = relationshipPathFinder.formatDirectRelationship(person1, person2, relationship.getType(), locale);
-        } else {
-            messageKey = getReverseRelationshipKey(relationship.getType(), person2.getGender().name());
-            localizedDescription = relationshipPathFinder.formatReverseRelationship(person1, person2, relationship.getType(), locale);
-        }
+        // Person1'in Person2'ye olan ilişkisini belirle
+        String messageKey = determineRelationshipFromPerson1ToPerson2(relationship, person1, person2);
+        String localizedDescription = relationshipPathFinder.formatDirectRelationship(person1, person2, relationship.getType(), locale);
         
         List<String> acceptableKeys = new ArrayList<>();
         acceptableKeys.add(messageKey);
@@ -236,7 +442,6 @@ public class RelationshipDescriptionResolverImpl implements RelationshipDescript
         if (messageKey.contains("father") || messageKey.contains("mother")) acceptableKeys.add(RELATIONSHIP_PREFIX + PARENT_LITERAL);
         if (messageKey.contains("son") || messageKey.contains("daughter")) acceptableKeys.add(RELATIONSHIP_PREFIX + CHILD_LITERAL);
         if (messageKey.contains("brother") || messageKey.contains("sister")) acceptableKeys.add(RELATIONSHIP_PREFIX + SIBLING_LITERAL);
-
 
         return Optional.of(RelationshipDescriptionResult.builder()
                 .localizedDescription(localizedDescription)
@@ -253,33 +458,55 @@ public class RelationshipDescriptionResolverImpl implements RelationshipDescript
                 .build());
     }
 
-    private String getForwardRelationshipKey(RelationshipType type, String gender) {
+    /**
+     * Person1'in Person2'ye olan ilişkisini belirler
+     * Örnek: "Mehmet Demir, Zehra Öztürk'nin nesidir?" -> Mehmet'in Zehra'ya olan ilişkisi
+     */
+    private String determineRelationshipFromPerson1ToPerson2(Relationship relationship, Person person1, Person person2) {
+        RelationshipType type = relationship.getType();
+        
+        // İlişkinin hangi yönde olduğunu kontrol et
+        boolean person1IsFirst = relationship.getPerson1().getId().equals(person1.getId());
+        
         switch (type) {
             case PARENT_CHILD:
-                if (GENDER_MALE.equalsIgnoreCase(gender)) return "relationship.son";
-                if (GENDER_FEMALE.equalsIgnoreCase(gender)) return "relationship.daughter";
-                return RELATIONSHIP_PREFIX + CHILD_LITERAL;
+                if (person1IsFirst) {
+                    // Person1 -> Person2 (Parent -> Child ilişkisi)
+                    // Person1, Person2'nin ebeveynidir, yani Person2 Person1'in çocuğudur
+                    return person2.getGender() == Gender.FEMALE ? "relationship.daughter" : "relationship.son";
+                } else {
+                    // Person2 -> Person1 (Parent -> Child ilişkisi)
+                    // Person2, Person1'in ebeveynidir, yani Person1 Person2'nin çocuğudur
+                    // Ama biz Person1'in Person2'ye olan ilişkisini istiyoruz
+                    return person2.getGender() == Gender.FEMALE ? "relationship.mother" : "relationship.father";
+                }
+                
             case SIBLING:
-                 if (GENDER_MALE.equalsIgnoreCase(gender)) return "relationship.brother";
-                if (GENDER_FEMALE.equalsIgnoreCase(gender)) return "relationship.sister";
-                return RELATIONSHIP_PREFIX + SIBLING_LITERAL;
+                // Kardeşlik simetriktir
+                return person2.getGender() == Gender.FEMALE ? "relationship.sister" : "relationship.brother";
+                
             case SPOUSE:
+                // Eşlik simetriktir
                 return "relationship.spouse";
+                
+            case MATERNAL_UNCLE:
+                return "relationship.maternal_uncle";
+                
+            case MATERNAL_AUNT:
+                return "relationship.maternal_aunt";
+                
+            case PATERNAL_UNCLE:
+                return "relationship.paternal_uncle";
+                
+            case PATERNAL_AUNT:
+                return "relationship.paternal_aunt";
+                
             default:
-                return RELATIONSHIP_PREFIX + "direct." + type.name().toLowerCase(Locale.ROOT);
+                log.warn("Unhandled relationship type: {}", type);
+                return RELATIONSHIP_PREFIX + "unknown";
         }
     }
-    
-    private String getReverseRelationshipKey(RelationshipType type, String gender) {
-        if (type == RelationshipType.PARENT_CHILD) {
-            if (GENDER_MALE.equalsIgnoreCase(gender)) return "relationship.father";
-            if (GENDER_FEMALE.equalsIgnoreCase(gender)) return "relationship.mother";
-            return RELATIONSHIP_PREFIX + PARENT_LITERAL;
-        }
-        // Sibling and spouse are symmetric
-        return getForwardRelationshipKey(type, gender);
-    }
-    
+
     private RelationshipDescriptionResult createNotFoundResult(PersonSummaryDTO p1, PersonSummaryDTO p2, Locale locale) {
          return RelationshipDescriptionResult.builder()
                 .localizedDescription(getMessage("relationship.not_found", locale))
@@ -310,6 +537,114 @@ public class RelationshipDescriptionResolverImpl implements RelationshipDescript
         } catch (NoSuchMessageException _) {
             log.warn("Message not found for code '{}' in locale '{}', returning code as fallback", code, locale);
             return code;
+        }
+    }
+    
+    // ========== SPESİFİK İLİŞKİ TANIMLAMA METOTLARı ==========
+    
+    private String getSpecificCousinKey(List<Relationship> path, Person startPerson, Person endPerson) {
+        // Path: startPerson -> parent -> grandparent -> sibling -> endPerson
+        // Bu yolda hangi taraftan geldiğini kontrol edelim
+        
+        if (path.size() < 3) return getCousinKey(endPerson.getGender().name());
+        
+        Relationship firstStep = path.get(0);
+        
+        // İlk adımda hangi ebeveyne gittiğini kontrol et
+        Person parent = (firstStep.getPerson1().getId().equals(startPerson.getId())) 
+                       ? firstStep.getPerson2() : firstStep.getPerson1();
+        
+        // Ebeveynin cinsiyetine göre hangi taraf olduğunu belirle
+        boolean isPaternal = parent.getGender() == Gender.MALE;
+        
+        // Amca/dayı/hala/teyze'nin çocuğu olduğunu kontrol et
+        if (isPaternal) {
+            // Baba tarafı - amca/hala çocuğu
+            if (endPerson.getGender() == Gender.MALE) {
+                return "relationship.cousin.paternal_uncle_son"; // Amca Oğlu
+            } else {
+                return "relationship.cousin.paternal_uncle_daughter"; // Amca Kızı
+            }
+        } else {
+            // Anne tarafı - dayı/teyze çocuğu
+            if (endPerson.getGender() == Gender.MALE) {
+                return "relationship.cousin.maternal_uncle_son"; // Dayı Oğlu
+            } else {
+                return "relationship.cousin.maternal_uncle_daughter"; // Dayı Kızı
+            }
+        }
+    }
+    
+    private String getSpecificGrandUncleAuntKey(List<Relationship> path, Person startPerson, Person endPerson) {
+        // Büyük amca/dayı/hala/teyze - babanın/annenin amcası/dayısı/halası/teyzesi
+        
+        if (path.size() < 1) return getGrandUncleAuntKey(endPerson.getGender().name());
+        
+        Relationship firstStep = path.get(0);
+        Person parent = (firstStep.getPerson1().getId().equals(startPerson.getId())) 
+                       ? firstStep.getPerson2() : firstStep.getPerson1();
+        
+        boolean isPaternal = parent.getGender() == Gender.MALE;
+        
+        if (isPaternal) {
+            // Baba tarafı büyük amca/hala
+            if (endPerson.getGender() == Gender.MALE) {
+                return "relationship.grand_uncle.paternal"; // Büyük Amcası
+            } else {
+                return "relationship.grand_aunt.paternal"; // Büyük Halası
+            }
+        } else {
+            // Anne tarafı büyük dayı/teyze
+            if (endPerson.getGender() == Gender.MALE) {
+                return "relationship.grand_uncle.maternal"; // Büyük Dayısı
+            } else {
+                return "relationship.grand_aunt.maternal"; // Büyük Teyzesi
+            }
+        }
+    }
+    
+    private String getSpecificInLawKey(List<Relationship> path, Person startPerson, Person endPerson) {
+        // Karmaşık kayın ilişkileri için spesifik tanımlama
+        
+        if (path.size() < 2) return getInLawKey(path, endPerson);
+        
+        // Eş -> Kardeş -> ? pattern'ini kontrol et
+        if (path.get(0).getType() == RelationshipType.SPOUSE && 
+            path.get(1).getType() == RelationshipType.SIBLING) {
+            
+            if (endPerson.getGender() == Gender.MALE) {
+                return "relationship.complex_inlaw.brother_wife_brother"; // Kayınbiraderinin Erkek Kardeşi
+            } else {
+                return "relationship.complex_inlaw.brother_wife_sister"; // Kayınbiraderinin Kız Kardeşi
+            }
+        }
+        
+        // Kardeş -> Eş -> ? pattern'ini kontrol et
+        if (path.get(0).getType() == RelationshipType.SIBLING && 
+            path.get(1).getType() == RelationshipType.SPOUSE) {
+            
+            if (endPerson.getGender() == Gender.MALE) {
+                return "relationship.complex_inlaw.sister_husband_brother"; // Kayınkardeşinin Erkek Kardeşi
+            } else {
+                return "relationship.complex_inlaw.sister_husband_sister"; // Kayınkardeşinin Kız Kardeşi
+            }
+        }
+        
+        // Fallback - genel kayın akraba
+        return getInLawKey(path, endPerson);
+    }
+    
+    private boolean isGreatGrandparentPath(List<Relationship> path, Person startPerson) {
+        // Büyük büyük ebeveyn kontrolü - 3 adım parent-child
+        return path.size() == 3 &&
+               path.stream().allMatch(rel -> rel.getType() == RelationshipType.PARENT_CHILD);
+    }
+    
+    private String getGreatGrandparentKey(String gender) {
+        if (GENDER_MALE.equals(gender)) {
+            return "relationship.great_grandparent.male"; // Büyük Dedesi
+        } else {
+            return "relationship.great_grandparent.female"; // Büyük Ninesi
         }
     }
 }

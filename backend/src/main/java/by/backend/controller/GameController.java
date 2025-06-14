@@ -428,12 +428,16 @@ public class GameController {
             return createErrorResponse(QUESTION_ID_REQUIRED_MSG, HttpStatus.BAD_REQUEST);
         }
         
+        // Difficulty'yi zorunlu kılmayalım, default değer ataması yapalım
         if (gameAnswer.getDifficulty() == null) {
-            return createErrorResponse(DIFFICULTY_REQUIRED_MSG, HttpStatus.BAD_REQUEST);
+            logger.warn("{}Difficulty null, MEDIUM olarak ayarlanıyor", LOG_ANSWER_PREFIX);
+            gameAnswer.setDifficulty(Difficulty.MEDIUM);
         }
         
+        // Player name'i zorunlu kılmayalım, default değer ataması yapalım
         if (isInvalidString(gameAnswer.getPlayerName())) {
-            return createErrorResponse(PLAYER_NAME_REQUIRED_MSG, HttpStatus.BAD_REQUEST);
+            logger.warn("{}Player name null/empty, Anonymous olarak ayarlanıyor", LOG_ANSWER_PREFIX);
+            gameAnswer.setPlayerName(ANONYMOUS_PLAYER);
         }
         
         return null; // No validation errors
@@ -448,6 +452,27 @@ public class GameController {
         if (isInvalidString(gameAnswer.getPlayerName())) {
             logger.warn("{}Player name eksik, setting default: {}", LOG_ANSWER_PREFIX, gameAnswer);
             gameAnswer.setPlayerName(ANONYMOUS_PLAYER);
+        }
+        
+        // Default değerler ata
+        if (gameAnswer.getTimeTakenInSeconds() <= 0) {
+            gameAnswer.setTimeTakenInSeconds(30); // Default 30 saniye
+        }
+        
+        if (gameAnswer.getCurrentScore() < 0) {
+            gameAnswer.setCurrentScore(0);
+        }
+        
+        if (gameAnswer.getCurrentStreak() < 0) {
+            gameAnswer.setCurrentStreak(0);
+        }
+        
+        if (gameAnswer.getQuestionsAnswered() < 0) {
+            gameAnswer.setQuestionsAnswered(0);
+        }
+        
+        if (gameAnswer.getCorrectAnswersCount() < 0) {
+            gameAnswer.setCorrectAnswersCount(0);
         }
     }
     

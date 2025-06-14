@@ -139,7 +139,7 @@ public interface PersonMapper {
             return null;
         }
         return person.getParents().stream()
-                .filter(p -> p.getGender() == Gender.KADIN)
+                .filter(p -> p.getGender() == Gender.FEMALE)
                 .findFirst()
                 .map(this::toSummaryDTO)
                 .orElse(null);
@@ -152,7 +152,7 @@ public interface PersonMapper {
             return null;
         }
         return person.getParents().stream()
-                .filter(p -> p.getGender() == Gender.ERKEK)
+                .filter(p -> p.getGender() == Gender.MALE)
                 .findFirst()
                 .map(this::toSummaryDTO)
                 .orElse(null);

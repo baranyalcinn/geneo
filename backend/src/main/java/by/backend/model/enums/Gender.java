@@ -1,8 +1,8 @@
 package by.backend.model.enums;
 
 public enum Gender {
-    ERKEK("Erkek"),
-    KADIN("Kadın");
+    MALE("Erkek"),
+    FEMALE("Kadın");
 
     private final String label;
 

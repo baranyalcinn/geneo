@@ -78,7 +78,7 @@ public class FamilyRelationshipValidator {
      * Cinsiyet uyumluluğunu kontrol eder
      */
     private ValidationResult validateGender(Person person, TurkishFamilyRelationType relationType) {
-        Gender requiredGender = relationType.getRequiredGender();
+        Gender requiredGender = relationType.getGender();
         Gender personGender = person.getGender();
 
         if (requiredGender != personGender) {
@@ -242,13 +242,13 @@ public class FamilyRelationshipValidator {
     public Optional<TurkishFamilyRelationType> mapToTurkishType(RelationshipType relationshipType, 
                                                                Gender targetGender) {
         return switch (relationshipType) {
-            case PARENT_CHILD -> targetGender == Gender.KADIN ? 
+            case PARENT_CHILD -> targetGender == Gender.FEMALE ? 
                                Optional.of(TurkishFamilyRelationType.ANNE) :
                                Optional.of(TurkishFamilyRelationType.BABA);
-            case SIBLING -> targetGender == Gender.KADIN ?
+            case SIBLING -> targetGender == Gender.FEMALE ?
                           Optional.of(TurkishFamilyRelationType.KIZ_KARDES) :
                           Optional.of(TurkishFamilyRelationType.ERKEK_KARDES);
-            case SPOUSE -> targetGender == Gender.KADIN ?
+            case SPOUSE -> targetGender == Gender.FEMALE ?
                          Optional.of(TurkishFamilyRelationType.ES_KADIN) :
                          Optional.of(TurkishFamilyRelationType.ES_ERKEK);
             case MATERNAL_UNCLE -> Optional.of(TurkishFamilyRelationType.DAYI);
