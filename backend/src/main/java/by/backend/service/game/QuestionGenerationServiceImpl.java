@@ -271,16 +271,16 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
     }
 
     private PersonPair selectRandomPersonPair(List<Person> activePersons) {
-        // %70 aile bağlantılı, %20 nesil farklı, %10 tamamen rastgele seçim 
-        // (karmaşık ilişkileri artırmak için aile bağlantılı seçimi artırdık)
+        // %60 aile bağlantılı, %30 nesil farklı, %10 tamamen rastgele seçim 
+        // (eş sorularını azaltmak için nesil farklı seçimi artırdık)
         double selector = random.nextDouble();
         
-        if (selector < 0.70) { // Aile bağlantılı seçimi artır
+        if (selector < 0.60) { // Aile bağlantılı seçimi azalt
             PersonPair familyPair = selectFamilyConnectedPair(activePersons);
             if (familyPair != null && !familyPair.isSamePerson()) {
                 return familyPair;
             }
-        } else if (selector < 0.90) { // Nesil farklı seçimi de artır
+        } else if (selector < 0.90) { // Nesil farklı seçimi artır
             PersonPair generationPair = selectGenerationDifferentPair(activePersons);
             if (generationPair != null && !generationPair.isSamePerson()) {
                 return generationPair;
@@ -839,34 +839,19 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
     private List<String> generateHardDistractors(String correctType, boolean isMale) {
         List<String> distractors = new ArrayList<>();
 
-        // Kayın ilişkileri (gerçek Türkçe terimler)
-        if (isMale) {
-            distractors.add("kaynata"); // Kayınpeder
-            distractors.add("kaynbiraderi"); // Kayınbirader
-            distractors.add("damat"); // Damat
-            distractors.add("enişte"); // Enişte
-            distractors.add("bacanak"); // Bacanak
-        } else {
-            distractors.add("kaynana"); // Kaynana
-            distractors.add("baldız"); // Baldız
-            distractors.add("görümce"); // Görümce
-            distractors.add("gelin"); // Gelin
-            distractors.add("elti"); // Elti
-        }
-
-        // Detaylı aile terimleri
-        distractors.add("büyükanne"); // Büyükanne
-        distractors.add("büyükbaba"); // Büyükbaba
-        distractors.add("nene"); // Nene
-        distractors.add("dede"); // Dede
+        // Çeşitli nesil ve ilişki türleri - eş seçeneklerini azalt
         
-        // Anne/Baba tarafı ayrımı
+        // Anne/Baba tarafı ayrımı (öncelikli)
         if (isMale) {
             distractors.add("amca"); // Amca (baba tarafı)
             distractors.add("dayı"); // Dayı (anne tarafı)
+            distractors.add("büyükbaba"); // Büyükbaba
+            distractors.add("dede"); // Dede
         } else {
             distractors.add("hala"); // Hala (baba tarafı)
             distractors.add("teyze"); // Teyze (anne tarafı)
+            distractors.add("büyükanne"); // Büyükanne
+            distractors.add("nene"); // Nene
         }
 
         // Karmaşık kuzen ilişkileri
@@ -874,19 +859,31 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
         distractors.add("üçüncü_kuzen"); // Üçüncü kuzen
         distractors.add("kuzen_bir_kere_uzak"); // Kuzen bir kere uzak
         
+        // Kayın ilişkileri (sınırlı)
+        if (isMale) {
+            distractors.add("kaynata"); // Kayınpeder
+            distractors.add("enişte"); // Enişte
+        } else {
+            distractors.add("kaynana"); // Kaynana
+            distractors.add("baldız"); // Baldız
+        }
+        
         // Üvey ilişkiler
         if (isMale) {
             distractors.add("üvey_baba"); // Üvey baba
             distractors.add("üvey_oğul"); // Üvey oğul
-            distractors.add("üvey_erkek_kardeş"); // Üvey erkek kardeş
         } else {
             distractors.add("üvey_anne"); // Üvey anne
             distractors.add("üvey_kız"); // Üvey kız
-            distractors.add("üvey_kız_kardeş"); // Üvey kız kardeş
+        }
+
+        // Çok az eş seçeneği ekle
+        if (random.nextDouble() < 0.05) { // Sadece %5 şansla
+            distractors.add("eşi");
         }
 
         Collections.shuffle(distractors);
-        return distractors;
+        return distractors.stream().distinct().limit(5).collect(Collectors.toList());
     }
 
     private List<String> getAllRelationshipKeys() {
