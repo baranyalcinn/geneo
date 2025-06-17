@@ -271,16 +271,16 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
     }
 
     private PersonPair selectRandomPersonPair(List<Person> activePersons) {
-        // %70 aile bağlantılı, %20 nesil farklı, %10 tamamen rastgele seçim 
-        // (karmaşık ilişkileri artırmak için aile bağlantılı seçimi artırdık)
+        // %60 aile bağlantılı, %30 nesil farklı, %10 tamamen rastgele seçim 
+        // (eş sorularını azaltmak için nesil farklı seçimi artırdık)
         double selector = random.nextDouble();
         
-        if (selector < 0.70) { // Aile bağlantılı seçimi artır
+        if (selector < 0.60) { // Aile bağlantılı seçimi azalt
             PersonPair familyPair = selectFamilyConnectedPair(activePersons);
             if (familyPair != null && !familyPair.isSamePerson()) {
                 return familyPair;
             }
-        } else if (selector < 0.90) { // Nesil farklı seçimi de artır
+        } else if (selector < 0.90) { // Nesil farklı seçimi artır
             PersonPair generationPair = selectGenerationDifferentPair(activePersons);
             if (generationPair != null && !generationPair.isSamePerson()) {
                 return generationPair;
@@ -839,54 +839,32 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
     private List<String> generateHardDistractors(String correctType, boolean isMale) {
         List<String> distractors = new ArrayList<>();
 
-        // Kayın ilişkileri (gerçek Türkçe terimler)
+        // Karmaşık kayın ve uzak akrabalık terimleri ekle
+        distractors.add("ikinci_kuzen");
+        distractors.add("üvey_kardeş");
+        distractors.add("dünür");
+        distractors.add("elti");
+        distractors.add("bacanak");
+
+        // Cinsiyete göre karmaşık çeldiriciler
         if (isMale) {
-            distractors.add("kaynata"); // Kayınpeder
-            distractors.add("kaynbiraderi"); // Kayınbirader
-            distractors.add("damat"); // Damat
-            distractors.add("enişte"); // Enişte
-            distractors.add("bacanak"); // Bacanak
+            distractors.add("kayınpeder");
+            distractors.add("kayınbirader");
+            distractors.add("enişte");
+            distractors.add("bacanak"); // Tekrar eklense de Set ile benzersiz olacak
         } else {
-            distractors.add("kaynana"); // Kaynana
-            distractors.add("baldız"); // Baldız
-            distractors.add("görümce"); // Görümce
-            distractors.add("gelin"); // Gelin
-            distractors.add("elti"); // Elti
+            distractors.add("kayınvalide");
+            distractors.add("görümce");
+            distractors.add("baldız");
+            distractors.add("elti"); // Tekrar eklense de Set ile benzersiz olacak
         }
 
-        // Detaylı aile terimleri
-        distractors.add("büyükanne"); // Büyükanne
-        distractors.add("büyükbaba"); // Büyükbaba
-        distractors.add("nene"); // Nene
-        distractors.add("dede"); // Dede
-        
-        // Anne/Baba tarafı ayrımı
-        if (isMale) {
-            distractors.add("amca"); // Amca (baba tarafı)
-            distractors.add("dayı"); // Dayı (anne tarafı)
-        } else {
-            distractors.add("hala"); // Hala (baba tarafı)
-            distractors.add("teyze"); // Teyze (anne tarafı)
-        }
-
-        // Karmaşık kuzen ilişkileri
-        distractors.add("ikinci_kuzen"); // İkinci kuzen
-        distractors.add("üçüncü_kuzen"); // Üçüncü kuzen
-        distractors.add("kuzen_bir_kere_uzak"); // Kuzen bir kere uzak
-        
-        // Üvey ilişkiler
-        if (isMale) {
-            distractors.add("üvey_baba"); // Üvey baba
-            distractors.add("üvey_oğul"); // Üvey oğul
-            distractors.add("üvey_erkek_kardeş"); // Üvey erkek kardeş
-        } else {
-            distractors.add("üvey_anne"); // Üvey anne
-            distractors.add("üvey_kız"); // Üvey kız
-            distractors.add("üvey_kız_kardeş"); // Üvey kız kardeş
-        }
+        // Çok uzak ve jenerik terimler
+        distractors.add("büyük amca");
+        distractors.add("ikinci dereceden kuzen");
 
         Collections.shuffle(distractors);
-        return distractors;
+        return distractors.stream().distinct().limit(5).collect(Collectors.toList());
     }
 
     private List<String> getAllRelationshipKeys() {
@@ -995,19 +973,20 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
     }
 
     private boolean isHardLevelRelationship(String messageKey, String category) {
-        // HARD seviye: Tüm ilişkileri kabul et (çok esnek)
-        // Sadece geçersiz durumları reddet
-        if (messageKey == null || messageKey.trim().isEmpty()) {
-            return false;
-        }
+        if (messageKey == null) return false;
         
-        // "not_found" ve "itself" hariç her şeyi kabul et
-        if (messageKey.contains("not_found") || messageKey.contains("itself")) {
-            return false;
-        }
-        
-        // Tüm geçerli ilişkileri kabul et
-        return true;
+        // Sadece gerçekten karmaşık ilişkileri HARD olarak kabul et
+        return messageKey.contains("great_grand") ||
+               messageKey.contains("cousin.second") ||
+               messageKey.contains("cousin.removed") ||
+               messageKey.contains("elti") ||
+               messageKey.contains("bacanak") ||
+               messageKey.contains("dunur") ||
+               messageKey.contains("kayin") || // kayınpeder/valide/birader
+               messageKey.contains("gorumce") ||
+               messageKey.contains("baldiz") ||
+               messageKey.contains("inlaw.complex") ||
+               messageKey.contains("distant");
     }
     
     /**

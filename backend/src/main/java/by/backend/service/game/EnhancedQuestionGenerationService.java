@@ -39,7 +39,7 @@ public class EnhancedQuestionGenerationService {
     
     private final Random random = new Random();
     
-    // Zorluk bazında ağırlıklar
+    // Zorluk bazında ağırlıklar - HARD modda çeşitlilik artırıldı
     private static final Map<Difficulty, Map<FamilyGeneration, Double>> GENERATION_WEIGHTS = Map.of(
         Difficulty.EASY, Map.of(
             FamilyGeneration.PARENT, 0.4,
@@ -56,13 +56,22 @@ public class EnhancedQuestionGenerationService {
             FamilyGeneration.GRANDCHILD, 0.1
         ),
         Difficulty.HARD, Map.of(
-            FamilyGeneration.PARENT, 0.15,
-            FamilyGeneration.CHILD, 0.15,
-            FamilyGeneration.SAME, 0.35,
-            FamilyGeneration.GRANDPARENT, 0.2,
-            FamilyGeneration.GRANDCHILD, 0.15
+            FamilyGeneration.PARENT, 0.2,
+            FamilyGeneration.CHILD, 0.2,
+            FamilyGeneration.SAME, 0.15, // Eş sorularını azalttık
+            FamilyGeneration.GRANDPARENT, 0.25,
+            FamilyGeneration.GRANDCHILD, 0.2
         )
     );
+    
+    // Eş ilişkilerini kısıtlamak için filtre
+    private static final Map<Difficulty, Integer> SPOUSE_QUESTION_LIMITS = Map.of(
+        Difficulty.EASY, 3,
+        Difficulty.MEDIUM, 2,
+        Difficulty.HARD, 1 // HARD modda daha az eş sorusu
+    );
+    
+    private int spouseQuestionCount = 0;
 
     /**
      * Gelişmiş soru üretim metodu
@@ -175,6 +184,12 @@ public class EnhancedQuestionGenerationService {
         if (turkishRelation == null) {
             return null;
         }
+        
+        // Eş sorularını sınırla
+        if (isSpouseRelation(turkishRelation) && spouseQuestionCount >= SPOUSE_QUESTION_LIMITS.get(difficulty)) {
+            log.debug("Eş sorusu sınırı aşıldı, atlaniyor: {}", turkishRelation);
+            return null;
+        }
 
         // Doğrulama
         ValidationResult validation = familyValidator.validateRelationship(
@@ -186,7 +201,14 @@ public class EnhancedQuestionGenerationService {
         }
 
         // Soru oluştur
-        return buildGameQuestion(pair, turkishRelation, difficulty, locale);
+        GameQuestionDTO question = buildGameQuestion(pair, turkishRelation, difficulty, locale);
+        
+        // Eş sorusu sayacını güncelle
+        if (question != null && isSpouseRelation(turkishRelation)) {
+            spouseQuestionCount++;
+        }
+        
+        return question;
     }
 
     /**
@@ -315,12 +337,26 @@ public class EnhancedQuestionGenerationService {
     }
 
     private void addHardDistractors(Set<String> options, List<TurkishFamilyRelationType> sameGenderTypes, FamilyGeneration correctGeneration) {
-        // Zor seviye: Benzer ilişki türlerinden seçenekler
+        // Zor seviye: Çeşitli nesil ve ilişki türlerinden seçenekler
         sameGenderTypes.stream()
-                .filter(type -> Math.abs(type.getGeneration().getGenerationDifference() - 
-                                       correctGeneration.getGenerationDifference()) <= 1)
-                .limit(4)
+                .filter(type -> type.getGeneration() != correctGeneration) // Farklı nesilleri öncelikle
+                .limit(2)
                 .forEach(type -> options.add(type.getTurkishName()));
+                
+        // Aynı nesilden de karmaşık seçenekler ekle
+        sameGenderTypes.stream()
+                .filter(type -> type.getGeneration() == correctGeneration)
+                .filter(type -> !options.contains(type.getTurkishName()))
+                .limit(2)
+                .forEach(type -> options.add(type.getTurkishName()));
+    }
+    
+    /**
+     * Eş ilişkisi kontrolü
+     */
+    private boolean isSpouseRelation(TurkishFamilyRelationType relationType) {
+        return relationType == TurkishFamilyRelationType.ES_KADIN || 
+               relationType == TurkishFamilyRelationType.ES_ERKEK;
     }
 
     private int calculateAge(Person person) {
