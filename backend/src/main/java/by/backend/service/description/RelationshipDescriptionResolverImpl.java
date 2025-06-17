@@ -464,46 +464,43 @@ public class RelationshipDescriptionResolverImpl implements RelationshipDescript
      */
     private String determineRelationshipFromPerson1ToPerson2(Relationship relationship, Person person1, Person person2) {
         RelationshipType type = relationship.getType();
-        
-        // İlişkinin hangi yönde olduğunu kontrol et
         boolean person1IsFirst = relationship.getPerson1().getId().equals(person1.getId());
-        
+
         switch (type) {
             case PARENT_CHILD:
-                if (person1IsFirst) {
-                    // Person1 -> Person2 (Parent -> Child ilişkisi)
-                    // Person1, Person2'nin ebeveynidir, yani Person2 Person1'in çocuğudur
-                    return person2.getGender() == Gender.FEMALE ? "relationship.daughter" : "relationship.son";
-                } else {
-                    // Person2 -> Person1 (Parent -> Child ilişkisi)
-                    // Person2, Person1'in ebeveynidir, yani Person1 Person2'nin çocuğudur
-                    // Ama biz Person1'in Person2'ye olan ilişkisini istiyoruz
-                    return person2.getGender() == Gender.FEMALE ? "relationship.mother" : "relationship.father";
-                }
-                
+                return resolveParentChild(person1IsFirst, person1);
             case SIBLING:
-                // Kardeşlik simetriktir
-                return person2.getGender() == Gender.FEMALE ? "relationship.sister" : "relationship.brother";
-                
+                return resolveSibling(person1);
             case SPOUSE:
-                // Eşlik simetriktir
                 return "relationship.spouse";
-                
             case MATERNAL_UNCLE:
-                return "relationship.maternal_uncle";
-                
             case MATERNAL_AUNT:
-                return "relationship.maternal_aunt";
-                
             case PATERNAL_UNCLE:
-                return "relationship.paternal_uncle";
-                
             case PATERNAL_AUNT:
-                return "relationship.paternal_aunt";
-                
+                return resolveUncleAunt(person1IsFirst, person1, type);
             default:
                 log.warn("Unhandled relationship type: {}", type);
                 return RELATIONSHIP_PREFIX + "unknown";
+        }
+    }
+
+    private String resolveParentChild(boolean person1IsParent, Person person1) {
+        if (person1IsParent) {
+            return person1.getGender() == Gender.FEMALE ? "relationship.mother" : "relationship.father";
+        } else {
+            return person1.getGender() == Gender.FEMALE ? "relationship.daughter" : "relationship.son";
+        }
+    }
+
+    private String resolveSibling(Person person1) {
+        return person1.getGender() == Gender.FEMALE ? "relationship.sister" : "relationship.brother";
+    }
+
+    private String resolveUncleAunt(boolean person1IsUncleAunt, Person person1, RelationshipType type) {
+        if (person1IsUncleAunt) {
+            return RELATIONSHIP_PREFIX + type.name().toLowerCase(Locale.ROOT);
+        } else {
+            return person1.getGender() == Gender.FEMALE ? "relationship.niece" : "relationship.nephew";
         }
     }
 
@@ -646,5 +643,107 @@ public class RelationshipDescriptionResolverImpl implements RelationshipDescript
         } else {
             return "relationship.great_grandparent.female"; // Büyük Ninesi
         }
+    }
+
+    /**
+     * İki kişi arasındaki daha karmaşık, çok adımlı ilişkileri çözer.
+     * Örnek: Elti, Bacanak, Kayınbirader, Dünür vb.
+     */
+    private RelationshipDescriptionResult resolveComplexRelationship(Person person1, Person person2, List<Relationship> path, Locale locale) {
+        if (path == null || path.isEmpty() || path.size() < 2) {
+            return null; // Yetersiz yol, bu metot çözemez
+        }
+
+        List<Person> personPath = getPersonPath(person1, path);
+        if (personPath.get(personPath.size() - 1).getId().longValue() != person2.getId().longValue()) {
+            return null; // Yol hedef kişiye ulaşmıyor
+        }
+
+        String messageKey = "relationship.distant"; // Default
+
+        // 2 adımlı karmaşık ilişkiler (p1 -> A -> p2)
+        if (path.size() == 2) {
+            Person p_mid = personPath.get(1);
+            Relationship r1 = path.get(0);
+            Relationship r2 = path.get(1);
+
+            // Kayınpeder/Kayınvalide: p1 -> eş(p_mid) -> ebeveyn(p2)
+            if (r1.getType() == RelationshipType.SPOUSE && getOtherPerson(r1, person1).getId().equals(p_mid.getId()) &&
+                r2.getType() == RelationshipType.PARENT_CHILD && r2.getPerson1().getId().equals(person2.getId()) &&
+                r2.getPerson2().getId().equals(p_mid.getId())) {
+                messageKey = person2.getGender() == Gender.FEMALE ? "relationship.inlaw.mother_in_law" : "relationship.inlaw.father_in_law";
+            }
+            // Kayınbirader/Görümce/Baldız: p1 -> eş(p_mid) -> kardeş(p2)
+            else if (r1.getType() == RelationshipType.SPOUSE && getOtherPerson(r1, person1).getId().equals(p_mid.getId()) &&
+                     r2.getType() == RelationshipType.SIBLING && getOtherPerson(r2, p_mid).getId().equals(person2.getId())) {
+                if (person1.getGender() == Gender.FEMALE) { // p1 kadınsa, kocasının kardeşleri
+                    messageKey = person2.getGender() == Gender.FEMALE ? "relationship.inlaw.gorumce" : "relationship.inlaw.kayinbirader";
+                } else { // p1 erkekse, karısının kardeşleri
+                    messageKey = person2.getGender() == Gender.FEMALE ? "relationship.inlaw.baldiz" : "relationship.inlaw.kayinbirader";
+                }
+            }
+        }
+
+        // 3 adımlı karmaşık ilişkiler (p1 -> A -> B -> p2)
+        if (path.size() == 3) {
+            Relationship r1 = path.get(0), r2 = path.get(1), r3 = path.get(2);
+
+            // Elti/Bacanak Pattern: p1 -> eş -> kardeş -> eş -> p2
+            if (r1.getType() == RelationshipType.SPOUSE && r2.getType() == RelationshipType.SIBLING && r3.getType() == RelationshipType.SPOUSE) {
+                // Elti: İki erkek kardeşin eşleri. p1(F) ve p2(F)
+                if (person1.getGender() == Gender.FEMALE && person2.getGender() == Gender.FEMALE) {
+                    messageKey = "relationship.inlaw.elti";
+                }
+                // Bacanak: İki kız kardeşin eşleri. p1(M) ve p2(M)
+                else if (person1.getGender() == Gender.MALE && person2.getGender() == Gender.MALE) {
+                    messageKey = "relationship.inlaw.bacanak";
+                }
+            }
+            // Dünür Pattern: p1 -> çocuk -> eş -> ebeveyn -> p2
+            else if (r1.getType() == RelationshipType.PARENT_CHILD && r1.getPerson1().getId().equals(person1.getId()) &&
+                     r2.getType() == RelationshipType.SPOUSE &&
+                     r3.getType() == RelationshipType.PARENT_CHILD && r3.getPerson1().getId().equals(person2.getId())) {
+                messageKey = "relationship.inlaw.dunur";
+            }
+        }
+
+        if (messageKey.equals("relationship.distant")) {
+            return null; // Çözümlenmiş bir karmaşık ilişki bulunamadı, null döndürerek ana metodun devam etmesini sağla
+        }
+
+        return RelationshipDescriptionResult.builder()
+                .status(RelationshipStatus.FOUND)
+                .messageKey(messageKey)
+                .path(relationshipPathFinder.convertPathToDTO(path, person1, person2, locale))
+                .build();
+    }
+
+    /**
+     * Bir ilişki nesnesinden ve bir başlangıç kişisinden diğer kişiyi alır.
+     */
+    private Person getOtherPerson(Relationship relationship, Person person) {
+        return relationship.getPerson1().getId().equals(person.getId()) ? relationship.getPerson2() : relationship.getPerson1();
+    }
+
+    /**
+     * Verilen başlangıç kişisi ve ilişki listesinden tam kişi yolunu oluşturur.
+     */
+    private List<Person> getPersonPath(Person start, List<Relationship> relationships) {
+        List<Person> personPath = new ArrayList<>();
+        personPath.add(start);
+        Person current = start;
+
+        for (Relationship rel : relationships) {
+            Person next = getOtherPerson(rel, current);
+            personPath.add(next);
+            current = next;
+        }
+        return personPath;
+    }
+
+    private RelationshipDescriptionResult createDistantRelationshipResult(Person person1, Person person2, List<Relationship> path, Locale locale) {
+        String messageKey = "relationship.distant";
+        // ... existing code ...
+        return null; // Placeholder return, actual implementation needed
     }
 }

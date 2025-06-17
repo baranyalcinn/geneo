@@ -6,6 +6,7 @@ import by.backend.model.entity.Person;
 import by.backend.model.entity.Relationship;
 import by.backend.model.enums.RelationshipType;
 import by.backend.repository.RelationshipRepository;
+import by.backend.service.FamilyGraphService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSource;
@@ -23,6 +24,7 @@ public class RelationshipPathFinderImpl implements RelationshipPathFinder {
     private final RelationshipRepository relationshipRepository;
     private final MessageSource messageSource;
     private final RelationshipProperties relationshipProperties;
+    private final FamilyGraphService familyGraphService;
 
     private static final String GENDER_MALE = "ERKEK";
     private static final String GENDER_FEMALE = "KADIN";
@@ -77,7 +79,10 @@ public class RelationshipPathFinderImpl implements RelationshipPathFinder {
         List<Relationship> currentRelations = currentState.relationsInPath();
         Set<Long> personsCurrentlyInThisPath = currentState.personsInThisPathIds();
         
-        List<Relationship> relationshipsToExplore = findAllActiveRelationshipsForPathFinder(currentLastPerson);
+        Set<FamilyGraphService.PersonEdge> neighborEdges = familyGraphService.getNeighbors(currentLastPerson.getId());
+        List<Relationship> relationshipsToExplore = neighborEdges.stream()
+                .map(FamilyGraphService.PersonEdge::relationship)
+                .collect(Collectors.toList());
 
         relationshipsToExplore.sort((r1, r2) -> {
             boolean r1IsDirect = r1.getType() == RelationshipType.PARENT_CHILD ||
@@ -151,11 +156,14 @@ public class RelationshipPathFinderImpl implements RelationshipPathFinder {
         List<Relationship> currentRelations = currentState.relationsInPath();
         Set<Long> personsCurrentlyInThisPath = currentState.personsInThisPathIds();
         
-        // Only find relationships where the current person is person1
-        List<Relationship> relationshipsToExplore = findForwardRelationshipsForPathFinder(currentLastPerson);
+        Set<FamilyGraphService.PersonEdge> neighborEdges = familyGraphService.getNeighbors(currentLastPerson.getId());
+        List<Relationship> relationshipsToExplore = neighborEdges.stream()
+            .map(FamilyGraphService.PersonEdge::relationship)
+            .filter(rel -> rel.getPerson1().getId().equals(currentLastPerson.getId()))
+            .collect(Collectors.toList());
 
         for (Relationship relationship : relationshipsToExplore) {
-            Person neighbor = relationship.getPerson2(); // In forward relationships, neighbor is always person2
+            Person neighbor = relationship.getPerson2(); // İleri yönlü olduğu için komşu her zaman person2'dir
 
             if (!personsCurrentlyInThisPath.contains(neighbor.getId())) {
                 List<Relationship> newRelationsForPath = new ArrayList<>(currentRelations);
@@ -225,7 +233,9 @@ public class RelationshipPathFinderImpl implements RelationshipPathFinder {
     /**
      * Finds all active relationships for a person. 
      * This is a local version for PathFinder to avoid cyclic dependency or to have specific logic if needed.
+     * @deprecated Bu metot, performans optimizasyonu sonrası FamilyGraphService ile değiştirilmiştir.
      */
+    @Deprecated
     private List<Relationship> findAllActiveRelationshipsForPathFinder(Person person) {
         List<Relationship> relationshipsAsP1 = relationshipRepository.findByPerson1AndIsActiveTrue(person);
         List<Relationship> relationshipsAsP2 = relationshipRepository.findByPerson2AndIsActiveTrue(person);
@@ -293,7 +303,9 @@ public class RelationshipPathFinderImpl implements RelationshipPathFinder {
 
     /**
      * Finds only forward-facing relationships for a person for directed pathfinding.
+     * @deprecated Bu metot, performans optimizasyonu sonrası FamilyGraphService ile değiştirilmiştir.
      */
+    @Deprecated
     private List<Relationship> findForwardRelationshipsForPathFinder(Person person) {
         return relationshipRepository.findByPerson1AndIsActiveTrue(person);
     }

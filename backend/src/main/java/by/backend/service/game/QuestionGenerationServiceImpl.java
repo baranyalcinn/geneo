@@ -839,48 +839,29 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
     private List<String> generateHardDistractors(String correctType, boolean isMale) {
         List<String> distractors = new ArrayList<>();
 
-        // Çeşitli nesil ve ilişki türleri - eş seçeneklerini azalt
-        
-        // Anne/Baba tarafı ayrımı (öncelikli)
+        // Karmaşık kayın ve uzak akrabalık terimleri ekle
+        distractors.add("ikinci_kuzen");
+        distractors.add("üvey_kardeş");
+        distractors.add("dünür");
+        distractors.add("elti");
+        distractors.add("bacanak");
+
+        // Cinsiyete göre karmaşık çeldiriciler
         if (isMale) {
-            distractors.add("amca"); // Amca (baba tarafı)
-            distractors.add("dayı"); // Dayı (anne tarafı)
-            distractors.add("büyükbaba"); // Büyükbaba
-            distractors.add("dede"); // Dede
+            distractors.add("kayınpeder");
+            distractors.add("kayınbirader");
+            distractors.add("enişte");
+            distractors.add("bacanak"); // Tekrar eklense de Set ile benzersiz olacak
         } else {
-            distractors.add("hala"); // Hala (baba tarafı)
-            distractors.add("teyze"); // Teyze (anne tarafı)
-            distractors.add("büyükanne"); // Büyükanne
-            distractors.add("nene"); // Nene
+            distractors.add("kayınvalide");
+            distractors.add("görümce");
+            distractors.add("baldız");
+            distractors.add("elti"); // Tekrar eklense de Set ile benzersiz olacak
         }
 
-        // Karmaşık kuzen ilişkileri
-        distractors.add("ikinci_kuzen"); // İkinci kuzen
-        distractors.add("üçüncü_kuzen"); // Üçüncü kuzen
-        distractors.add("kuzen_bir_kere_uzak"); // Kuzen bir kere uzak
-        
-        // Kayın ilişkileri (sınırlı)
-        if (isMale) {
-            distractors.add("kaynata"); // Kayınpeder
-            distractors.add("enişte"); // Enişte
-        } else {
-            distractors.add("kaynana"); // Kaynana
-            distractors.add("baldız"); // Baldız
-        }
-        
-        // Üvey ilişkiler
-        if (isMale) {
-            distractors.add("üvey_baba"); // Üvey baba
-            distractors.add("üvey_oğul"); // Üvey oğul
-        } else {
-            distractors.add("üvey_anne"); // Üvey anne
-            distractors.add("üvey_kız"); // Üvey kız
-        }
-
-        // Çok az eş seçeneği ekle
-        if (random.nextDouble() < 0.05) { // Sadece %5 şansla
-            distractors.add("eşi");
-        }
+        // Çok uzak ve jenerik terimler
+        distractors.add("büyük amca");
+        distractors.add("ikinci dereceden kuzen");
 
         Collections.shuffle(distractors);
         return distractors.stream().distinct().limit(5).collect(Collectors.toList());
@@ -992,19 +973,20 @@ public class QuestionGenerationServiceImpl implements QuestionGenerationService 
     }
 
     private boolean isHardLevelRelationship(String messageKey, String category) {
-        // HARD seviye: Tüm ilişkileri kabul et (çok esnek)
-        // Sadece geçersiz durumları reddet
-        if (messageKey == null || messageKey.trim().isEmpty()) {
-            return false;
-        }
+        if (messageKey == null) return false;
         
-        // "not_found" ve "itself" hariç her şeyi kabul et
-        if (messageKey.contains("not_found") || messageKey.contains("itself")) {
-            return false;
-        }
-        
-        // Tüm geçerli ilişkileri kabul et
-        return true;
+        // Sadece gerçekten karmaşık ilişkileri HARD olarak kabul et
+        return messageKey.contains("great_grand") ||
+               messageKey.contains("cousin.second") ||
+               messageKey.contains("cousin.removed") ||
+               messageKey.contains("elti") ||
+               messageKey.contains("bacanak") ||
+               messageKey.contains("dunur") ||
+               messageKey.contains("kayin") || // kayınpeder/valide/birader
+               messageKey.contains("gorumce") ||
+               messageKey.contains("baldiz") ||
+               messageKey.contains("inlaw.complex") ||
+               messageKey.contains("distant");
     }
     
     /**
