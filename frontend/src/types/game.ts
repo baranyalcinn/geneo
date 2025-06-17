@@ -11,7 +11,8 @@ export interface StartGameRequest {
 
 export interface PersonInfo {
   id: string | number;
-  fullName: string;
+  fullName?: string;
+  name?: string;  // Backend'den gelen field
   gender?: string;
   birthYear?: number | null;
   deathYear?: number | null;

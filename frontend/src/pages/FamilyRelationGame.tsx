@@ -153,26 +153,67 @@ const PersonInfoDisplay = ({ personName, personInfo, isTarget = false }: PersonI
   // Cinsiyet anahtarını güvenli bir şekilde oluştur
   const genderKey = personInfo?.gender ? `gender.${personInfo.gender.toLowerCase()}` : '';
 
+  // Gösterilecek ismi belirle - personInfo.fullName veya name varsa onu kullan, yoksa personName'i kullan
+  const displayName = personInfo?.fullName || personInfo?.name || personName || t('unknown_person', 'Bilinmeyen Kişi');
+
+  // Cinsiyete göre renk seçimi
+  const getGenderColors = () => {
+    const gender = personInfo?.gender?.toUpperCase();
+    
+    switch (gender) {
+      case 'FEMALE':
+      case 'KADIN':
+        return {
+          borderColor: '#e91e63', // Pembe
+          backgroundColor: alpha('#e91e63', 0.05),
+          shadowColor: alpha('#e91e63', 0.2),
+          textColor: '#c2185b'
+        };
+      case 'MALE':
+      case 'ERKEK':
+        return {
+          borderColor: '#2196f3', // Mavi
+          backgroundColor: alpha('#2196f3', 0.05),
+          shadowColor: alpha('#2196f3', 0.2),
+          textColor: '#1976d2'
+        };
+      default:
+        // Cinsiyet bilinmiyor - isTarget durumuna göre renk
+        return {
+          borderColor: isTarget ? theme.palette.secondary.main : theme.palette.primary.main,
+          backgroundColor: alpha(isTarget ? theme.palette.secondary.main : theme.palette.primary.main, 0.05),
+          shadowColor: alpha(isTarget ? theme.palette.secondary.main : theme.palette.primary.main, 0.2),
+          textColor: isTarget ? theme.palette.secondary.main : theme.palette.primary.main
+        };
+    }
+  };
+
+  const genderColors = getGenderColors();
+
   return (
     <GameCard sx={{
-      borderColor: isTarget ? theme.palette.secondary.main : theme.palette.primary.main,
-      borderWidth: 1,
+      borderColor: genderColors.borderColor,
+      backgroundColor: genderColors.backgroundColor,
+      borderWidth: 2,
       borderStyle: 'solid',
-      boxShadow: isTarget 
-        ? `0 4px 12px ${alpha(theme.palette.secondary.main, 0.2)}`
-        : `0 4px 12px ${alpha(theme.palette.primary.main, 0.2)}`,
+      boxShadow: `0 4px 12px ${genderColors.shadowColor}`,
+      transition: 'all 0.3s ease-in-out',
+      '&:hover': {
+        boxShadow: `0 6px 16px ${genderColors.shadowColor}`,
+        transform: 'translateY(-2px)',
+      }
     }}>
       <Typography 
         variant="subtitle1" 
         fontWeight="medium" 
         sx={{ 
           mb: 0.75, 
-          color: isTarget ? theme.palette.secondary.main : theme.palette.primary.main,
-          borderBottom: `1px solid ${alpha(isTarget ? theme.palette.secondary.main : theme.palette.primary.main, 0.2)}`,
+          color: genderColors.textColor,
+          borderBottom: `1px solid ${alpha(genderColors.borderColor, 0.3)}`,
           pb: 0.5
         }}
       >
-        {personName}
+        {displayName}
       </Typography>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
         {personInfo?.gender && (
@@ -718,8 +759,10 @@ const FamilyRelationGame = () => {
 
   const person1InfoToDisplay = currentQuestion?.person1Info || null;
   const person2InfoToDisplay = currentQuestion?.person2Info || null;
-  const person1 = currentQuestion?.person1Info?.fullName || '...';
-  const person2 = currentQuestion?.person2Info?.fullName || '...';
+  const person1 = currentQuestion?.person1Info?.fullName || currentQuestion?.person1Info?.name || '...';
+  const person2 = currentQuestion?.person2Info?.fullName || currentQuestion?.person2Info?.name || '...';
+  
+
 
   // Component functions
   const fetchNextQuestion = useCallback(async () => {
